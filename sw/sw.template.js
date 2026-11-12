@@ -11,15 +11,30 @@ const CACHE = `travio-${BUILD_ID}`;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE.map((u) => new Request(u, { cache: 'reload' })))),
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(
+        PRECACHE.map(async (u) => {
+          const res = await fetch(new Request(u, { cache: 'reload' }));
+          // A build file answered with HTML means the deployment is not complete
+          // yet – fail the install and retry later instead of caching garbage.
+          if (!res.ok || (u.startsWith('/assets/') && (res.headers.get('Content-Type') || '').includes('text/html'))) {
+            throw new Error(`precache failed: ${u}`);
+          }
+          await cache.put(u, res);
+        }),
+      );
+    })(),
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const keys = await caches.keys();
-      await Promise.all(keys.filter((k) => k.startsWith('travio-') && k !== CACHE).map((k) => caches.delete(k)));
+      // Keep the directly previous version: pages that were opened before the
+      // update still lazy-load their (old) chunks from it until they reload.
+      const old = (await caches.keys()).filter((k) => k.startsWith('travio-') && k !== CACHE);
+      await Promise.all(old.slice(0, -1).map((k) => caches.delete(k)));
       await self.clients.claim();
     })(),
   );
@@ -56,12 +71,20 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     (async () => {
+      const isAsset = url.pathname.startsWith('/assets/');
+      const isHtml = (r) => (r.headers.get('Content-Type') || '').includes('text/html');
       const cache = await caches.open(CACHE);
-      const hit = await cache.match(req);
-      if (hit) return hit;
+      // Look in every TRAVIO cache (current + previous version).
+      const hit = (await cache.match(req)) || (await caches.match(req));
+      if (hit && !(isAsset && isHtml(hit))) return hit;
       const res = await fetch(req);
+      if (isAsset && isHtml(res)) {
+        // The SPA fallback answered a missing build file with index.html –
+        // never cache or execute that as a script.
+        return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+      }
       // Hashed build assets are immutable – keep them for offline use.
-      if (res.ok && url.pathname.startsWith('/assets/')) cache.put(req, res.clone());
+      if (res.ok && isAsset) cache.put(req, res.clone());
       return res;
     })(),
   );

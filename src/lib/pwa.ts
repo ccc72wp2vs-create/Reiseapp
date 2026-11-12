@@ -45,3 +45,55 @@ export function registerServiceWorker() {
 export function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
+
+const RELOAD_KEY = 'travio.chunkReload';
+
+/** True for errors caused by a build file that no longer exists (after a deploy). */
+export function isChunkLoadError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return /dynamically imported module|Importing a module script failed|valid JavaScript MIME type|Failed to fetch dynamically|error loading dynamically imported/i.test(msg);
+}
+
+/**
+ * Reloads the page once to pick up the current version. Returns false when a
+ * reload was already attempted in the last minute (prevents reload loops).
+ */
+export function reloadForNewVersion(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+  } catch {
+    /* storage unavailable – still try once */
+  }
+  window.location.reload();
+  return true;
+}
+
+/** A lazily loaded page from an older version failed to load → reload once. */
+export function handleStaleChunks() {
+  window.addEventListener('vite:preloadError', (event) => {
+    if (reloadForNewVersion()) event.preventDefault();
+  });
+}
+
+/**
+ * Last resort from the error screen: activate a waiting update, otherwise drop
+ * the offline file cache (trip data in IndexedDB is untouched) and reload.
+ */
+export async function repairAndReload() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg?.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      await new Promise((r) => setTimeout(r, 800));
+    } else {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k.startsWith('travio-')).map((k) => caches.delete(k)));
+      await reg?.update().catch(() => undefined);
+    }
+  } catch {
+    /* ignore – reload anyway */
+  }
+  window.location.reload();
+}

@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
-import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation, useRouteError } from 'react-router';
 import { AppShell } from './components/AppShell';
 import { Logo } from './components/CoverArt';
 import { Toaster } from './components/toast';
 import { Skeleton } from './components/ui';
 import { HomePage } from './features/dashboard/HomePage';
 import { auth, useAuth } from './lib/auth';
+import { isChunkLoadError, reloadForNewVersion, repairAndReload } from './lib/pwa';
 
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
 const SetupPage = lazy(() => import('./features/auth/SetupPage'));
@@ -54,6 +55,33 @@ function Root() {
   );
 }
 
+/** Friendly error screen; a stale build file (after an update) reloads once automatically. */
+function RouteError() {
+  const error = useRouteError();
+  const stale = isChunkLoadError(error);
+  useEffect(() => {
+    if (stale) reloadForNewVersion();
+  }, [stale]);
+  return (
+    <div className="grid min-h-dvh place-items-center px-safe text-center">
+      <div className="max-w-sm">
+        <Logo size={44} withWordmark={false} className="mx-auto" />
+        <h1 className="mt-5 font-display text-[26px] font-semibold">{stale ? 'Neue Version verfügbar' : 'Da ist etwas schiefgelaufen'}</h1>
+        <p className="mt-2 text-[15px] text-text-2">
+          {stale ? 'TRAVIO wurde aktualisiert. Bitte einmal neu laden.' : 'Bitte lade die Seite neu. Deine Daten bleiben erhalten.'}
+        </p>
+        <button
+          type="button"
+          onClick={() => void repairAndReload()}
+          className="mt-6 inline-flex h-12 items-center rounded-full bg-accent px-6 text-[15px] font-semibold text-accent-ink"
+        >
+          Neu laden
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, setupRequired } = useAuth();
   const location = useLocation();
@@ -64,6 +92,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
 const router = createBrowserRouter([
   {
     element: <Root />,
+    errorElement: <RouteError />,
     children: [
       { path: '/anmelden', element: <LoginPage /> },
       { path: '/einrichtung', element: <SetupPage /> },
