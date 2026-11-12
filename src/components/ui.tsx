@@ -54,7 +54,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={disabled || loading}
       className={cx(
-        'inline-flex select-none items-center justify-center rounded-full font-semibold transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100',
+        'inline-flex select-none items-center justify-center whitespace-nowrap rounded-full font-semibold transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100',
         VARIANTS[variant],
         sizes[size],
         block && 'w-full',

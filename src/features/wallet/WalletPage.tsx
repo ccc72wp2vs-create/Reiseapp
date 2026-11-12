@@ -112,9 +112,9 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                 </div>
               )}
               {canEdit && (
-                <div className="mt-5 flex gap-2">
+                <div className="mt-5 flex flex-wrap gap-2">
                   <Button size="sm" icon={<Receipt size={16} />} disabled={!canWrite} onClick={() => setSheet({ kind: 'expense' })}>
-                    {t.wallet.addExpense}
+                    {t.home.addExpense}
                   </Button>
                   <Button size="sm" variant="secondary" icon={<HandCoins size={16} />} disabled={!canWrite || travelers.length < 2} onClick={() => setSheet({ kind: 'settlement' })}>
                     {t.wallet.settlement}
@@ -152,22 +152,15 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                 <Card className="divide-y divide-line">
                   {balances.map((b) => (
                     <div key={b.travelerId} className="flex items-center gap-3 p-4">
-                      <span className="h-3 w-3 rounded-full" style={{ background: color(b.travelerId) }} />
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: color(b.travelerId) }} />
                       <span className="min-w-0 flex-1 truncate font-medium">{name(b.travelerId)}</span>
-                      <div className="text-right text-[13px]">
+                      <div className="shrink-0 text-right text-[13px]">
                         <p className="tabular">
                           {t.wallet.paid} <span className="font-semibold">{money(netPaidMinor(b), base)}</span>
                         </p>
                         <p className="tabular text-text-3">
                           {t.wallet.consumed} {money(b.owedMinor, base)}
                         </p>
-                        {(b.settledInMinor > 0 || b.settledOutMinor > 0) && (
-                          <p className="tabular text-[12px] text-text-3">
-                            {t.wallet.advanced} {money(b.paidMinor, base)}
-                            {b.settledOutMinor > 0 && ` · ${t.wallet.repaidOut} ${money(b.settledOutMinor, base)}`}
-                            {b.settledInMinor > 0 && ` · ${t.wallet.repaidIn} ${money(b.settledInMinor, base)}`}
-                          </p>
-                        )}
                       </div>
                     </div>
                   ))}
