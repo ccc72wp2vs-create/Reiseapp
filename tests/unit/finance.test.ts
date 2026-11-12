@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBalances, computeShares, SplitError, suggestSettlements } from '../../shared/finance';
+import { computeBalances, computeShares, netPaidMinor, SplitError, suggestSettlements } from '../../shared/finance';
 import { allocate, convertMinor, formatMoney, minorToInput, normalizeRate, parseAmount, parseRate, sum } from '../../shared/money';
 
 describe('parseAmount (German & international input)', () => {
@@ -172,5 +172,25 @@ describe('balances & settlements', () => {
       { fromTravelerId: 'clara', toTravelerId: 'anna', amountMinor: 1000 },
       { fromTravelerId: 'ben', toTravelerId: 'anna', amountMinor: 600 },
     ]);
+  });
+
+  it('net paid equals the share once everything is settled (couple scenario)', () => {
+    // John advances 3 838,32 € for John & Lilli, Annika 3 903,32 € for Annika & Tim
+    const ids4 = ['john', 'lilli', 'tim', 'annika'];
+    const expenses = [
+      { paidBy: 'john', baseAmountMinor: 383832, shares: share(383832, ['john', 'lilli']) },
+      { paidBy: 'annika', baseAmountMinor: 390332, shares: share(390332, ['annika', 'tim']) },
+    ];
+    const before = computeBalances(ids4, expenses, []);
+    expect(before.map(netPaidMinor)).toEqual([383832, 0, 0, 390332]);
+    const transfers = suggestSettlements(before);
+    const after = computeBalances(
+      ids4,
+      expenses,
+      transfers.map((x) => ({ fromTravelerId: x.fromTravelerId, toTravelerId: x.toTravelerId, baseAmountMinor: x.amountMinor })),
+    );
+    expect(after.map(netPaidMinor)).toEqual(after.map((b) => b.owedMinor));
+    expect(after.map(netPaidMinor)).toEqual([191916, 191916, 195166, 195166]);
+    expect(sum(after.map(netPaidMinor))).toBe(383832 + 390332);
   });
 });

@@ -162,6 +162,16 @@ export function computeBalances(
   return [...map.values()];
 }
 
+/**
+ * What a traveler has effectively paid out of their own pocket so far:
+ * advanced expenses plus repayments sent, minus repayments received.
+ * Once all balances are settled this equals the traveler's share.
+ * Summed over all travelers it always equals the total of all expenses.
+ */
+export function netPaidMinor(b: Pick<TravelerBalance, 'paidMinor' | 'settledOutMinor' | 'settledInMinor'>): number {
+  return b.paidMinor + b.settledOutMinor - b.settledInMinor;
+}
+
 export interface SuggestedTransfer {
   fromTravelerId: string;
   toTravelerId: string;

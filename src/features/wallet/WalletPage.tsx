@@ -1,7 +1,7 @@
 import { ArrowRight, ArrowRightLeft, Calculator, Coins, HandCoins, Plus, Receipt, Trash2 } from 'lucide-react';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
-import { computeBalances, suggestSettlements } from '../../../shared/finance';
+import { computeBalances, netPaidMinor, suggestSettlements } from '../../../shared/finance';
 import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
 import type { ExpenseDto, SettlementDto, TripSnapshot } from '../../../shared/types';
@@ -148,6 +148,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                   })}
                 </Card>
                 <SectionTitle>{t.wallet.byPerson}</SectionTitle>
+                <p className="-mt-1 mb-3 text-[13px] text-text-3">{t.wallet.byPersonHint}</p>
                 <Card className="divide-y divide-line">
                   {balances.map((b) => (
                     <div key={b.travelerId} className="flex items-center gap-3 p-4">
@@ -155,11 +156,18 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                       <span className="min-w-0 flex-1 truncate font-medium">{name(b.travelerId)}</span>
                       <div className="text-right text-[13px]">
                         <p className="tabular">
-                          {t.wallet.paid} <span className="font-semibold">{money(b.paidMinor, base)}</span>
+                          {t.wallet.paid} <span className="font-semibold">{money(netPaidMinor(b), base)}</span>
                         </p>
                         <p className="tabular text-text-3">
                           {t.wallet.consumed} {money(b.owedMinor, base)}
                         </p>
+                        {(b.settledInMinor > 0 || b.settledOutMinor > 0) && (
+                          <p className="tabular text-[12px] text-text-3">
+                            {t.wallet.advanced} {money(b.paidMinor, base)}
+                            {b.settledOutMinor > 0 && ` · ${t.wallet.repaidOut} ${money(b.settledOutMinor, base)}`}
+                            {b.settledInMinor > 0 && ` · ${t.wallet.repaidIn} ${money(b.settledInMinor, base)}`}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ))}
