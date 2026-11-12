@@ -18,9 +18,19 @@ export function applyTheme(pref: ThemePref = getThemePref()) {
   syncThemeColor();
 }
 
+/**
+ * Pages with a dark hero image at the top set `dark` while the hero is
+ * visible, so the iOS status bar area (and its blur effect) stays dark.
+ */
+export function setStatusBarOverHero(overHero: boolean) {
+  if (overHero) document.documentElement.dataset.statusbar = 'hero';
+  else delete document.documentElement.dataset.statusbar;
+  syncThemeColor();
+}
+
 function syncThemeColor() {
   const root = document.documentElement;
-  const color = root.dataset.theme === 'light' ? '#F8F6F1' : '#0B1524';
+  const color = root.dataset.statusbar === 'hero' ? '#0B1524' : root.dataset.theme === 'light' ? '#F8F6F1' : '#0B1524';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 }
 

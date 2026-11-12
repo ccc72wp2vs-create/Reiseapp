@@ -216,11 +216,18 @@ input[type='time']::-webkit-date-and-time-value {
   inset: 0 0 auto 0;
   /* Safari (not installed) reports 0 – keep a thin strip so the browser
      can sample its colour for the top bar tint. */
-  height: env(safe-area-inset-top);
+  height: max(env(safe-area-inset-top), 3px);
   z-index: 35;
   pointer-events: none;
   background: var(--bg);
   transition: background-color 0.2s ease;
+}
+:root[data-statusbar='hero'] .statusbar-backdrop {
+  background: #0b1524;
+}
+/* Over the dark hero the canvas (and rubber-band overscroll) is dark too. */
+:root[data-statusbar='hero'] {
+  background: #0b1524;
 }
 
 /* Safe area helpers */
