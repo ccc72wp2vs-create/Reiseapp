@@ -1,4 +1,4 @@
-import { Bookmark, Check, CloudUpload, Lock, Minus, Plus, Trash2, Users } from 'lucide-react';
+import { Bookmark, Check, Landmark, Sailboat, TreePalm, Umbrella, Waves, CloudUpload, Lock, Minus, Plus, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { PACKING_CATEGORIES, ROLE_RANK, type PackingCategory, type PackingVisibility } from '../../../shared/constants';
 import type { PackingItemDto, PackingListDto, TripSnapshot } from '../../../shared/types';
@@ -8,6 +8,8 @@ import { Badge, Button, Card, Chip, ConfirmDialog, EmptyState, IconButton, Input
 import { t } from '../../i18n';
 import { tripStore, usePendingIds } from '../../lib/store';
 import { DAY_PRESETS, type DayPreset } from './dayPresets';
+
+const PRESET_ICONS = { boat: Sailboat, dive: Waves, temple: Landmark, beach: Umbrella, nature: TreePalm } as const;
 
 export default function PackingPage() {
   const { snap } = useTrip();
@@ -295,7 +297,11 @@ function NewListSheet({ snap, onClose, onCreated }: { snap: TripSnapshot; onClos
                   preset?.key === p.key ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2',
                 )}
               >
-                <span aria-hidden>{p.emoji}</span> {p.label}
+                {(() => {
+                  const Icon = PRESET_ICONS[p.icon];
+                  return <Icon size={15} className={preset?.key === p.key ? '' : 'text-accent'} aria-hidden />;
+                })()}
+                {p.label}
               </button>
             ))}
           </div>

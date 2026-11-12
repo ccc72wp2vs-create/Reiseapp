@@ -3,7 +3,7 @@ import type { PackingCategory } from '../../../shared/constants';
 export interface DayPreset {
   key: string;
   label: string;
-  emoji: string;
+  icon: 'boat' | 'dive' | 'temple' | 'beach' | 'nature';
   items: [string, PackingCategory][];
 }
 
@@ -12,7 +12,7 @@ export const DAY_PRESETS: DayPreset[] = [
   {
     key: 'boat',
     label: 'Bootsausflug & Schnorcheln',
-    emoji: '🚤',
+    icon: 'boat',
     items: [
       ['Badesachen', 'clothing'],
       ['Handtuch', 'other'],
@@ -30,7 +30,7 @@ export const DAY_PRESETS: DayPreset[] = [
   {
     key: 'dive',
     label: 'Tauchen',
-    emoji: '🤿',
+    icon: 'dive',
     items: [
       ['Tauchschein & Logbuch', 'documents'],
       ['Versicherungsnachweis', 'documents'],
@@ -46,7 +46,7 @@ export const DAY_PRESETS: DayPreset[] = [
   {
     key: 'temple',
     label: 'Tempel & Stadt',
-    emoji: '🛕',
+    icon: 'temple',
     items: [
       ['Schultern & Knie bedeckt (Tuch/lange Hose)', 'clothing'],
       ['Schuhe zum leichten Ausziehen', 'clothing'],
@@ -61,7 +61,7 @@ export const DAY_PRESETS: DayPreset[] = [
   {
     key: 'beach',
     label: 'Strandtag',
-    emoji: '🏖️',
+    icon: 'beach',
     items: [
       ['Badesachen', 'clothing'],
       ['Handtuch', 'other'],
@@ -75,7 +75,7 @@ export const DAY_PRESETS: DayPreset[] = [
   {
     key: 'nature',
     label: 'Natur & Elefanten',
-    emoji: '🐘',
+    icon: 'nature',
     items: [
       ['Feste Schuhe', 'clothing'],
       ['Kleidung, die schmutzig werden darf', 'clothing'],

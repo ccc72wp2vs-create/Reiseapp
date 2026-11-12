@@ -15,7 +15,7 @@ export interface Phrase {
 export interface PhraseGroup {
   key: string;
   title: string;
-  emoji: string;
+  icon: 'hand' | 'food' | 'shopping' | 'transport' | 'emergency' | 'numbers';
   phrases: Phrase[];
 }
 
@@ -23,7 +23,7 @@ export const PHRASES: PhraseGroup[] = [
   {
     key: 'basics',
     title: 'Grundlagen',
-    emoji: '👋',
+    icon: 'hand',
     phrases: [
       { de: 'Hallo / Tschüss', th: 'สวัสดี', say: 'sa-wat-dii', polite: true, hint: 'Mit Wai (Hände zusammen, leichte Verbeugung).' },
       { de: 'Danke', th: 'ขอบคุณ', say: 'khop-khun', polite: true },
@@ -39,7 +39,7 @@ export const PHRASES: PhraseGroup[] = [
   {
     key: 'food',
     title: 'Essen & Trinken',
-    emoji: '🍜',
+    icon: 'food',
     phrases: [
       { de: 'Nicht scharf, bitte', th: 'ไม่เผ็ด', say: 'mai phet', polite: true },
       { de: 'Ein bisschen scharf', th: 'เผ็ดนิดหน่อย', say: 'phet nit-noi', polite: true },
@@ -56,7 +56,7 @@ export const PHRASES: PhraseGroup[] = [
   {
     key: 'shopping',
     title: 'Einkaufen & Handeln',
-    emoji: '🛍️',
+    icon: 'shopping',
     phrases: [
       { de: 'Wie viel kostet das?', th: 'เท่าไหร่', say: 'thao-rai', polite: true },
       { de: 'Zu teuer', th: 'แพงไป', say: 'phaeng pai', polite: true },
@@ -68,7 +68,7 @@ export const PHRASES: PhraseGroup[] = [
   {
     key: 'transport',
     title: 'Unterwegs & Taxi',
-    emoji: '🛺',
+    icon: 'transport',
     phrases: [
       { de: 'Wo ist …?', th: '… อยู่ที่ไหน', say: '… yuu thii-nai', polite: true },
       { de: 'Wo ist die Toilette?', th: 'ห้องน้ำอยู่ที่ไหน', say: 'hong-naam yuu thii-nai', polite: true },
@@ -83,7 +83,7 @@ export const PHRASES: PhraseGroup[] = [
   {
     key: 'emergency',
     title: 'Notfall & Gesundheit',
-    emoji: '🚑',
+    icon: 'emergency',
     phrases: [
       { de: 'Hilfe!', th: 'ช่วยด้วย', say: 'chuai duai' },
       { de: 'Ich brauche einen Arzt', th: 'ต้องการหมอ', say: 'tong-gaan mor', polite: true },
@@ -96,7 +96,7 @@ export const PHRASES: PhraseGroup[] = [
   {
     key: 'numbers',
     title: 'Zahlen',
-    emoji: '🔢',
+    icon: 'numbers',
     phrases: [
       { de: '1', th: 'หนึ่ง', say: 'nueng' },
       { de: '2', th: 'สอง', say: 'song' },

@@ -1,4 +1,4 @@
-import { Search, Volume2 } from 'lucide-react';
+import { Hand, Hash, Search, ShoppingBag, Siren, TramFront, UtensilsCrossed, Volume2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../../components/AppShell';
 import { Input, Segmented, Sheet } from '../../components/ui';
@@ -6,6 +6,8 @@ import { t } from '../../i18n';
 import { PHRASES, withParticle, type Phrase, type Speaker } from './phrases';
 
 const KEY = 'travio.thaiSpeaker';
+
+const ICONS = { hand: Hand, food: UtensilsCrossed, shopping: ShoppingBag, transport: TramFront, emergency: Siren, numbers: Hash } as const;
 
 function useThaiVoice() {
   const [voice, setVoice] = useState<SpeechSynthesisVoice | null>(null);
@@ -78,8 +80,12 @@ export default function ThaiPage() {
       <div className="px-safe">
         {groups.map((g) => (
           <section key={g.key} aria-label={g.title}>
-            <h2 className="mb-3 mt-7 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
-              <span aria-hidden>{g.emoji}</span> {g.title}
+            <h2 className="mb-3 mt-7 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
+              {(() => {
+                const Icon = ICONS[g.icon];
+                return <Icon size={14} className="text-accent" aria-hidden />;
+              })()}
+              {g.title}
             </h2>
             <ul className="divide-y divide-line overflow-hidden rounded-[1.5rem] border border-line bg-surface">
               {g.phrases.map((p) => {

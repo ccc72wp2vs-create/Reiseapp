@@ -506,7 +506,7 @@ export const de = {
     copyFailed: 'Kopieren nicht möglich',
     paidRecord: 'Bezahlt – als erledigt erfassen',
     recorded: 'Rückzahlung erfasst',
-    noPaymentDetails: (n: string) => `Für ${n} sind keine Zahlungsdaten hinterlegt. Unter Mehr → Reiseübersicht → Reisegruppe → ✏️ kann PayPal.me oder IBAN ergänzt werden.`,
+    noPaymentDetails: (n: string) => `Für ${n} sind keine Zahlungsdaten hinterlegt. Unter Mehr → Reiseübersicht → Reisegruppe → Stift-Symbol kann PayPal.me oder IBAN ergänzt werden.`,
     payHint: 'Nach dem Überweisen auf „Bezahlt“ tippen – dann wird die Rückzahlung erfasst und die Salden aktualisiert.',
     payHintViewer: 'Rückzahlungen können nur Mitglieder mit Bearbeitungsrecht erfassen.',
     whatFor: 'Wofür?',
