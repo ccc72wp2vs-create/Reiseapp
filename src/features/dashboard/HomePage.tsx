@@ -4,6 +4,7 @@ import {
   BedDouble,
   CalendarDays,
   ChevronDown,
+  ChevronRight,
   CircleHelp,
   Download,
   MapPin,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { costInfo, personCostOverview, tripCostOverview } from '../../../shared/costs';
+import { costBucketItems, costInfo, personCostOverview, tripCostOverview, type CostBucket } from '../../../shared/costs';
 import {
   bookingSortKey,
   bookingsOnDate,
@@ -32,7 +33,7 @@ import { CoverArt, Logo } from '../../components/CoverArt';
 import { BookingBadges, BookingIcon, CategoryIcon, ExpenseIcon, IconTile, ModeIcon } from '../../components/status';
 import { toast } from '../../components/toast';
 import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
-import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Skeleton, cx } from '../../components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Sheet, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
@@ -498,6 +499,7 @@ function CostsCard({ snap }: { snap: TripSnapshot }) {
   const base = trip.baseCurrency;
   const selection = usePersonSelection(travelers);
   const { selected, filtered } = selection;
+  const [detail, setDetail] = useState<CostBucket | null>(null);
   const group = tripCostOverview(base, expenses, bookings);
   const person = filtered ? personCostOverview(base, selected, expenses, settlements, bookings) : null;
   const costs = person ?? group;
@@ -533,22 +535,13 @@ function CostsCard({ snap }: { snap: TripSnapshot }) {
           </>
         )}
         {costs.bookedNotInWalletMinor > 0 && (
-          <div className="flex justify-between gap-3">
-            <dt className="min-w-0 text-text-2">{t.home.costsBookedOpen}</dt>
-            <dd className="shrink-0 tabular">{money(costs.bookedNotInWalletMinor, base)}</dd>
-          </div>
+          <CostRow label={t.home.costsBookedOpen} value={money(costs.bookedNotInWalletMinor, base)} onClick={() => setDetail('bookedNotInWallet')} />
         )}
         {costs.plannedMinor > 0 && (
-          <div className="flex justify-between gap-3">
-            <dt className="min-w-0 text-text-2">{t.home.costsPlanned}</dt>
-            <dd className="shrink-0 tabular text-info">≈ {money(costs.plannedMinor, base)}</dd>
-          </div>
+          <CostRow label={t.home.costsPlanned} value={`≈ ${money(costs.plannedMinor, base)}`} tone="info" onClick={() => setDetail('planned')} />
         )}
         {costs.budgetCapMinor > 0 && (
-          <div className="flex justify-between gap-3">
-            <dt className="min-w-0 text-text-2">{t.home.costsCaps}</dt>
-            <dd className="shrink-0 tabular text-info">≤ {money(costs.budgetCapMinor, base)}</dd>
-          </div>
+          <CostRow label={t.home.costsCaps} value={`≤ ${money(costs.budgetCapMinor, base)}`} tone="info" onClick={() => setDetail('budgetCap')} />
         )}
         <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
           <dt className="min-w-0">{t.home.costsProjected}</dt>
@@ -576,6 +569,86 @@ function CostsCard({ snap }: { snap: TripSnapshot }) {
       )}
       {expenses.length === 0 && <p className="mt-2 text-[14px] text-text-3">{t.wallet.empty}</p>}
       <p className="mt-3 text-[12px] leading-snug text-text-3">{t.home.costsHint}</p>
+      {detail && <CostBucketSheet snap={snap} bucket={detail} selected={selected} onClose={() => setDetail(null)} />}
     </Card>
+  );
+}
+
+function CostRow({ label, value, tone, onClick }: { label: string; value: string; tone?: 'info'; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition active:bg-surface-2">
+      <span className="min-w-0 text-text-2 underline decoration-line-strong decoration-dotted underline-offset-4">{label}</span>
+      <span className={cx('flex shrink-0 items-center gap-1 tabular', tone === 'info' && 'text-info')}>
+        {value}
+        <ChevronRight size={16} className="text-text-3" />
+      </span>
+    </button>
+  );
+}
+
+const BUCKET_TITLE: Record<CostBucket, string> = {
+  bookedNotInWallet: t.home.costsBookedOpen,
+  planned: t.home.costsPlanned,
+  budgetCap: t.home.costsCaps,
+};
+
+/** Drill-down: the bookings behind a cost line of the overview. */
+function CostBucketSheet({ snap, bucket, selected, onClose }: { snap: TripSnapshot; bucket: CostBucket; selected: string[]; onClose: () => void }) {
+  const navigate = useNavigate();
+  const base = snap.trip.baseCurrency;
+  const items = costBucketItems(base, snap.bookings, selected).filter((i) => i.bucket === bucket);
+  const total = items.reduce((a, i) => a + i.amountMinor, 0);
+  const prefix = bucket === 'planned' ? '≈ ' : bucket === 'budgetCap' ? '≤ ' : '';
+  const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
+  return (
+    <Sheet open onClose={onClose} title={BUCKET_TITLE[bucket]}>
+      <div className="rounded-[1.25rem] bg-surface p-4">
+        <p className="text-[13px] text-text-3">{selected.length ? selected.map(name).join(' & ') : t.home.costsAll}</p>
+        <p className={cx('font-display text-[30px] font-semibold tabular', bucket !== 'bookedNotInWallet' && 'text-info')}>
+          {prefix}
+          {money(total, base)}
+        </p>
+      </div>
+      <ul className="mt-3 divide-y divide-line">
+        {items.map((i) => {
+          const b = snap.bookings.find((x) => x.id === i.bookingId)!;
+          return (
+            <li key={b.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navigate('/buchungen');
+                }}
+                className="flex w-full items-start gap-3 py-3 text-left"
+              >
+                <IconTile tone={b.bookingStatus === 'booked' ? 'accent' : 'warn'}>
+                  <BookingIcon type={b.type} />
+                </IconTile>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold leading-snug">{b.title}</span>
+                  <span className="block text-[13px] text-text-3">
+                    {b.startDate ? formatDate(b.startDate) : t.bookings.undated}
+                    {b.travelerIds.length ? ` · ${b.travelerIds.map(name).join(', ')}` : ''}
+                  </span>
+                  <span className="mt-1.5 block">
+                    <BookingBadges booking={b} compact />
+                  </span>
+                  {selected.length > 0 && i.amountMinor !== b.priceMinor && (
+                    <span className="mt-1 block text-[12px] text-text-3">{t.home.costsPartOf(money(b.priceMinor!, base))}</span>
+                  )}
+                </span>
+                <span className={cx('shrink-0 font-semibold tabular', bucket !== 'bookedNotInWallet' && 'text-info')}>
+                  {prefix}
+                  {money(i.amountMinor, base)}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {items.length === 0 && <p className="mt-3 text-[14px] text-text-3">{t.common.none}</p>}
+      <p className="mt-3 text-[12px] leading-snug text-text-3">{bucket === 'bookedNotInWallet' ? t.home.costsBookedOpenHint : t.home.costsPlannedHint}</p>
+    </Sheet>
   );
 }

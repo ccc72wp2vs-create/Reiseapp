@@ -215,3 +215,39 @@ export function personCostOverview(
   o.otherCurrencies = [...other].map(([currency, minor]) => ({ currency, minor }));
   return o;
 }
+
+export type CostBucket = 'bookedNotInWallet' | 'planned' | 'budgetCap';
+
+export interface CostBucketItem {
+  bookingId: string;
+  bucket: CostBucket;
+  /** Full booking amount, or the selected persons' part when filtered. */
+  amountMinor: number;
+}
+
+/**
+ * The bookings behind the cost overview lines (same rules as
+ * tripCostOverview / personCostOverview), for drill-down views.
+ */
+export function costBucketItems(
+  baseCurrency: string,
+  bookings: readonly (CostFields & Pick<BookingDto, 'id' | 'expenseId' | 'travelerIds'>)[],
+  travelerIds?: readonly string[],
+): CostBucketItem[] {
+  const sel = travelerIds && travelerIds.length ? new Set(travelerIds) : null;
+  const out: CostBucketItem[] = [];
+  for (const b of bookings) {
+    if (b.priceMinor == null || b.currency !== baseCurrency || b.bookingStatus === 'cancelled' || b.expenseId) continue;
+    let amount = b.priceMinor;
+    if (sel) {
+      if (!b.travelerIds.length) continue;
+      const parts = allocate(b.priceMinor, b.travelerIds.map(() => 1));
+      amount = b.travelerIds.reduce((a, id, i) => a + (sel.has(id) ? parts[i] : 0), 0);
+      if (!amount) continue;
+    }
+    const bucket: CostBucket =
+      b.costKind === 'budget_cap' ? 'budgetCap' : b.costKind === 'estimate' || b.bookingStatus !== 'booked' ? 'planned' : 'bookedNotInWallet';
+    out.push({ bookingId: b.id, bucket, amountMinor: amount });
+  }
+  return out;
+}

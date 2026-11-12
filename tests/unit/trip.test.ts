@@ -167,3 +167,20 @@ describe('person cost overview', () => {
     expect(couple).toMatchObject({ spentMinor: 383832, plannedMinor: 6600, netPaidMinor: 383832, balanceMinor: 0 });
   });
 });
+
+describe('cost bucket items', () => {
+  it('lists the bookings behind each overview line and matches the totals', async () => {
+    const { costBucketItems, tripCostOverview, personCostOverview } = await import('../../shared/costs');
+    const bs = bookings.map((b) => ({ ...b, travelerIds: ['a', 'b'] }));
+    const items = costBucketItems('EUR', bs);
+    const o = tripCostOverview('EUR', [], bs);
+    const sumOf = (k: string) => items.filter((i) => i.bucket === k).reduce((a, i) => a + i.amountMinor, 0);
+    expect(sumOf('planned')).toBe(o.plannedMinor);
+    expect(sumOf('budgetCap')).toBe(o.budgetCapMinor);
+    expect(sumOf('bookedNotInWallet')).toBe(o.bookedNotInWalletMinor);
+    expect(items.filter((i) => i.bucket === 'planned').map((i) => i.bookingId)).toEqual(['transfer-hkt-lanta']);
+    const pa = personCostOverview('EUR', ['a'], [], [], bs);
+    const pItems = costBucketItems('EUR', bs, ['a']);
+    expect(pItems.filter((i) => i.bucket === 'planned').reduce((x, i) => x + i.amountMinor, 0)).toBe(pa.plannedMinor);
+  });
+});
