@@ -13,7 +13,7 @@ import {
   Route,
   Sparkles,
 } from 'lucide-react';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { costBucketItems, costInfo, personCostOverview, tripCostOverview, type CostBucket } from '../../../shared/costs';
 import {
@@ -30,6 +30,7 @@ import {
 import type { BookingDto, TripSnapshot } from '../../../shared/types';
 import { pickDefaultTrip, useTrip } from '../../components/AppShell';
 import { CoverArt, Logo } from '../../components/CoverArt';
+import { WeatherCard } from '../../components/WeatherCard';
 import { BookingBadges, BookingIcon, CategoryIcon, ExpenseIcon, IconTile, ModeIcon } from '../../components/status';
 import { toast } from '../../components/toast';
 import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
@@ -38,28 +39,13 @@ import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
-import { setStatusBarOverHero } from '../../lib/theme';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
 const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
 const DestinationSheet = lazy(() => import('../trips/DestinationSheet'));
 const TripSheet = lazy(() => import('../trips/TripSheet'));
 
-/** Keeps the status bar dark while the dark hero image is behind it. */
-function useHeroStatusBar() {
-  useEffect(() => {
-    const update = () => setStatusBarOverHero(window.scrollY < window.innerHeight * 0.45);
-    update();
-    window.addEventListener('scroll', update, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', update);
-      setStatusBarOverHero(false);
-    };
-  }, []);
-}
-
 export function HomePage() {
-  useHeroStatusBar();
   const { state, snap } = useTrip();
   const { trips } = useTrips();
 
@@ -113,6 +99,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const where = destinationOn(destinations, today);
   const heroDest = phase.phase === 'before' ? destinations[0] : phase.phase === 'after' ? null : (where.current ?? where.leaving);
 
+  const weatherDest = where.current ?? where.leaving ?? (phase.phase === 'before' ? destinations[0] : null);
   const todays = activities.filter((a) => a.date === today);
   const todaysBookings = bookingsOnDate(bookings, today);
   const reminders = useMemo(() => transferReminders(trip, destinations, bookings, today), [trip, destinations, bookings, today]);
@@ -129,16 +116,16 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   return (
     <div>
       {/* ------------------------------------------------------------------ Hero */}
-      <section className="relative">
+      <section className="relative mx-3 overflow-hidden rounded-[2rem] shadow-float" style={{ marginTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}>
         <CoverArt
           name={heroDest?.name ?? trip.name}
           imageUrl={heroDest?.coverImageUrl ?? trip.coverImageUrl}
-          className="h-[56dvh] min-h-[380px] w-full rounded-b-[2.25rem]"
+          className="h-[50dvh] min-h-[360px] w-full"
           label={heroDest?.name ?? trip.name}
         />
-        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#0b1524] via-[#0b1524]/35 to-transparent" aria-hidden />
-        <div className="absolute inset-x-0 top-0 px-safe pt-safe">
-          <div className="flex items-center justify-between pt-2 text-sand">
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b1524] via-[#0b1524]/35 to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 top-0 px-4 pt-4">
+          <div className="flex items-center justify-between text-sand">
             <Logo size={30} withWordmark={false} />
             <Link
               to="/reisen"
@@ -150,7 +137,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             </Link>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f4f7fa]">
+        <div className="absolute inset-x-0 bottom-0 px-5 pb-6 text-[#f4f7fa]">
           <p className="text-[14px] font-medium text-white/75">
             {greeting()}
             {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}
@@ -180,6 +167,13 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
       </section>
 
       <div className="px-safe">
+        {/* ------------------------------------------------------------- Weather */}
+        {weatherDest && weatherDest.lat != null && weatherDest.lng != null && phase.phase !== 'after' && (
+          <div className="mt-5">
+            <WeatherCard lat={weatherDest.lat} lng={weatherDest.lng} timezone={weatherDest.timezone} place={weatherDest.name} />
+          </div>
+        )}
+
         {/* ------------------------------------------------------------ Reminders */}
         {(reminders.length > 0 || clarifications.length > 0) && phase.phase !== 'after' && (
           <section aria-label={t.home.reminders} className="mt-5 space-y-2.5">
@@ -219,27 +213,6 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           </section>
         )}
 
-        {/* ------------------------------------------------------- Quick actions */}
-        <section aria-label={t.home.quickActions} className="mt-6 grid grid-cols-4 gap-2">
-          {[
-            { label: t.home.addActivity, icon: <Plus size={20} />, onClick: () => setSheet('activity'), disabled: !canEdit },
-            { label: t.home.addExpense, icon: <Receipt size={20} />, onClick: () => setSheet('expense'), disabled: !canEdit || !online },
-            { label: t.home.addDestination, icon: <MapPin size={20} />, onClick: () => setSheet('destination'), disabled: !canEdit || !online },
-            { label: t.home.viewPlan, icon: <CalendarDays size={20} />, onClick: () => navigate('/plan') },
-          ].map((a) => (
-            <button
-              key={a.label}
-              type="button"
-              onClick={a.onClick}
-              disabled={a.disabled}
-              className="flex flex-col items-center gap-2 rounded-[1.25rem] py-2 text-[12px] font-semibold text-text-2 transition active:scale-95 disabled:opacity-40"
-            >
-              <span className="grid h-14 w-14 place-items-center rounded-[1.25rem] border border-line bg-surface text-accent shadow-card">{a.icon}</span>
-              {a.label}
-            </button>
-          ))}
-        </section>
-
         {/* ------------------------------------------------------------- Today */}
         {phase.phase === 'during' && (
           <>
@@ -255,8 +228,10 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">{b.title}</p>
                     <p className="text-[13px] text-text-3">{b.startDate === today ? formatTime(b.startTime) || t.plan.allDay : `${t.bookings.arrival} ${formatTime(b.endTime)}`}</p>
+                    <div className="mt-2">
+                      <BookingBadges booking={b} compact />
+                    </div>
                   </div>
-                  <BookingBadges booking={b} compact />
                 </Link>
               ))}
               {todays.map((a) => (
@@ -338,6 +313,27 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             </Card>
           )}
         </div>
+
+        {/* ------------------------------------------------------- Quick actions */}
+        <section aria-label={t.home.quickActions} className="mt-8 grid grid-cols-4 gap-2">
+          {[
+            { label: t.home.addActivity, icon: <Plus size={20} />, onClick: () => setSheet('activity'), disabled: !canEdit },
+            { label: t.home.addExpense, icon: <Receipt size={20} />, onClick: () => setSheet('expense'), disabled: !canEdit || !online },
+            { label: t.home.addDestination, icon: <MapPin size={20} />, onClick: () => setSheet('destination'), disabled: !canEdit || !online },
+            { label: t.home.viewPlan, icon: <CalendarDays size={20} />, onClick: () => navigate('/plan') },
+          ].map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              onClick={a.onClick}
+              disabled={a.disabled}
+              className="flex flex-col items-center gap-2 rounded-[1.25rem] py-2 text-[12px] font-semibold text-text-2 transition active:scale-95 disabled:opacity-40"
+            >
+              <span className="grid h-14 w-14 place-items-center rounded-[1.25rem] border border-line bg-surface text-accent shadow-card">{a.icon}</span>
+              {a.label}
+            </button>
+          ))}
+        </section>
 
         {/* ---------------------------------------------------- Next transport */}
         {transport && transport.id !== nextLeg?.booking?.id && (
@@ -455,11 +451,11 @@ function NoTrip() {
 
   return (
     <div>
-      <section className="relative">
-        <CoverArt name="Koh Lanta" className="h-[44dvh] min-h-[300px] w-full rounded-b-[2.25rem]" />
-        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#0b1524] to-transparent" aria-hidden />
-        <div className="absolute inset-x-0 top-0 px-safe pt-safe">
-          <Logo size={32} className="pt-2 text-sand" />
+      <section className="relative mx-3 overflow-hidden rounded-[2rem]" style={{ marginTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}>
+        <CoverArt name="Koh Lanta" className="h-[40dvh] min-h-[280px] w-full" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b1524] to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 top-0 px-4 pt-4">
+          <Logo size={32} className="text-sand" />
         </div>
         <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f4f7fa]">
           <h1 className="font-display text-[44px] font-semibold leading-none">{t.home.noTrip}</h1>

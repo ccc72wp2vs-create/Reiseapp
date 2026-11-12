@@ -314,3 +314,31 @@ export interface ApiErrorBody {
     details?: unknown;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Weather (Open-Meteo, proxied through the worker)
+// ---------------------------------------------------------------------------
+
+export interface WeatherDayDto {
+  date: string;
+  weatherCode: number;
+  maxC: number;
+  minC: number;
+  /** Max. precipitation probability in % (null if unknown). */
+  rainProbability: number | null;
+}
+
+export interface WeatherDto {
+  /** Observation time (local time of the place, ISO without offset). */
+  time: string;
+  temperatureC: number;
+  apparentC: number | null;
+  humidity: number | null;
+  windKmh: number | null;
+  weatherCode: number;
+  isDay: boolean;
+  days: WeatherDayDto[];
+  /** When the server fetched the data (UTC ISO). */
+  fetchedAt: string;
+  source: 'open-meteo';
+}
