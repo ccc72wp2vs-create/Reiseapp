@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { costInfo, summarizeBookingCosts } from '../../../shared/costs';
+import { costInfo, tripCostOverview } from '../../../shared/costs';
 import {
   bookingSortKey,
   bookingsOnDate,
@@ -123,8 +123,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
     .filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '') > today)
     .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)))
     .slice(0, 3);
-  const spent = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
-  const costTotals = summarizeBookingCosts(bookings);
+  const costs = tripCostOverview(trip.baseCurrency, expenses, bookings);
 
   return (
     <div>
@@ -363,56 +362,58 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
 
         {/* ------------------------------------------------------------ Wallet */}
         <SectionTitle action={<Link to="/kasse" className="text-[14px] font-semibold text-accent">{t.wallet.title}</Link>}>
-          {t.home.expenses}
+          {t.home.tripCosts}
         </SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Card className="p-5">
-            <p className="text-[13px] font-semibold text-text-3">{t.home.spentTotal}</p>
-            <p className="mt-1 font-display text-[30px] font-semibold tabular">{money(spent, trip.baseCurrency)}</p>
-            <ul className="mt-3 space-y-2">
+        <Card className="p-5">
+          <p className="text-[13px] font-semibold text-text-3">{t.home.costsSpent}</p>
+          <p className="mt-1 font-display text-[30px] font-semibold tabular">{money(costs.spentMinor, trip.baseCurrency)}</p>
+          {(costs.bookedNotInWalletMinor > 0 || costs.plannedMinor > 0 || costs.budgetCapMinor > 0) && (
+            <dl className="mt-3 space-y-1.5 border-t border-line pt-3 text-[14px]">
+              {costs.bookedNotInWalletMinor > 0 && (
+                <div className="flex justify-between gap-3">
+                  <dt className="min-w-0 text-text-2">{t.home.costsBookedOpen}</dt>
+                  <dd className="shrink-0 tabular">{money(costs.bookedNotInWalletMinor, trip.baseCurrency)}</dd>
+                </div>
+              )}
+              {costs.plannedMinor > 0 && (
+                <div className="flex justify-between gap-3">
+                  <dt className="min-w-0 text-text-2">{t.home.costsPlanned}</dt>
+                  <dd className="shrink-0 tabular text-info">≈ {money(costs.plannedMinor, trip.baseCurrency)}</dd>
+                </div>
+              )}
+              {costs.budgetCapMinor > 0 && (
+                <div className="flex justify-between gap-3">
+                  <dt className="min-w-0 text-text-2">{t.home.costsCaps}</dt>
+                  <dd className="shrink-0 tabular text-info">≤ {money(costs.budgetCapMinor, trip.baseCurrency)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
+                <dt className="min-w-0">{t.home.costsProjected}</dt>
+                <dd className="shrink-0 tabular">{money(costs.projectedMinor, trip.baseCurrency)}</dd>
+              </div>
+            </dl>
+          )}
+          {costs.otherCurrencies.length > 0 && (
+            <p className="mt-2 text-[13px] text-text-3">
+              {t.home.costsOther}: {costs.otherCurrencies.map((c) => money(c.minor, c.currency)).join(' · ')}
+            </p>
+          )}
+          {expenses.length > 0 && (
+            <ul className="mt-4 space-y-2 border-t border-line pt-3">
               {expenses.slice(0, 3).map((e) => (
                 <li key={e.id} className="flex items-center gap-2.5 text-[14px]">
                   <span className="text-text-3">
                     <ExpenseIcon category={e.category} size={16} />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{e.title}</span>
-                  <span className="tabular text-text-2">{money(e.amountMinor, e.currency)}</span>
+                  <span className="shrink-0 tabular text-text-2">{money(e.amountMinor, e.currency)}</span>
                 </li>
               ))}
-              {expenses.length === 0 && <li className="text-[14px] text-text-3">{t.wallet.empty}</li>}
             </ul>
-          </Card>
-          {costTotals.length > 0 && (
-            <Card className="p-5">
-              <p className="text-[13px] font-semibold text-text-3">{t.home.bookingCosts}</p>
-              {costTotals.map((c) => (
-                <dl key={c.currency} className="mt-2 space-y-1.5 text-[14px]">
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-text-2">{t.bookings.committed}</dt>
-                    <dd className="font-semibold tabular">{money(c.committedMinor, c.currency)}</dd>
-                  </div>
-                  <div className="flex justify-between gap-2 pl-3 text-[13px]">
-                    <dt className="text-text-3">{t.bookings.paid}</dt>
-                    <dd className="tabular text-text-2">{money(c.paidMinor, c.currency)}</dd>
-                  </div>
-                  {c.estimatedMinor > 0 && (
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-text-2">{t.bookings.estimated}</dt>
-                      <dd className="tabular text-info">{money(c.estimatedMinor, c.currency)}</dd>
-                    </div>
-                  )}
-                  {c.budgetCapMinor > 0 && (
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-text-2">{t.bookings.budgetCap}</dt>
-                      <dd className="tabular text-info">≤ {money(c.budgetCapMinor, c.currency)}</dd>
-                    </div>
-                  )}
-                </dl>
-              ))}
-              <p className="mt-3 text-[12px] leading-snug text-text-3">{t.bookings.notSpentHint}</p>
-            </Card>
           )}
-        </div>
+          {expenses.length === 0 && <p className="mt-2 text-[14px] text-text-3">{t.wallet.empty}</p>}
+          <p className="mt-3 text-[12px] leading-snug text-text-3">{t.home.costsHint}</p>
+        </Card>
 
         <div className="mt-8 flex flex-wrap gap-2">
           <Link to="/route" className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-[14px] font-semibold">

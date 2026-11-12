@@ -8,7 +8,7 @@
  *  - if it is unknown for how many people a price applies, nothing is split
  *    automatically and the booking is flagged for clarification
  */
-import type { BookingDto } from './types';
+import type { BookingDto, ExpenseDto } from './types';
 import { divRoundHalfAwayFromZero } from './money';
 
 export interface CostInfo {
@@ -97,4 +97,54 @@ export function summarizeBookingCosts(bookings: readonly CostFields[]): Currency
     }
   }
   return [...map.values()];
+}
+
+export interface TripCostOverview {
+  baseCurrency: string;
+  /** All wallet expenses in the base currency (incl. bookings transferred to the wallet). */
+  spentMinor: number;
+  /** Booked fixed prices that are not (yet) in the wallet. */
+  bookedNotInWalletMinor: number;
+  /** Estimates and not-yet-booked prices (never counted as spent). */
+  plannedMinor: number;
+  /** Upper budget limits. */
+  budgetCapMinor: number;
+  /** spent + booked-not-in-wallet + planned + budget caps. */
+  projectedMinor: number;
+  /** Booking amounts in other currencies that cannot be added up without a rate. */
+  otherCurrencies: { currency: string; minor: number }[];
+}
+
+/**
+ * One consistent view of what the trip costs. Bookings already transferred
+ * to the wallet are counted only once (as expenses).
+ */
+export function tripCostOverview(
+  baseCurrency: string,
+  expenses: readonly Pick<ExpenseDto, 'baseAmountMinor'>[],
+  bookings: readonly (CostFields & Pick<BookingDto, 'expenseId'>)[],
+): TripCostOverview {
+  const o: TripCostOverview = {
+    baseCurrency,
+    spentMinor: expenses.reduce((a, e) => a + e.baseAmountMinor, 0),
+    bookedNotInWalletMinor: 0,
+    plannedMinor: 0,
+    budgetCapMinor: 0,
+    projectedMinor: 0,
+    otherCurrencies: [],
+  };
+  const other = new Map<string, number>();
+  for (const b of bookings) {
+    if (b.priceMinor == null || !b.currency || b.bookingStatus === 'cancelled' || b.expenseId) continue;
+    if (b.currency !== baseCurrency) {
+      other.set(b.currency, (other.get(b.currency) ?? 0) + b.priceMinor);
+      continue;
+    }
+    if (b.costKind === 'budget_cap') o.budgetCapMinor += b.priceMinor;
+    else if (b.costKind === 'estimate' || b.bookingStatus !== 'booked') o.plannedMinor += b.priceMinor;
+    else o.bookedNotInWalletMinor += b.priceMinor;
+  }
+  o.projectedMinor = o.spentMinor + o.bookedNotInWalletMinor + o.plannedMinor + o.budgetCapMinor;
+  o.otherCurrencies = [...other].map(([currency, minor]) => ({ currency, minor }));
+  return o;
 }

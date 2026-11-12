@@ -136,3 +136,17 @@ describe('activity conflicts', () => {
     expect([...overlappingActivities([a('1', '09:00', '11:00'), a('2', '10:30', '12:00'), a('3', '12:00', '13:00'), a('4', null, null)])].sort()).toEqual(['1', '2']);
   });
 });
+
+describe('trip cost overview', () => {
+  it('counts bookings transferred to the wallet only once', async () => {
+    const { tripCostOverview } = await import('../../shared/costs');
+    const hotel = bookings.find((b) => b.id === 'hotel-hkt')!;
+    const transferred = bookings.map((b) => (b.id === 'hotel-hkt' ? { ...b, paymentStatus: 'paid' as const, expenseId: 'e1' } : b));
+    const o = tripCostOverview('EUR', [{ baseAmountMinor: hotel.priceMinor! }], transferred);
+    expect(o.spentMinor).toBe(46900);
+    expect(o.bookedNotInWalletMinor).toBe(383100 - 46900);
+    expect(o.plannedMinor).toBe(8000);
+    expect(o.budgetCapMinor).toBe(6000);
+    expect(o.projectedMinor).toBe(383100 + 8000 + 6000);
+  });
+});
