@@ -31,7 +31,8 @@ import { pickDefaultTrip, useTrip } from '../../components/AppShell';
 import { CoverArt, Logo } from '../../components/CoverArt';
 import { BookingBadges, BookingIcon, CategoryIcon, ExpenseIcon, IconTile, ModeIcon } from '../../components/status';
 import { toast } from '../../components/toast';
-import { Badge, Button, Card, Chip, EmptyState, ErrorState, SectionTitle, Skeleton, cx } from '../../components/ui';
+import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
+import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
@@ -495,13 +496,11 @@ function NoTrip() {
 function CostsCard({ snap }: { snap: TripSnapshot }) {
   const { trip, travelers, expenses, settlements, bookings } = snap;
   const base = trip.baseCurrency;
-  const [selected, setSelected] = useState<string[]>([]);
-  const filtered = selected.length > 0;
+  const selection = usePersonSelection(travelers);
+  const { selected, filtered } = selection;
   const group = tripCostOverview(base, expenses, bookings);
   const person = filtered ? personCostOverview(base, selected, expenses, settlements, bookings) : null;
   const costs = person ?? group;
-  const toggle = (id: string) =>
-    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : travelers.filter((x) => x.id === id || cur.includes(x.id)).map((x) => x.id)));
   const recent = filtered
     ? expenses
         .map((e) => ({ e, share: e.shares.filter((x) => selected.includes(x.travelerId)).reduce((a, x) => a + x.baseShareMinor, 0) }))
@@ -511,21 +510,9 @@ function CostsCard({ snap }: { snap: TripSnapshot }) {
 
   return (
     <Card className="p-5">
-      {travelers.length > 1 && (
-        <>
-          <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label={t.home.tripCosts}>
-            <Chip active={!filtered} onClick={() => setSelected([])}>
-              {t.home.costsAll}
-            </Chip>
-            {travelers.map((x) => (
-              <Chip key={x.id} active={selected.includes(x.id)} onClick={() => toggle(x.id)} icon={<span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color }} />}>
-                {x.name}
-              </Chip>
-            ))}
-          </div>
-          <p className="mb-3 mt-1 text-[12px] text-text-3">{t.home.costsFilterHint}</p>
-        </>
-      )}
+      <div className="mb-3">
+        <PersonFilter travelers={travelers} selection={selection} bleed="-mx-5 px-5" />
+      </div>
       <p className="text-[13px] font-semibold text-text-3">{filtered ? t.home.costsShare : t.home.costsSpent}</p>
       <p className="mt-1 font-display text-[30px] font-semibold tabular">{money(costs.spentMinor, base)}</p>
       <dl className="mt-3 space-y-1.5 border-t border-line pt-3 text-[14px]">

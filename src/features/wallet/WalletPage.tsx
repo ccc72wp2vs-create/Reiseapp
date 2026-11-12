@@ -1,12 +1,14 @@
 import { ArrowRight, ArrowRightLeft, Calculator, Coins, HandCoins, Plus, Receipt, Trash2 } from 'lucide-react';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
+import { personCostOverview } from '../../../shared/costs';
 import { computeBalances, netPaidMinor, suggestSettlements } from '../../../shared/finance';
 import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
 import type { ExpenseDto, SettlementDto, TripSnapshot } from '../../../shared/types';
 import { PageHeader, useTrip } from '../../components/AppShell';
 import { MoneyField } from '../../components/inputs';
+import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
 import { ExpenseIcon } from '../../components/status';
 import { toast } from '../../components/toast';
 import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, IconButton, Input, Progress, Segmented, SectionTitle, Select, Skeleton, TextField, cx } from '../../components/ui';
@@ -57,6 +59,13 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   const total = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
   const mine = me ? balances.find((b) => b.travelerId === me.id) : null;
   const canWrite = canEdit && online;
+  const selection = usePersonSelection(travelers);
+  const sel = selection.filtered ? personCostOverview(base, selection.selected, expenses, settlements, snap.bookings) : null;
+  const selectionLabel = selection.selected.map(name).join(' & ');
+  /** Expense amount in base currency – the selected persons' share when filtered. */
+  const amountOf = (e: ExpenseDto) =>
+    sel ? e.shares.filter((x) => selection.selected.includes(x.travelerId)).reduce((a, x) => a + x.baseShareMinor, 0) : e.baseAmountMinor;
+  const shownTotal = sel ? sel.spentMinor : total;
 
   return (
     <div>
@@ -73,14 +82,13 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       >
         <div className="no-scrollbar -mx-1 mt-5 overflow-x-auto px-1">
           <Segmented
-            className="min-w-[420px]"
             value={tab}
             onChange={setTab}
             options={[
               { value: 'overview', label: t.wallet.overview },
               { value: 'balances', label: t.wallet.balances },
               { value: 'history', label: t.wallet.history },
-              { value: 'rates', label: t.wallet.rates },
+              { value: 'rates', label: t.wallet.ratesShort },
             ]}
           />
         </div>
@@ -91,12 +99,30 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
 
         {tab === 'overview' && (
           <>
+            <div className="mb-4">
+              <PersonFilter travelers={travelers} selection={selection} bleed="-mx-4 px-4" />
+            </div>
             <Card className="relative overflow-hidden p-6">
               <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent-soft blur-2xl" aria-hidden />
-              <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-text-3">{t.wallet.total}</p>
-              <p className="mt-1 font-display text-[44px] font-semibold leading-none tabular">{money(total, base)}</p>
-              <p className="mt-2 text-[13px] text-text-3">{t.wallet.baseInfo(base)}</p>
-              {mine && (
+              <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-text-3">{sel ? t.home.costsShare : t.wallet.total}</p>
+              <p className="mt-1 font-display text-[44px] font-semibold leading-none tabular">{money(sel ? sel.spentMinor : total, base)}</p>
+              <p className="mt-2 text-[13px] text-text-3">{sel ? selectionLabel : t.wallet.baseInfo(base)}</p>
+              {sel && (
+                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
+                  <div>
+                    <p className="text-[12px] text-text-3">{t.home.costsNetPaid}</p>
+                    <p className="font-semibold tabular">{money(sel.netPaidMinor, base)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[12px] text-text-3">{t.wallet.balances}</p>
+                    <p className={cx('font-semibold tabular', sel.balanceMinor > 0 ? 'text-success' : sel.balanceMinor < 0 ? 'text-danger' : '')}>
+                      {sel.balanceMinor > 0 ? '+' : ''}
+                      {money(sel.balanceMinor, base)}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {!sel && mine && (
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
                   <div>
                     <p className="text-[12px] text-text-3">{t.wallet.myShare}</p>
@@ -132,7 +158,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                 <SectionTitle>{t.wallet.byCategory}</SectionTitle>
                 <Card className="space-y-4 p-5">
                   {EXPENSE_CATEGORIES.map((c) => {
-                    const v = expenses.filter((e) => e.category === c).reduce((a, e) => a + e.baseAmountMinor, 0);
+                    const v = expenses.filter((e) => e.category === c).reduce((a, e) => a + amountOf(e), 0);
                     if (!v) return null;
                     return (
                       <div key={c}>
@@ -142,7 +168,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                           </span>
                           <span className="font-semibold tabular">{money(v, base)}</span>
                         </div>
-                        <Progress value={total ? v / total : 0} label={t.expenseCategories[c]} />
+                        <Progress value={shownTotal ? v / shownTotal : 0} label={t.expenseCategories[c]} />
                       </div>
                     );
                   })}
@@ -150,7 +176,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                 <SectionTitle>{t.wallet.byPerson}</SectionTitle>
                 <p className="-mt-1 mb-3 text-[13px] text-text-3">{t.wallet.byPersonHint}</p>
                 <Card className="divide-y divide-line">
-                  {balances.map((b) => (
+                  {balances.filter((b) => !sel || selection.selected.includes(b.travelerId)).map((b) => (
                     <div key={b.travelerId} className="flex items-center gap-3 p-4">
                       <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: color(b.travelerId) }} />
                       <span className="min-w-0 flex-1 truncate font-medium">{name(b.travelerId)}</span>
@@ -168,7 +194,12 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                 <SectionTitle action={<button className="text-[14px] font-semibold text-accent" onClick={() => setTab('history')}>{t.wallet.history}</button>}>
                   {t.home.recentExpenses}
                 </SectionTitle>
-                <ExpenseList expenses={expenses.slice(0, 5)} snap={snap} onOpen={(e) => canEdit && setSheet({ kind: 'expense', expense: e })} />
+                <ExpenseList
+                  expenses={(sel ? expenses.filter((e) => amountOf(e) > 0) : expenses).slice(0, 5)}
+                  snap={snap}
+                  shareOf={sel ? selection.selected : undefined}
+                  onOpen={(e) => canEdit && setSheet({ kind: 'expense', expense: e })}
+                />
               </>
             )}
           </>
@@ -237,7 +268,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   );
 }
 
-function ExpenseList({ expenses, snap, onOpen }: { expenses: ExpenseDto[]; snap: TripSnapshot; onOpen: (e: ExpenseDto) => void }) {
+function ExpenseList({ expenses, snap, onOpen, shareOf }: { expenses: ExpenseDto[]; snap: TripSnapshot; onOpen: (e: ExpenseDto) => void; shareOf?: string[] }) {
   const base = snap.trip.baseCurrency;
   const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
   return (
@@ -254,10 +285,19 @@ function ExpenseList({ expenses, snap, onOpen }: { expenses: ExpenseDto[]; snap:
                 {formatDateShort(e.date)} · {name(e.paidByTravelerId)} · {t.wallet.split[e.splitMethod]} ({e.shares.length})
               </span>
             </span>
-            <span className="text-right">
-              <span className="block font-semibold tabular">{money(e.amountMinor, e.currency)}</span>
-              {e.currency !== base && <span className="block text-[12px] text-text-3 tabular">≈ {money(e.baseAmountMinor, base)}</span>}
-            </span>
+            {shareOf ? (
+              <span className="shrink-0 text-right">
+                <span className="block font-semibold tabular">
+                  {money(e.shares.filter((x) => shareOf.includes(x.travelerId)).reduce((a, x) => a + x.baseShareMinor, 0), base)}
+                </span>
+                <span className="block text-[12px] text-text-3 tabular">{t.wallet.shareOf(money(e.amountMinor, e.currency))}</span>
+              </span>
+            ) : (
+              <span className="shrink-0 text-right">
+                <span className="block font-semibold tabular">{money(e.amountMinor, e.currency)}</span>
+                {e.currency !== base && <span className="block text-[12px] text-text-3 tabular">≈ {money(e.baseAmountMinor, base)}</span>}
+              </span>
+            )}
           </button>
         </li>
       ))}

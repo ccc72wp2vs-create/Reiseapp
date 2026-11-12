@@ -391,6 +391,7 @@ export const de = {
     byPerson: 'Pro Person',
     byPersonHint: '„Bezahlt“ = tatsächlich selbst getragen (inkl. Rückzahlungen).',
     rates: 'Wechselkurse',
+    ratesShort: 'Kurse',
     addRate: 'Kurs speichern',
     rateEffective: 'Gültig ab',
     converter: 'Währungsrechner',
@@ -399,7 +400,7 @@ export const de = {
     liveRatesPlanned: 'Live-Wechselkurse sind als spätere Integration vorbereitet.',
     fromBooking: 'Aus Buchung',
     baseInfo: (c: string) => `Alle Salden in ${c}`,
-    shareOf: (s: string) => `Anteil: ${s}`,
+    shareOf: (s: string) => `von ${s}`,
     needsTravelers: 'Lege zuerst die Reisegruppe an.',
   },
   expenseCategories: {
