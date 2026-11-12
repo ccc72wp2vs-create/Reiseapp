@@ -253,15 +253,19 @@ describe('directSettlements', () => {
     expect(r.find((x) => x.fromTravelerId === 'A' && x.toTravelerId === 'L')!.items.map((i) => i.amountMinor)).toEqual([300, -200]);
   });
 
+  it('ignores expenses where everyone paid exactly their own share', () => {
+    expect(directSettlements([exp('room', [['A', 3750], ['B', 3750], ['C', 3750], ['D', 3750]], [['A', 3750], ['B', 3750], ['C', 3750], ['D', 3750]])], [])).toEqual([]);
+  });
+
   it('splits a share across several payers and subtracts repayments', () => {
     const r = directSettlements(
       [exp('dinner', [['A', 300], ['B', 100]], [['A', 200], ['C', 200]])],
       [{ id: 's1', date: '2026-11-11', fromTravelerId: 'C', toTravelerId: 'A', baseAmountMinor: 150 }],
     );
-    // C owes A 150 and B 50; A owes B 50 (B paid 100, A's share 200 → 50 to B)
-    expect(r.find((x) => x.fromTravelerId === 'C' && x.toTravelerId === 'A')).toBeUndefined();
-    expect(r.find((x) => x.fromTravelerId === 'C' && x.toTravelerId === 'B')!.amountMinor).toBe(50);
-    expect(r.find((x) => x.fromTravelerId === 'A' && x.toTravelerId === 'B')!.amountMinor).toBe(50);
+    // Net: A +100, B +100, C −200 → C owes A 100 and B 100; C already sent A 150.
+    expect(r.find((x) => x.fromTravelerId === 'C' && x.toTravelerId === 'B')!.amountMinor).toBe(100);
+    expect(r.find((x) => x.fromTravelerId === 'A' && x.toTravelerId === 'C')!.amountMinor).toBe(50);
+    expect(r.find((x) => x.fromTravelerId === 'A' && x.toTravelerId === 'B')).toBeUndefined();
   });
 
   it('settles the same balances as the minimal plan', () => {

@@ -318,13 +318,29 @@ export function directSettlements(
     else p.items.push({ ...item, amountMinor: sign * amount });
   };
   for (const e of expenses) {
-    const payers = e.payers.filter((p) => p.baseAmountMinor > 0);
-    if (!payers.length) continue;
-    for (const s of e.shares) {
-      if (s.baseShareMinor <= 0) continue;
-      const parts = allocate(s.baseShareMinor, payers.map((p) => p.baseAmountMinor));
-      payers.forEach((p, i) => add(s.travelerId, p.travelerId, parts[i], { kind: 'expense', id: e.id, title: e.title, date: e.date }));
+    // Only what someone paid beyond their own share creates a debt: whoever
+    // paid exactly their part (e.g. everyone paid their own room) owes nobody.
+    const net = new Map<string, number>();
+    for (const p of e.payers) net.set(p.travelerId, (net.get(p.travelerId) ?? 0) + p.baseAmountMinor);
+    for (const sh of e.shares) net.set(sh.travelerId, (net.get(sh.travelerId) ?? 0) - sh.baseShareMinor);
+    const creditors = [...net].filter(([, v]) => v > 0);
+    const debtors = [...net].filter(([, v]) => v < 0);
+    if (!creditors.length || !debtors.length) continue;
+    // Each debtor's amount goes to the creditors in proportion to what they advanced …
+    const rows = debtors.map(([, v]) => allocate(-v, creditors.map(([, c]) => c)));
+    // … then fix rounding so every creditor receives exactly what they advanced.
+    for (let guard = 0; guard < 1000; guard++) {
+      const diff = creditors.map(([, c], j) => rows.reduce((a, r) => a + r[j], 0) - c);
+      const over = diff.findIndex((d) => d > 0);
+      const under = diff.findIndex((d) => d < 0);
+      if (over < 0 || under < 0) break;
+      const row = rows.find((r) => r[over] > 0);
+      if (!row) break;
+      row[over] -= 1;
+      row[under] += 1;
     }
+    const item = { kind: 'expense' as const, id: e.id, title: e.title, date: e.date };
+    debtors.forEach(([d], i) => creditors.forEach(([c], j) => add(d, c, rows[i][j], item)));
   }
   for (const s of settlements) {
     // A repayment from X to Y reduces what X owes Y.
