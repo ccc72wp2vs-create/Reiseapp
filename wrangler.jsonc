@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // TRAVIO – Cloudflare Worker + Static Assets + D1
+  "name": "travio",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "assets": {
+    // The SPA is served from Workers Static Assets; unknown paths fall back to
+    // index.html. Only /api/* runs the Worker first.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "APP_ENV": "production"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "travio",
+      // Replace with the ID printed by `npx wrangler d1 create travio`.
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+  // Future: private bucket for booking documents (create it first with
+  // `npx wrangler r2 bucket create travio-documents`, then uncomment):
+  // "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "travio-documents" }]
+}
