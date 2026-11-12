@@ -321,6 +321,10 @@ input[type='time']::-webkit-date-and-time-value {
 
 /* Leaflet theming */
 .leaflet-container {
+  /* Leaflet's panes use z-index 400+ – keep them in their own stacking
+     context so the map never paints over the bottom navigation or sheets. */
+  isolation: isolate;
+  z-index: 0;
   background: var(--surface) !important;
   font-family: var(--font-sans) !important;
 }

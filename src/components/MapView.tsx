@@ -151,7 +151,7 @@ export function MapView({
   }
 
   return (
-    <div className={cx('relative overflow-hidden rounded-[1.5rem] border border-line', className)}>
+    <div className={cx('relative isolate overflow-hidden rounded-[1.5rem] border border-line', className)}>
       <div ref={el} className="absolute inset-0" />
       {!ready && <Skeleton className="absolute inset-0 rounded-none" />}
       {tileError && (
