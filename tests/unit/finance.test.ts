@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { balanceBreakdown, computeBalances, computeShares, netPaidMinor, SplitError, suggestSettlements } from '../../shared/finance';
+import { balanceBreakdown, computeBalances, computeShares, directSettlements, netPaidMinor, SplitError, suggestSettlements } from '../../shared/finance';
 import { allocate, convertMinor, formatMoney, minorToInput, normalizeRate, parseAmount, parseRate, sum } from '../../shared/money';
 
 describe('parseAmount (German & international input)', () => {
@@ -223,5 +223,58 @@ describe('balances & settlements', () => {
     expect(tim.find((i) => i.id === 'boat')).toMatchObject({ amountMinor: -3769, counterpartIds: ['lilli'] });
     expect(tim.find((i) => i.id === 'dinner')).toMatchObject({ amountMinor: -2500, counterpartIds: ['john', 'annika'] });
     expect(tim.find((i) => i.id === 's1')).toMatchObject({ kind: 'settlement', amountMinor: 3769, counterpartIds: ['lilli'] });
+  });
+});
+
+describe('directSettlements', () => {
+  const exp = (id: string, payers: [string, number][], shares: [string, number][]) => ({
+    id,
+    title: id,
+    date: '2026-11-10',
+    payers: payers.map(([travelerId, baseAmountMinor]) => ({ travelerId, baseAmountMinor })),
+    shares: shares.map(([travelerId, baseShareMinor]) => ({ travelerId, baseShareMinor })),
+  });
+
+  it('pays each creditor directly and nets debts between two people', () => {
+    const r = directSettlements(
+      [
+        exp('boat', [['L', 1200]], [['L', 300], ['J', 300], ['T', 300], ['A', 300]]),
+        exp('sushi', [['A', 800]], [['L', 200], ['J', 200], ['T', 200], ['A', 200]]),
+      ],
+      [],
+    );
+    const find = (f: string, to: string) => r.find((x) => x.fromTravelerId === f && x.toTravelerId === to)?.amountMinor;
+    expect(find('J', 'L')).toBe(300);
+    expect(find('T', 'L')).toBe(300);
+    expect(find('A', 'L')).toBe(100); // 300 owed – 200 Lilli owes Annika
+    expect(find('J', 'A')).toBe(200);
+    expect(find('T', 'A')).toBe(200);
+    expect(find('L', 'A')).toBeUndefined();
+    expect(r.find((x) => x.fromTravelerId === 'A' && x.toTravelerId === 'L')!.items.map((i) => i.amountMinor)).toEqual([300, -200]);
+  });
+
+  it('splits a share across several payers and subtracts repayments', () => {
+    const r = directSettlements(
+      [exp('dinner', [['A', 300], ['B', 100]], [['A', 200], ['C', 200]])],
+      [{ id: 's1', date: '2026-11-11', fromTravelerId: 'C', toTravelerId: 'A', baseAmountMinor: 150 }],
+    );
+    // C owes A 150 and B 50; A owes B 50 (B paid 100, A's share 200 → 50 to B)
+    expect(r.find((x) => x.fromTravelerId === 'C' && x.toTravelerId === 'A')).toBeUndefined();
+    expect(r.find((x) => x.fromTravelerId === 'C' && x.toTravelerId === 'B')!.amountMinor).toBe(50);
+    expect(r.find((x) => x.fromTravelerId === 'A' && x.toTravelerId === 'B')!.amountMinor).toBe(50);
+  });
+
+  it('settles the same balances as the minimal plan', () => {
+    const expenses = [
+      exp('a', [['L', 1001]], [['L', 250], ['J', 250], ['T', 250], ['A', 251]]),
+      exp('b', [['J', 891]], [['J', 297], ['A', 297], ['L', 297]]),
+    ];
+    const net = new Map<string, number>();
+    for (const t of directSettlements(expenses, [])) {
+      net.set(t.fromTravelerId, (net.get(t.fromTravelerId) ?? 0) - t.amountMinor);
+      net.set(t.toTravelerId, (net.get(t.toTravelerId) ?? 0) + t.amountMinor);
+    }
+    const balances = computeBalances(['L', 'J', 'T', 'A'], expenses.map((e) => ({ ...e, baseAmountMinor: e.payers.reduce((x, p) => x + p.baseAmountMinor, 0) })), []);
+    for (const b of balances) expect(net.get(b.travelerId) ?? 0).toBe(b.balanceMinor);
   });
 });

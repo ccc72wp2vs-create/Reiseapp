@@ -274,3 +274,77 @@ export function balanceBreakdown(
   }
   return items.sort((a, b) => a.date.localeCompare(b.date));
 }
+
+// ---------------------------------------------------------------------------
+// Direct ("einzeln") settlement: everyone pays back exactly whom they owe
+// ---------------------------------------------------------------------------
+
+export interface PairItem {
+  kind: 'expense' | 'settlement';
+  id: string;
+  title: string | null;
+  date: string;
+  /** > 0: the debtor owes this to the creditor; < 0: reduces the debt. */
+  amountMinor: number;
+}
+
+export interface DirectTransfer extends SuggestedTransfer {
+  /** The expenses and repayments this transfer consists of. */
+  items: PairItem[];
+}
+
+/**
+ * Settles every debt directly between the people involved – no netting across
+ * third persons. Each participant's share of an expense is owed to its payers
+ * (split proportionally to what they paid). Debts in both directions between
+ * two people cancel out, and recorded repayments reduce them. More transfers
+ * than suggestSettlements(), but every one is easy to trace back.
+ */
+export function directSettlements(
+  expenses: readonly BreakdownExpense[],
+  settlements: readonly BreakdownSettlement[],
+): DirectTransfer[] {
+  // key "a|b" with a < b; positive amount = a owes b
+  const pairs = new Map<string, { amount: number; items: PairItem[] }>();
+  const add = (debtor: string, creditor: string, amount: number, item: Omit<PairItem, 'amountMinor'>) => {
+    if (debtor === creditor || amount === 0) return;
+    const [a, b, sign] = debtor < creditor ? [debtor, creditor, 1] : [creditor, debtor, -1];
+    const key = `${a}|${b}`;
+    let p = pairs.get(key);
+    if (!p) pairs.set(key, (p = { amount: 0, items: [] }));
+    p.amount += sign * amount;
+    const existing = p.items.find((i) => i.kind === item.kind && i.id === item.id);
+    if (existing) existing.amountMinor += sign * amount;
+    else p.items.push({ ...item, amountMinor: sign * amount });
+  };
+  for (const e of expenses) {
+    const payers = e.payers.filter((p) => p.baseAmountMinor > 0);
+    if (!payers.length) continue;
+    for (const s of e.shares) {
+      if (s.baseShareMinor <= 0) continue;
+      const parts = allocate(s.baseShareMinor, payers.map((p) => p.baseAmountMinor));
+      payers.forEach((p, i) => add(s.travelerId, p.travelerId, parts[i], { kind: 'expense', id: e.id, title: e.title, date: e.date }));
+    }
+  }
+  for (const s of settlements) {
+    // A repayment from X to Y reduces what X owes Y.
+    add(s.fromTravelerId, s.toTravelerId, -s.baseAmountMinor, { kind: 'settlement', id: s.id, title: null, date: s.date });
+  }
+  const out: DirectTransfer[] = [];
+  for (const [key, p] of pairs) {
+    if (p.amount === 0) continue;
+    const [a, b] = key.split('|');
+    const forward = p.amount > 0;
+    out.push({
+      fromTravelerId: forward ? a : b,
+      toTravelerId: forward ? b : a,
+      amountMinor: Math.abs(p.amount),
+      // Express items from the debtor's point of view (+ = owes).
+      items: p.items
+        .map((i) => ({ ...i, amountMinor: forward ? i.amountMinor : -i.amountMinor }))
+        .filter((i) => i.amountMinor !== 0)
+        .sort((x, y) => x.date.localeCompare(y.date)),
+    });
+  }
+  return out.sort((x, y) => y.amountMinor - x.amountMinor || x.fromTravelerId.localeCompare(y.fromTravelerId));
+}

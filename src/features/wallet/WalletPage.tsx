@@ -2,7 +2,7 @@ import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as Hel
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
-import { balanceBreakdown, computeBalances, netPaidMinor, suggestSettlements } from '../../../shared/finance';
+import { balanceBreakdown, computeBalances, directSettlements, netPaidMinor, suggestSettlements, type DirectTransfer } from '../../../shared/finance';
 import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
 import type { ExpenseDto, SettlementDto, TripSnapshot } from '../../../shared/types';
@@ -53,7 +53,32 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       ),
     [travelers, expenses, settlements],
   );
-  const suggestions = useMemo(() => suggestSettlements(balances), [balances]);
+  const [settleMode, setSettleModeState] = useState<'minimal' | 'direct'>(() => {
+    try {
+      return localStorage.getItem('travio.settleMode') === 'direct' ? 'direct' : 'minimal';
+    } catch {
+      return 'minimal';
+    }
+  });
+  const setSettleMode = (m: 'minimal' | 'direct') => {
+    setSettleModeState(m);
+    try {
+      localStorage.setItem('travio.settleMode', m);
+    } catch {
+      /* ignore */
+    }
+  };
+  const minimal = useMemo(() => suggestSettlements(balances), [balances]);
+  const direct = useMemo(
+    () =>
+      directSettlements(
+        expenses.map((e) => ({ id: e.id, title: e.title, date: e.date, payers: e.payers, shares: e.shares })),
+        settlements.map((s) => ({ id: s.id, date: s.date, fromTravelerId: s.fromTravelerId, toTravelerId: s.toTravelerId, baseAmountMinor: s.baseAmountMinor })),
+      ),
+    [expenses, settlements],
+  );
+  const suggestions = settleMode === 'direct' ? direct : minimal;
+  const [pair, setPair] = useState<DirectTransfer | null>(null);
   const name = (id: string) => travelers.find((x) => x.id === id)?.name ?? '?';
   const color = (id: string) => travelers.find((x) => x.id === id)?.color ?? '#999';
   const total = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
@@ -233,7 +258,15 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
             </Card>
             <p className="mt-2 text-[12px] text-text-3">{t.wallet.tapForDetails}</p>
             <SectionTitle>{t.wallet.suggestions}</SectionTitle>
-            <p className="-mt-1 mb-3 text-[13px] text-text-3">{t.wallet.suggestionsText}</p>
+            <Segmented
+              value={settleMode}
+              onChange={setSettleMode}
+              options={[
+                { value: 'minimal', label: t.wallet.settleModeMinimal },
+                { value: 'direct', label: t.wallet.settleModeDirect },
+              ]}
+            />
+            <p className="mb-3 mt-2 text-[13px] text-text-3">{settleMode === 'direct' ? t.wallet.directText : t.wallet.suggestionsText}</p>
             {suggestions.length === 0 ? (
               <Card className="p-5 text-center text-success">{t.wallet.allSettled}</Card>
             ) : (
@@ -247,7 +280,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                       <span className="ml-auto font-display text-[19px] font-semibold tabular">{money(s.amountMinor, base)}</span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" variant="secondary" icon={<HelpCircle size={16} />} onClick={() => setExplain(s.fromTravelerId)}>
+                      <Button size="sm" variant="secondary" icon={<HelpCircle size={16} />} onClick={() => ('items' in s ? setPair(s as DirectTransfer) : setExplain(s.fromTravelerId))}>
                         {t.wallet.whatFor}
                       </Button>
                       {canEdit && (
@@ -273,6 +306,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       </div>
 
       {explain && <BalanceSheet snap={snap} travelerId={explain} onClose={() => setExplain(null)} />}
+      {pair && <PairSheet snap={snap} transfer={pair} onClose={() => setPair(null)} />}
       <Suspense fallback={null}>
         {sheet?.kind === 'expense' && <ExpenseSheet key={sheet.expense?.id ?? 'new'} open expense={sheet.expense} onClose={() => setSheet(null)} />}
         {sheet?.kind === 'settlement' && <SettlementSheet open preset={sheet.preset} onClose={() => setSheet(null)} />}
@@ -501,6 +535,38 @@ function Rates({ snap }: { snap: TripSnapshot }) {
       )}
       <p className="mt-4 text-[12px] text-text-3">{t.wallet.liveRatesPlanned}</p>
     </>
+  );
+}
+
+/** "Wofür?" for a direct transfer: the expenses between exactly these two people. */
+function PairSheet({ snap, transfer, onClose }: { snap: TripSnapshot; transfer: DirectTransfer; onClose: () => void }) {
+  const base = snap.trip.baseCurrency;
+  const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
+  const from = name(transfer.fromTravelerId);
+  const to = name(transfer.toTravelerId);
+  return (
+    <Sheet open onClose={onClose} title={t.wallet.pairTitle(from, to)}>
+      <div className="rounded-[1.25rem] bg-surface p-4">
+        <p className="text-[13px] text-text-3">{t.wallet.pairOwes(from, to)}</p>
+        <p className="font-display text-[30px] font-semibold tabular text-danger">{money(transfer.amountMinor, base)}</p>
+      </div>
+      <ul className="mt-3 divide-y divide-line">
+        {transfer.items.map((i) => (
+          <li key={i.kind + i.id} className="flex items-start gap-3 py-3">
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium leading-snug">{i.kind === 'expense' ? i.title : t.wallet.settlement}</span>
+              <span className="block text-[13px] text-text-3">
+                {formatDate(i.date)} · {i.kind === 'settlement' ? t.wallet.pairRepaid : i.amountMinor > 0 ? `${t.wallet.pairExpense}, ${t.wallet.owedTo(to)}` : t.wallet.pairCounter(to, from)}
+              </span>
+            </span>
+            <span className={cx('shrink-0 font-semibold tabular', i.amountMinor > 0 ? 'text-danger' : 'text-success')}>
+              {i.amountMinor > 0 ? '' : '−'}
+              {money(Math.abs(i.amountMinor), base)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Sheet>
   );
 }
 
