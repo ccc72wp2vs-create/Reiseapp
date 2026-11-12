@@ -1,4 +1,4 @@
-import { CalendarPlus, Compass, ExternalLink, List, Map as MapIcon, MapPin, Navigation, Plus, Route, Search, Star } from 'lucide-react';
+import { CalendarPlus, Compass, ExternalLink, List, Map as MapIcon, MapPin, Navigation, Plus, Route, Search, Star, ThumbsUp } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { PLACE_CATEGORIES, type PlaceCategory } from '../../../shared/constants';
 import { destinationOn, sortDestinations, todayIn, tripPhase } from '../../../shared/trip';
@@ -9,7 +9,9 @@ import { CategoryIcon } from '../../components/status';
 import { Badge, Button, Chip, EmptyState, IconButton, Input, Segmented, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { appleMapsUrl, googleMapsUrl } from '../../lib/maps';
-import { tripStore } from '../../lib/store';
+import { tripStore, useOnline } from '../../lib/store';
+import { http } from '../../lib/api';
+import { toast } from '../../components/toast';
 
 const PlaceSheet = lazy(() => import('./PlaceSheet'));
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
@@ -81,6 +83,8 @@ function Explore({ snap }: { snap: TripSnapshot }) {
         (!q || p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)),
     );
   }, [inStop, query, cat]);
+  // Most 👍 first – the group's favourites float to the top.
+  const sorted = useMemo(() => [...filtered].sort((a, b) => (b.votes?.length ?? 0) - (a.votes?.length ?? 0)), [filtered]);
   const usedCats = PLACE_CATEGORIES.filter((c) => inStop.some((p) => p.category === c));
   const markers: MapMarker[] = filtered
     .filter((p) => p.lat != null && p.lng != null)
@@ -174,7 +178,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
             )}
             {view === 'list' && (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
-                {filtered.map((p) => (
+                {sorted.map((p) => (
                   <PlaceCard key={p.id} place={p} snap={snap} onEdit={() => setEditing(p)} onPlan={() => setPlanning(p)} />
                 ))}
                 {filtered.length === 0 && (
@@ -207,6 +211,50 @@ function Explore({ snap }: { snap: TripSnapshot }) {
         )}
       </Suspense>
     </div>
+  );
+}
+
+function VoteButton({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) {
+  const { me } = useTrip();
+  const online = useOnline();
+  const [busy, setBusy] = useState(false);
+  const votes = place.votes ?? [];
+  const mine = !!me && votes.includes(me.id);
+  const voters = votes.map((id) => snap.travelers.find((x) => x.id === id)).filter((x) => !!x);
+  return (
+    <button
+      type="button"
+      aria-pressed={mine}
+      aria-label={t.explore.vote(votes.length)}
+      title={me ? undefined : t.explore.voteNeedsTraveler}
+      disabled={!me || !online || busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await tripStore.mutate(() => http.put(`/trips/${snap.trip.id}/places/${place.id}/vote`, { vote: !mine }));
+        } catch (e) {
+          toast.error(e);
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className={cx(
+        'inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition active:scale-95 disabled:opacity-50',
+        mine ? 'border-transparent bg-accent text-accent-ink' : 'border-line bg-surface-2 text-text-2',
+      )}
+    >
+      <ThumbsUp size={15} fill={mine ? 'currentColor' : 'none'} />
+      {votes.length > 0 && <span className="tabular">{votes.length}</span>}
+      {voters.length > 0 && (
+        <span className="ml-0.5 flex -space-x-1.5" aria-hidden>
+          {voters.slice(0, 4).map((v) => (
+            <span key={v.id} className="grid h-5 w-5 place-items-center rounded-full border border-surface text-[10px] font-bold text-[#0b1524]" style={{ background: v.color }}>
+              {v.name.slice(0, 1).toUpperCase()}
+            </span>
+          ))}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -246,6 +294,7 @@ function PlaceCard({ place, snap, onEdit, onPlan, highlight }: { place: PlaceDto
         {place.lat == null && <Badge>{t.explore.noCoords}</Badge>}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
+        <VoteButton place={place} snap={snap} />
         {canEdit && (
           <Button size="sm" variant="soft" icon={<CalendarPlus size={16} />} onClick={onPlan}>
             {t.explore.addToPlan}

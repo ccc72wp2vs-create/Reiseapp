@@ -38,6 +38,7 @@ import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
+import { CurrencyConverter } from '../../components/CurrencyConverter';
 import { setStatusBarOverHero } from '../../lib/theme';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
@@ -239,6 +240,8 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             </button>
           ))}
         </section>
+
+        <CurrencyConverter snap={snap} today={today} />
 
         {/* ------------------------------------------------------------- Today */}
         {phase.phase === 'during' && (

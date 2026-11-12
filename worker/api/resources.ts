@@ -1,6 +1,7 @@
 /**
  * Trip-scoped resources: activities, places, bookings, wallet, packing, sync.
  */
+import { z } from 'zod';
 import { Hono } from 'hono';
 import {
   activityCreateSchema,
@@ -40,6 +41,7 @@ import { currentUser, loadTripAccess, parseJson, requireRole } from '../middlewa
 import * as packing from '../services/packing';
 import * as plan from '../services/plan';
 import { processSyncOps } from '../services/sync';
+import { setVote } from '../services/votes';
 import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
@@ -111,6 +113,13 @@ r.patch('/:tripId/places/:id', async (c) => {
   const { version, ...patch } = await parseJson(c, placeUpdateSchema);
   const res = await plan.updatePlace(c.env.DB, c.get('trip').tripId, c.req.param('id'), version, patch);
   return c.json({ place: unwrapUpdate(res, 'Ort') });
+});
+
+/** 👍 vote – any member (also viewers) may vote with their own traveler. */
+r.put('/:tripId/places/:id/vote', async (c) => {
+  const { vote } = await parseJson(c, z.object({ vote: z.boolean() }));
+  const votes = await setVote(c.env.DB, c.get('trip').tripId, currentUser(c).id, c.req.param('id'), vote);
+  return c.json({ votes });
 });
 
 r.delete('/:tripId/places/:id', async (c) => {

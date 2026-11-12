@@ -8,7 +8,7 @@ import { PageHeader, useTrip } from '../../components/AppShell';
 import { CoverArt } from '../../components/CoverArt';
 import { moveId, SortableList } from '../../components/SortableList';
 import { toast } from '../../components/toast';
-import { Badge, Button, Card, ConfirmDialog, IconButton, Input, SectionTitle, Select, SelectField, Sheet, Skeleton, cx } from '../../components/ui';
+import { Badge, Button, Card, ConfirmDialog, IconButton, Input, SectionTitle, Select, SelectField, Sheet, Skeleton, TextField, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatDateTime, formatRange } from '../../lib/format';
@@ -250,7 +250,10 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
               <p className="truncate font-semibold">
                 {x.name} {x.userId === user?.id && <span className="text-[13px] font-normal text-text-3">({t.travelers.you})</span>}
               </p>
-              <p className="text-[12px] text-text-3">{x.userId ? t.travelers.linked : t.travelers.noAccount}</p>
+              <p className="text-[12px] text-text-3">
+                {x.userId ? t.travelers.linked : t.travelers.noAccount}
+                {(x.paypalMe || x.iban) && ` · ${[x.paypalMe && 'PayPal', x.iban && 'IBAN'].filter(Boolean).join(' & ')} ${t.travelers.stored}`}
+              </p>
               {isOwner && !x.userId && (
                 <button
                   type="button"
@@ -265,7 +268,7 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
             </div>
             {canEdit && (
               <>
-                <IconButton label={t.travelers.rename} className="h-9 w-9" disabled={!online} onClick={() => setEditing(x)}>
+                <IconButton label={t.travelers.edit} className="h-9 w-9" disabled={!online} onClick={() => setEditing(x)}>
                   <Pencil size={16} />
                 </IconButton>
                 <IconButton label={t.travelers.remove} className="h-9 w-9" disabled={!online || x.userId === user?.id} onClick={() => setRemoving(x)}>
@@ -308,12 +311,14 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
 
 function RenameTraveler({ traveler, tripId, onClose }: { traveler: TravelerDto; tripId: string; onClose: () => void }) {
   const [name, setName] = useState(traveler.name);
+  const [paypal, setPaypal] = useState(traveler.paypalMe ?? '');
+  const [iban, setIban] = useState(traveler.iban ?? '');
   const [busy, setBusy] = useState(false);
   return (
     <Sheet
       open
       onClose={onClose}
-      title={t.travelers.rename}
+      title={t.travelers.edit}
       footer={
         <>
           <Button variant="secondary" block onClick={onClose}>
@@ -326,7 +331,14 @@ function RenameTraveler({ traveler, tripId, onClose }: { traveler: TravelerDto; 
             onClick={async () => {
               setBusy(true);
               try {
-                await tripStore.mutate(() => http.patch(`/trips/${tripId}/travelers/${traveler.id}`, { name: name.trim(), version: traveler.version }));
+                await tripStore.mutate(() =>
+                  http.patch(`/trips/${tripId}/travelers/${traveler.id}`, {
+                    name: name.trim(),
+                    paypalMe: paypal.trim() || null,
+                    iban: iban.trim() || null,
+                    version: traveler.version,
+                  }),
+                );
                 onClose();
               } catch (e) {
                 toast.error(e);
@@ -340,7 +352,12 @@ function RenameTraveler({ traveler, tripId, onClose }: { traveler: TravelerDto; 
         </>
       }
     >
-      <Input aria-label={t.travelers.name} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      <div className="space-y-4">
+        <TextField label={t.travelers.name} value={name} onChange={(e) => setName(e.target.value)} />
+        <p className="text-[13px] text-text-2">{t.travelers.paymentHint}</p>
+        <TextField label={t.travelers.paypalMe} optional placeholder="z. B. MaxMuster" autoCapitalize="off" autoCorrect="off" value={paypal} onChange={(e) => setPaypal(e.target.value)} />
+        <TextField label={t.travelers.iban} optional placeholder="DE…" autoCapitalize="characters" autoCorrect="off" value={iban} onChange={(e) => setIban(e.target.value)} />
+      </div>
     </Sheet>
   );
 }

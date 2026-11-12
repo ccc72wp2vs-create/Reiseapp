@@ -1,9 +1,9 @@
-import { Trash2 } from 'lucide-react';
+import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory, type FxSource, type SplitMethod } from '../../../shared/constants';
 import { convertMinor, minorToInput, normalizeRate, parseAmount, sum } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
-import type { ExchangeRateDto, ExpenseDto } from '../../../shared/types';
+import type { ExpenseDto } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField } from '../../components/inputs';
 import { toast } from '../../components/toast';
@@ -13,43 +13,44 @@ import { errorMessage, http } from '../../lib/api';
 import { formatDate, formatRate, money } from '../../lib/format';
 import { tripStore, useOnline } from '../../lib/store';
 
-/** Latest stored rate for a currency that is effective on the given date. */
-export function storedRateFor(rates: ExchangeRateDto[], currency: string, date: string): ExchangeRateDto | null {
-  return (
-    rates
-      .filter((r) => r.currency === currency && r.effectiveDate <= date)
-      .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.createdAt.localeCompare(a.createdAt))[0] ??
-    rates.filter((r) => r.currency === currency).sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate))[0] ??
-    null
-  );
-}
+export { storedRateFor, suggestedRate, type SuggestedRate } from '../../lib/rates';
+import { storedRateFor, suggestedRate } from '../../lib/rates';
 
-export interface SuggestedRate {
-  rate: string;
-  effectiveDate: string;
-  from: 'stored' | 'lastUsed';
+export interface SplitPreset {
+  key: string;
+  label: string;
+  ids: string[];
 }
 
 /**
- * Rate to prefill: the stored trip rate, otherwise the rate last used for an
- * expense in that currency. Never invented – null if neither exists.
+ * One-tap "für wen?" presets: everyone, the pairs that already appear in the
+ * trip (two-person expenses or bookings) and "everyone except X".
  */
-export function suggestedRate(
-  rates: ExchangeRateDto[],
-  expenses: Pick<ExpenseDto, 'currency' | 'fxRate' | 'fxSource' | 'fxDate' | 'date' | 'createdAt'>[],
-  currency: string,
-  date: string,
-): SuggestedRate | null {
-  const stored = storedRateFor(rates, currency, date);
-  if (stored) return { rate: stored.rate, effectiveDate: stored.effectiveDate, from: 'stored' };
-  const last = expenses
-    .filter((e) => e.currency === currency && e.fxSource !== 'identity')
-    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
-  return last ? { rate: last.fxRate, effectiveDate: last.fxDate ?? last.date, from: 'lastUsed' } : null;
+export function splitPresets(
+  travelers: { id: string; name: string }[],
+  expenses: Pick<ExpenseDto, 'shares'>[],
+  bookings: { travelerIds: string[] }[],
+): SplitPreset[] {
+  const order = (ids: string[]) => travelers.filter((x) => ids.includes(x.id)).map((x) => x.id);
+  const name = (id: string) => travelers.find((x) => x.id === id)?.name ?? '?';
+  const out: SplitPreset[] = [{ key: 'all', label: t.wallet.presetAll(travelers.length), ids: travelers.map((x) => x.id) }];
+  if (travelers.length > 2) {
+    const pairs = new Map<string, string[]>();
+    for (const ids of [...expenses.map((e) => e.shares.map((x) => x.travelerId)), ...bookings.map((b) => b.travelerIds)]) {
+      if (ids.length !== 2 || !ids.every((id) => travelers.some((x) => x.id === id))) continue;
+      const o = order(ids);
+      pairs.set(o.join('|'), o);
+    }
+    for (const [key, ids] of [...pairs].slice(0, 4)) out.push({ key, label: ids.map(name).join(' & '), ids });
+    for (const x of travelers) out.push({ key: `not-${x.id}`, label: t.wallet.presetExcept(x.name), ids: travelers.filter((y) => y.id !== x.id).map((y) => y.id) });
+  }
+  return out;
 }
 
 export default function ExpenseSheet({ open, onClose, expense }: { open: boolean; onClose: () => void; expense?: ExpenseDto | null }) {
   const { snap, me } = useTrip();
+  // New expenses start in the quick form (amount, who paid, for whom).
+  const [quick, setQuick] = useState(!expense);
   const online = useOnline();
   const { trip, travelers, exchangeRates, expenses } = snap!;
   const base = trip.baseCurrency;
@@ -84,6 +85,8 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const presets = useMemo(() => splitPresets(travelers, expenses, snap!.bookings), [travelers, expenses, snap]);
+  const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
   const amountMinor = form.amount.trim() ? parseAmount(form.amount, form.currency) : null;
   const needsRate = form.currency !== base;
@@ -157,14 +160,15 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!form.title.trim()) return setError(`${t.wallet.titleField}: ${t.errors.required}`);
+    const title = form.title.trim() || (quick ? t.expenseCategories[form.category] : '');
+    if (!title) return setError(`${t.wallet.titleField}: ${t.errors.required}`);
     if (!amountMinor || amountMinor <= 0) return setError(t.errors.invalidAmount);
     if (!form.participants.length) return setError(t.wallet.participants + ': ' + t.errors.required);
     if (needsRate && !rateNorm) return setError(t.wallet.rate + ': ' + t.errors.validation);
     if (split.bad || (form.method !== 'equal' && split.remaining !== 0)) return setError(t.errors.validation + ' – ' + t.wallet.splitMethod);
     if (multiPay && (pay.bad || pay.remaining !== 0 || pay.vals.some((v) => v <= 0))) return setError(t.wallet.payersMismatch);
     const payload = {
-      title: form.title.trim(),
+      title,
       amountMinor,
       currency: form.currency,
       date: form.date,
@@ -225,7 +229,7 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
         <form id="expense-form" onSubmit={submit} className="space-y-4" noValidate>
           {!online && <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[14px] text-warn">{t.errors.offlineAction}</p>}
           {expense?.bookingId && <Badge tone="info">{t.wallet.fromBooking}</Badge>}
-          <TextField label={t.wallet.titleField} required autoFocus={!expense} value={form.title} onChange={(e) => set('title', e.target.value)} />
+          {!quick && <TextField label={t.wallet.titleField} required autoFocus={!expense} value={form.title} onChange={(e) => set('title', e.target.value)} />}
           <MoneyField
             label={t.wallet.amount}
             amount={form.amount}
@@ -237,7 +241,21 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
             }}
             error={form.amount && amountMinor === null ? t.errors.invalidAmount : null}
           />
-          {needsRate && (
+          {quick && needsRate && rateNorm && converted != null && (
+            <p className="-mt-2 text-[13px] text-text-2">
+              {t.wallet.convertedTo(money(converted, base))} · {t.wallet.rate} {formatRate(rateNorm)}
+            </p>
+          )}
+          {quick && (
+            <TextField
+              label={t.wallet.titleField}
+              optional
+              placeholder={t.wallet.quickTitlePlaceholder(t.expenseCategories[form.category])}
+              value={form.title}
+              onChange={(e) => set('title', e.target.value)}
+            />
+          )}
+          {needsRate && (!quick || !rateNorm) && (
             <div className="rounded-[1.25rem] border border-line bg-surface p-4">
               <Field label={`${t.wallet.rate} · ${t.wallet.rateHelp(form.currency, base)}`}>
                 <Input
@@ -276,15 +294,34 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
               <p className="mt-2 text-[12px] text-text-3">{t.wallet.historicNote}</p>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
+          {quick && (
+            <Field label={t.wallet.category}>
+              <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-pressed={form.category === c}
+                    onClick={() => set('category', c)}
+                    className={cx('inline-flex h-10 shrink-0 items-center rounded-full border px-3.5 text-[14px] font-semibold', form.category === c ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2')}
+                  >
+                    {t.expenseCategories[c]}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
+          <div className={cx('grid gap-3 [&>*]:min-w-0', quick ? 'grid-cols-1' : 'grid-cols-2')}>
             <TextField label={t.wallet.date} type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
-            <SelectField label={t.wallet.category} value={form.category} onChange={(e) => set('category', e.target.value as ExpenseCategory)}>
-              {EXPENSE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {t.expenseCategories[c]}
-                </option>
-              ))}
-            </SelectField>
+            {!quick && (
+              <SelectField label={t.wallet.category} value={form.category} onChange={(e) => set('category', e.target.value as ExpenseCategory)}>
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {t.expenseCategories[c]}
+                  </option>
+                ))}
+              </SelectField>
+            )}
           </div>
           <Field label={t.wallet.paidBy} hint={!multiPay ? t.wallet.payersHint : undefined}>
             <div className="flex flex-wrap gap-2">
@@ -339,7 +376,25 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
             </div>
           )}
 
-          <Field label={t.wallet.participants}>
+          <Field label={quick ? t.wallet.forWhom : t.wallet.participants}>
+            {presets.length > 1 && (
+              <div className="no-scrollbar -mx-1 mb-2 flex gap-2 overflow-x-auto px-1 pb-1">
+                {presets.map((p) => {
+                  const on = sameSet(p.ids, form.participants);
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setForm((f) => ({ ...f, participants: p.ids, method: 'equal', values: {} }))}
+                      className={cx('inline-flex h-9 shrink-0 items-center rounded-full border px-3 text-[13px] font-semibold', on ? 'border-transparent bg-accent text-accent-ink' : 'border-line bg-surface-2 text-text-2')}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               {travelers.map((x) => {
                 const on = form.participants.includes(x.id);
@@ -359,6 +414,20 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
             </div>
           </Field>
 
+          {quick ? (
+            <>
+              {amountMinor && form.participants.length > 0 && (
+                <p className="text-[14px] text-text-2">
+                  {t.wallet.perPerson}: ≈ <span className="font-semibold text-text">{money(Math.floor(amountMinor / form.participants.length), form.currency)}</span>
+                  {needsRate && rateNorm && <> ({money(Math.floor(convertMinor(amountMinor, form.currency, base, rateNorm) / form.participants.length), base)})</>}
+                </p>
+              )}
+              <Button variant="ghost" size="sm" icon={<SlidersHorizontal size={16} />} onClick={() => setQuick(false)}>
+                {t.wallet.moreOptions}
+              </Button>
+            </>
+          ) : (
+          <>
           <Field label={t.wallet.splitMethod}>
             <Segmented
               value={form.method}
@@ -410,6 +479,8 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
             </div>
           )}
           <TextAreaField label={t.common.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+          </>
+          )}
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
               {error}

@@ -54,6 +54,10 @@ export interface TripDto extends Versioned {
   homeTimezone: string;
   importKey: string | null;
   isDemo: boolean;
+  /** Optional daily spending target in the base currency (minor units). */
+  dailyBudgetMinor: number | null;
+  /** Free-text emergency info (insurance hotline, policy number, …). */
+  emergencyNotes: string | null;
   /** Role of the requesting user. */
   role: Role;
 }
@@ -77,6 +81,8 @@ export interface TravelerDto extends Versioned {
   userId: string | null;
   color: string;
   sortOrder: number;
+  paypalMe: string | null;
+  iban: string | null;
 }
 
 export interface DestinationDto extends Versioned {
@@ -131,6 +137,8 @@ export interface PlaceDto extends Versioned {
   favorite: boolean;
   destinationId: string | null;
   createdBy: string | null;
+  /** Travelers who gave this place a 👍 (may be missing on offline-created places). */
+  votes?: string[];
 }
 
 export interface BookingDto extends Versioned {

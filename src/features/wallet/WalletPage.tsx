@@ -1,4 +1,6 @@
-import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, HandCoins, Plus, Receipt, Trash2 } from 'lucide-react';
+import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, HandCoins, Plus, Receipt, Send, Trash2 } from 'lucide-react';
+import type { PayRequest } from './PaySheet';
+import { BudgetCard } from './BudgetCard';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
@@ -19,6 +21,7 @@ import { tripStore, useOnline } from '../../lib/store';
 
 const ExpenseSheet = lazy(() => import('./ExpenseSheet'));
 const SettlementSheet = lazy(() => import('./SettlementSheet'));
+const PaySheet = lazy(() => import('./PaySheet'));
 
 export default function WalletPage() {
   const { snap } = useTrip();
@@ -79,6 +82,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   );
   const suggestions = settleMode === 'direct' ? direct : minimal;
   const [pair, setPair] = useState<DirectTransfer | null>(null);
+  const [paying, setPaying] = useState<PayRequest | null>(null);
   const name = (id: string) => travelers.find((x) => x.id === id)?.name ?? '?';
   const color = (id: string) => travelers.find((x) => x.id === id)?.color ?? '#999';
   const total = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
@@ -174,6 +178,8 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                 </div>
               )}
             </Card>
+
+            <BudgetCard snap={snap} persons={sel ? selection.selected : travelers.map((x) => x.id)} canEdit={canEdit} />
 
             {expenses.length === 0 ? (
               <div className="mt-6">
@@ -283,6 +289,21 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                       <Button size="sm" variant="secondary" icon={<HelpCircle size={16} />} onClick={() => ('items' in s ? setPair(s as DirectTransfer) : setExplain(s.fromTravelerId))}>
                         {t.wallet.whatFor}
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        icon={<Send size={15} />}
+                        onClick={() =>
+                          setPaying({
+                            fromTravelerId: s.fromTravelerId,
+                            toTravelerId: s.toTravelerId,
+                            amountMinor: s.amountMinor,
+                            purpose: 'items' in s ? [...new Set((s as DirectTransfer).items.filter((i) => i.kind === 'expense' && i.amountMinor > 0).map((i) => i.title ?? ''))] : [],
+                          })
+                        }
+                      >
+                        {t.wallet.payNow}
+                      </Button>
                       {canEdit && (
                         <Button
                           size="sm"
@@ -310,6 +331,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       <Suspense fallback={null}>
         {sheet?.kind === 'expense' && <ExpenseSheet key={sheet.expense?.id ?? 'new'} open expense={sheet.expense} onClose={() => setSheet(null)} />}
         {sheet?.kind === 'settlement' && <SettlementSheet open preset={sheet.preset} onClose={() => setSheet(null)} />}
+        {paying && <PaySheet snap={snap} req={paying} canRecord={canEdit} onClose={() => setPaying(null)} />}
       </Suspense>
     </div>
   );

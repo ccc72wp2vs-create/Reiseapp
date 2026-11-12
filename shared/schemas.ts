@@ -131,6 +131,8 @@ const tripFields = {
   originLat: lat,
   originLng: lng,
   homeTimezone: timeZone,
+  dailyBudgetMinor: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  emergencyNotes: optText(4000),
 };
 
 export const tripCreateSchema = z
@@ -150,6 +152,15 @@ export const travelerCreateSchema = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
   userId: id.nullable().optional(),
+  /** PayPal.me user name (without the URL). */
+  paypalMe: z.preprocess(
+    (v) => (typeof v === 'string' ? v.trim().replace(/^(https?:\/\/)?(www\.)?paypal\.me\//i, '').replace(/\/.*$/, '') || null : v),
+    z.string().regex(/^[A-Za-z0-9._-]{1,40}$/, 'Ungültiger PayPal.me-Name').nullable(),
+  ).optional(),
+  iban: z.preprocess(
+    (v) => (typeof v === 'string' ? v.replace(/\s+/g, '').toUpperCase() || null : v),
+    z.string().regex(/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/, 'Ungültige IBAN').nullable(),
+  ).optional(),
 });
 export const travelerUpdateSchema = travelerCreateSchema.partial().extend({ version });
 

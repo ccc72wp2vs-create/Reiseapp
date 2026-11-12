@@ -1,4 +1,4 @@
-import { Briefcase, ChevronRight, CloudOff, Download, FlaskConical, Luggage, Map, Settings, Smartphone, Sparkles, Ticket, Trash2, Users } from 'lucide-react';
+import { Briefcase, ChevronRight, CloudOff, Download, FlaskConical, Luggage, Map, Settings, Siren, Smartphone, Sparkles, Ticket, Trash2, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { PageHeader, useTrip } from '../../components/AppShell';
@@ -58,6 +58,8 @@ export default function MorePage() {
           <Row to="/reise" icon={<Users size={19} />} label={t.trips.overview} hint={`${t.destinations.title} · ${t.travelers.title}`} />
           <Row to="/route" icon={<Map size={19} />} label={t.trips.route} />
           <Row to="/buchungen" icon={<Ticket size={19} />} label={t.bookings.title} hint={snap ? `${snap.bookings.length}` : undefined} />
+          <Row to="/rueckblick" icon={<Sparkles size={19} />} label={t.recap.title} hint={t.recap.share} />
+          <Row to="/notfall" icon={<Siren size={19} />} label={t.emergency.title} hint={t.emergency.eyebrow} />
           <Row to="/packliste" icon={<Luggage size={19} />} label={t.packing.title} hint={items.length ? t.packing.progress(items.filter((i) => i.packed).length, items.length) : undefined} />
         </ul>
 

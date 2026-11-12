@@ -7,6 +7,7 @@ import { toast } from '../../components/toast';
 import { Badge, Button, Card, Chip, ConfirmDialog, EmptyState, IconButton, Input, Progress, Segmented, Select, SelectField, Sheet, Skeleton, TextField, Toggle, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { tripStore, usePendingIds } from '../../lib/store';
+import { DAY_PRESETS, type DayPreset } from './dayPresets';
 
 export default function PackingPage() {
   const { snap } = useTrip();
@@ -244,6 +245,7 @@ function NewListSheet({ snap, onClose, onCreated }: { snap: TripSnapshot; onClos
   const [name, setName] = useState('');
   const [visibility, setVisibility] = useState<PackingVisibility>('private');
   const [from, setFrom] = useState('');
+  const [preset, setPreset] = useState<DayPreset | null>(null);
   return (
     <Sheet
       open
@@ -258,7 +260,10 @@ function NewListSheet({ snap, onClose, onCreated }: { snap: TripSnapshot; onClos
             block
             disabled={!name.trim()}
             onClick={() => {
-              const id = tripStore.packing.createList({ name: name.trim(), visibility, isTemplate: false, ...(from ? { fromListId: from } : {}) });
+              const id = tripStore.packing.createList({ name: name.trim(), visibility, isTemplate: false, ...(from && !preset ? { fromListId: from } : {}) });
+              if (id && preset) {
+                for (const [itemName, category] of preset.items) tripStore.packing.createItem({ listId: id, name: itemName, category, quantity: 1, packed: false });
+              }
               if (id) onCreated(id);
             }}
           >
@@ -268,7 +273,35 @@ function NewListSheet({ snap, onClose, onCreated }: { snap: TripSnapshot; onClos
       }
     >
       <div className="space-y-4">
-        <TextField label={t.packing.listName} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <div>
+          <p className="mb-2 text-[14px] font-semibold text-text-2">{t.packing.dayTrip}</p>
+          <div className="flex flex-wrap gap-2">
+            {DAY_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                aria-pressed={preset?.key === p.key}
+                onClick={() => {
+                  const on = preset?.key !== p.key;
+                  setPreset(on ? p : null);
+                  if (on) {
+                    setName(p.label);
+                    setFrom('');
+                    if (canShared) setVisibility('shared');
+                  }
+                }}
+                className={cx(
+                  'inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-semibold',
+                  preset?.key === p.key ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2',
+                )}
+              >
+                <span aria-hidden>{p.emoji}</span> {p.label}
+              </button>
+            ))}
+          </div>
+          {preset && <p className="mt-2 text-[13px] text-text-3">{t.packing.presetItems(preset.items.length)}</p>}
+        </div>
+        <TextField label={t.packing.listName} value={name} onChange={(e) => setName(e.target.value)} />
         <Segmented
           label={t.packing.visibility}
           value={visibility}
@@ -279,6 +312,7 @@ function NewListSheet({ snap, onClose, onCreated }: { snap: TripSnapshot; onClos
           ]}
         />
         <p className="text-[13px] text-text-3">{visibility === 'private' ? t.packing.privateHint : t.packing.sharedHint}</p>
+        {!preset && (
         <SelectField label={t.packing.fromTemplate} optional value={from} onChange={(e) => setFrom(e.target.value)}>
           <option value="">{t.packing.blank}</option>
           {templates.map((x) => (
@@ -294,6 +328,7 @@ function NewListSheet({ snap, onClose, onCreated }: { snap: TripSnapshot; onClos
               </option>
             ))}
         </SelectField>
+        )}
       </div>
     </Sheet>
   );

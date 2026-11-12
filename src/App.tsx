@@ -23,6 +23,8 @@ const TripsPage = lazy(() => import('./features/trips/TripsPage'));
 const TripDetailsPage = lazy(() => import('./features/trips/TripDetailsPage'));
 const RoutePage = lazy(() => import('./features/trips/RoutePage'));
 const NotFoundPage = lazy(() => import('./features/more/NotFoundPage'));
+const EmergencyPage = lazy(() => import('./features/more/EmergencyPage'));
+const RecapPage = lazy(() => import('./features/trips/RecapPage'));
 
 function PageFallback() {
   return (
@@ -116,6 +118,8 @@ const router = createBrowserRouter([
           { path: 'route', element: <RoutePage /> },
           { path: 'einstellungen', element: <SettingsPage /> },
           { path: 'installieren', element: <InstallPage /> },
+          { path: 'notfall', element: <EmergencyPage /> },
+          { path: 'rueckblick', element: <RecapPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

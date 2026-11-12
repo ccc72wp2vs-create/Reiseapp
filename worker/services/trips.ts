@@ -12,6 +12,7 @@ import { nowIso, uuid } from '../lib/util';
 import { listExchangeRates, listExpenses, listSettlements } from './wallet';
 import { listVisiblePacking } from './packing';
 import { attachTravelers } from './bookings';
+import { attachVotes } from './votes';
 
 type Row = Record<string, unknown>;
 
@@ -37,6 +38,8 @@ export function tripRowToDto(row: Row, role: Role): TripDto {
     homeTimezone: row.home_timezone as string,
     importKey: (row.import_key as string) ?? null,
     isDemo: row.is_demo === 1,
+    dailyBudgetMinor: (row.daily_budget_minor as number) ?? null,
+    emergencyNotes: (row.emergency_notes as string) ?? null,
     role,
   };
 }
@@ -55,6 +58,8 @@ export const TRIP_COLUMNS: Record<string, string> = {
   originLat: 'origin_lat',
   originLng: 'origin_lng',
   homeTimezone: 'home_timezone',
+  dailyBudgetMinor: 'daily_budget_minor',
+  emergencyNotes: 'emergency_notes',
 };
 
 export async function listTripsForUser(db: D1Database, userId: string): Promise<TripSummaryDto[]> {
@@ -198,7 +203,7 @@ export async function buildSnapshot(
     travelers,
     destinations,
     activities,
-    places,
+    places: await attachVotes(db, tripId, places),
     bookings: await attachTravelers(db, tripId, bookings),
     expenses,
     settlements,

@@ -352,6 +352,6 @@ export const travelerSpec: EntitySpec = {
   label: 'Reisende:r',
   table: 'travelers',
   orderBy: 'sort_order, created_at',
-  fields: { name: f('name'), color: f('color'), userId: f('user_id') },
+  fields: { name: f('name'), color: f('color'), userId: f('user_id'), paypalMe: f('paypal_me'), iban: f('iban') },
   readonly: { sortOrder: f('sort_order', 'int') },
 };

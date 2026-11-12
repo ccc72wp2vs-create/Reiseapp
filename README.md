@@ -68,6 +68,7 @@ scripts/        Icon-Generator, E2E-Server
 - **Packlisten:** private und gemeinsame Listen, Kategorien, Mengen, Fortschritt, Vorlagen.
 - **Mehrbenutzer:** Inhaber:in/Bearbeiter:in/Leser:in, einmalige, ablaufende Einladungslinks, serverseitige Berechtigungsprüfung bei jeder Anfrage.
 - **PWA:** installierbar, App-Shell offline, Update-Hinweis, Offline-Anzeige, Konfliktauflösung.
+- **Unterwegs (Ergänzungen):** Schnell-Erfassung von Ausgaben mit „Für wen?“-Vorlagen (Alle, Paare, „Ohne …“), Ausgleich wahlweise mit möglichst wenigen oder einzelnen (direkten) Überweisungen, „Jetzt überweisen“ per PayPal.me-Link oder IBAN (Zahlungsdaten je Person), Währungsrechner auf der Startseite, Tagesbudget pro Person mit Auswertung je Ort, Notfall-Seite (Thailand-Notrufe, Botschaft, eigene Notfall-Infos, Krankenhaus in der Nähe), 👍-Abstimmung über gespeicherte Orte, fertige Ausflugs-Packlisten und Reise-Rückblick zum Teilen.
 
 Geplante Erweiterungen sind in der App unter **Mehr → In Vorbereitung** klar als „Geplant“ gekennzeichnet.
 
