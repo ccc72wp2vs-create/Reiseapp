@@ -20,7 +20,7 @@
       "binding": "DB",
       "database_name": "travio",
       // Replace with the ID printed by `npx wrangler d1 create travio`.
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "857a5ba6-2e84-4655-b1f2-b5a9da0347c1",
       "migrations_dir": "migrations"
     }
   ]
