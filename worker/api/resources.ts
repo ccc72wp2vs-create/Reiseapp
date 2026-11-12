@@ -40,6 +40,7 @@ import { currentUser, loadTripAccess, parseJson, requireRole } from '../middlewa
 import * as packing from '../services/packing';
 import * as plan from '../services/plan';
 import { processSyncOps } from '../services/sync';
+import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
 import type { AppEnv } from '../types';
@@ -129,16 +130,18 @@ function checkBookingDates(b: { startDate?: string | null; endDate?: string | nu
 
 r.post('/:tripId/bookings', async (c) => {
   requireRole(c, 'editor');
-  const input = await parseJson(c, bookingCreateSchema);
+  const tripId = c.get('trip').tripId;
+  const { travelerIds, ...input } = await parseJson(c, bookingCreateSchema);
   checkBookingDates(input);
-  const booking = await insertEntity<BookingDto>(c.env.DB, bookingSpec, c.get('trip').tripId, input, { created_by: currentUser(c).id });
-  return c.json({ booking }, 201);
+  const booking = await insertEntity<BookingDto>(c.env.DB, bookingSpec, tripId, input, { created_by: currentUser(c).id });
+  if (travelerIds?.length) await setBookingTravelers(c.env.DB, tripId, booking.id, travelerIds);
+  return c.json({ booking: await attachTravelersOne(c.env.DB, tripId, booking) }, 201);
 });
 
 r.patch('/:tripId/bookings/:id', async (c) => {
   requireRole(c, 'editor');
   const t = c.get('trip');
-  const { version, ...patch } = await parseJson(c, bookingUpdateSchema);
+  const { version, travelerIds, ...patch } = await parseJson(c, bookingUpdateSchema);
   const cur = await getEntity<BookingDto>(c.env.DB, bookingSpec, t.tripId, c.req.param('id'));
   if (!cur) throw new ApiError('not_found', 'Buchung nicht gefunden');
   const merged = { ...cur, ...patch };
@@ -147,7 +150,9 @@ r.patch('/:tripId/bookings/:id', async (c) => {
     throw new ApiError('validation_failed', 'Währung fehlt', [{ path: 'currency' }]);
   }
   const res: UpdateResult<BookingDto> = await updateEntity(c.env.DB, bookingSpec, t.tripId, cur.id, version, patch);
-  return c.json({ booking: unwrapUpdate(res, 'Buchung') });
+  const booking = unwrapUpdate(res, 'Buchung');
+  if (travelerIds) await setBookingTravelers(c.env.DB, t.tripId, booking.id, travelerIds);
+  return c.json({ booking: await attachTravelersOne(c.env.DB, t.tripId, booking) });
 });
 
 r.delete('/:tripId/bookings/:id', async (c) => {

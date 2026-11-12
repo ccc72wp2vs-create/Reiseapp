@@ -11,6 +11,7 @@ import {
 import { nowIso, uuid } from '../lib/util';
 import { listExchangeRates, listExpenses, listSettlements } from './wallet';
 import { listVisiblePacking } from './packing';
+import { attachTravelers } from './bookings';
 
 type Row = Record<string, unknown>;
 
@@ -185,7 +186,7 @@ export async function buildSnapshot(
       listEntities<TripSnapshot['destinations'][number]>(db, destinationSpec, tripId),
       listEntities<TripSnapshot['activities'][number]>(db, activitySpec, tripId),
       listEntities<TripSnapshot['places'][number]>(db, placeSpec, tripId),
-      listEntities<TripSnapshot['bookings'][number]>(db, bookingSpec, tripId),
+      listEntities<Omit<TripSnapshot['bookings'][number], 'travelerIds'>>(db, bookingSpec, tripId),
       listExpenses(db, tripId),
       listSettlements(db, tripId),
       listExchangeRates(db, tripId),
@@ -198,7 +199,7 @@ export async function buildSnapshot(
     destinations,
     activities,
     places,
-    bookings,
+    bookings: await attachTravelers(db, tripId, bookings),
     expenses,
     settlements,
     exchangeRates,

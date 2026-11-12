@@ -16,7 +16,7 @@ import type { BookingDto } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField, TimeZoneSelect } from '../../components/inputs';
 import { toast } from '../../components/toast';
-import { Button, ConfirmDialog, SelectField, Sheet, TextAreaField, TextField } from '../../components/ui';
+import { Button, ConfirmDialog, Field, SelectField, Sheet, TextAreaField, TextField } from '../../components/ui';
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { tripStore, useOnline } from '../../lib/store';
@@ -55,6 +55,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
     paidByTravelerId: b?.paidByTravelerId ?? '',
     clarificationNote: b?.clarificationNote ?? '',
     notes: b?.notes ?? '',
+    travelerIds: b?.travelerIds ?? [],
   }));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,6 +100,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
       paidByTravelerId: form.paidByTravelerId || null,
       clarificationNote: form.clarificationNote.trim() || null,
       notes: form.notes.trim() || null,
+      travelerIds: form.travelerIds,
     };
     setBusy(true);
     try {
@@ -206,6 +208,31 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
             </SelectField>
           )}
           <TextField label={t.bookings.location} optional value={form.location} onChange={(e) => set('location', e.target.value)} />
+
+          <Field label={t.bookings.forWhom} hint={t.bookings.forWhomHint}>
+            <div className="flex flex-wrap gap-2">
+              {travelers.map((x) => {
+                const on = form.travelerIds.includes(x.id);
+                return (
+                  <button
+                    key={x.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      set(
+                        'travelerIds',
+                        on ? form.travelerIds.filter((id) => id !== x.id) : travelers.filter((tr) => tr.id === x.id || form.travelerIds.includes(tr.id)).map((tr) => tr.id),
+                      )
+                    }
+                    className={`inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-[14px] font-semibold ${on ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2'}`}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color }} />
+                    {x.name}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
 
           <fieldset className="space-y-3 rounded-[1.25rem] border border-line p-4">
             <legend className="px-1 text-[13px] font-semibold text-text-2">{t.bookings.price}</legend>

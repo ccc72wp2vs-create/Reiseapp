@@ -186,6 +186,11 @@ function Timeline({
                     </span>
                   )}
                   {b.reference && <span className="mt-0.5 block text-[13px] text-text-3">{t.bookings.reference}: {b.reference}</span>}
+                  {b.travelerIds.length > 0 && (
+                    <span className="mt-0.5 block text-[13px] text-text-3">
+                      {t.bookings.forWhom}: {b.travelerIds.map((id) => travelerName(id)).filter(Boolean).join(', ')}
+                    </span>
+                  )}
                 </span>
               </button>
               <div className="mt-3">
@@ -251,7 +256,11 @@ function ToWalletSheet({ booking, snap, onClose }: { booking: BookingDto; snap: 
   const { me } = useTrip();
   const [paidBy, setPaidBy] = useState(booking.paidByTravelerId ?? me?.id ?? travelers[0]?.id ?? '');
   const [participants, setParticipants] = useState<string[]>(
-    booking.personsCount && booking.personsCount <= travelers.length ? travelers.slice(0, booking.personsCount).map((x) => x.id) : travelers.map((x) => x.id),
+    booking.travelerIds.length
+      ? booking.travelerIds
+      : booking.personsCount && booking.personsCount <= travelers.length
+        ? travelers.slice(0, booking.personsCount).map((x) => x.id)
+        : travelers.map((x) => x.id),
   );
   const needsRate = booking.currency !== trip.baseCurrency;
   const stored = needsRate ? storedRateFor(exchangeRates, booking.currency!, booking.startDate ?? '9999') : null;

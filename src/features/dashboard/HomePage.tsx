@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { costInfo, tripCostOverview } from '../../../shared/costs';
+import { costInfo, personCostOverview, tripCostOverview } from '../../../shared/costs';
 import {
   bookingSortKey,
   bookingsOnDate,
@@ -31,7 +31,7 @@ import { pickDefaultTrip, useTrip } from '../../components/AppShell';
 import { CoverArt, Logo } from '../../components/CoverArt';
 import { BookingBadges, BookingIcon, CategoryIcon, ExpenseIcon, IconTile, ModeIcon } from '../../components/status';
 import { toast } from '../../components/toast';
-import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Skeleton, cx } from '../../components/ui';
+import { Badge, Button, Card, Chip, EmptyState, ErrorState, SectionTitle, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
@@ -100,7 +100,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const online = useOnline();
   const navigate = useNavigate();
   const [sheet, setSheet] = useState<SheetKind>(null);
-  const { trip, destinations, bookings, activities, expenses } = snap;
+  const { trip, destinations, bookings, activities } = snap;
 
   // "Today" is evaluated in the time zone of where the travelers currently are.
   const homeToday = todayIn(trip.homeTimezone);
@@ -123,7 +123,6 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
     .filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '') > today)
     .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)))
     .slice(0, 3);
-  const costs = tripCostOverview(trip.baseCurrency, expenses, bookings);
 
   return (
     <div>
@@ -364,56 +363,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         <SectionTitle action={<Link to="/kasse" className="text-[14px] font-semibold text-accent">{t.wallet.title}</Link>}>
           {t.home.tripCosts}
         </SectionTitle>
-        <Card className="p-5">
-          <p className="text-[13px] font-semibold text-text-3">{t.home.costsSpent}</p>
-          <p className="mt-1 font-display text-[30px] font-semibold tabular">{money(costs.spentMinor, trip.baseCurrency)}</p>
-          {(costs.bookedNotInWalletMinor > 0 || costs.plannedMinor > 0 || costs.budgetCapMinor > 0) && (
-            <dl className="mt-3 space-y-1.5 border-t border-line pt-3 text-[14px]">
-              {costs.bookedNotInWalletMinor > 0 && (
-                <div className="flex justify-between gap-3">
-                  <dt className="min-w-0 text-text-2">{t.home.costsBookedOpen}</dt>
-                  <dd className="shrink-0 tabular">{money(costs.bookedNotInWalletMinor, trip.baseCurrency)}</dd>
-                </div>
-              )}
-              {costs.plannedMinor > 0 && (
-                <div className="flex justify-between gap-3">
-                  <dt className="min-w-0 text-text-2">{t.home.costsPlanned}</dt>
-                  <dd className="shrink-0 tabular text-info">≈ {money(costs.plannedMinor, trip.baseCurrency)}</dd>
-                </div>
-              )}
-              {costs.budgetCapMinor > 0 && (
-                <div className="flex justify-between gap-3">
-                  <dt className="min-w-0 text-text-2">{t.home.costsCaps}</dt>
-                  <dd className="shrink-0 tabular text-info">≤ {money(costs.budgetCapMinor, trip.baseCurrency)}</dd>
-                </div>
-              )}
-              <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
-                <dt className="min-w-0">{t.home.costsProjected}</dt>
-                <dd className="shrink-0 tabular">{money(costs.projectedMinor, trip.baseCurrency)}</dd>
-              </div>
-            </dl>
-          )}
-          {costs.otherCurrencies.length > 0 && (
-            <p className="mt-2 text-[13px] text-text-3">
-              {t.home.costsOther}: {costs.otherCurrencies.map((c) => money(c.minor, c.currency)).join(' · ')}
-            </p>
-          )}
-          {expenses.length > 0 && (
-            <ul className="mt-4 space-y-2 border-t border-line pt-3">
-              {expenses.slice(0, 3).map((e) => (
-                <li key={e.id} className="flex items-center gap-2.5 text-[14px]">
-                  <span className="text-text-3">
-                    <ExpenseIcon category={e.category} size={16} />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
-                  <span className="shrink-0 tabular text-text-2">{money(e.amountMinor, e.currency)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {expenses.length === 0 && <p className="mt-2 text-[14px] text-text-3">{t.wallet.empty}</p>}
-          <p className="mt-3 text-[12px] leading-snug text-text-3">{t.home.costsHint}</p>
-        </Card>
+        <CostsCard snap={snap} />
 
         <div className="mt-8 flex flex-wrap gap-2">
           <Link to="/route" className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-[14px] font-semibold">
@@ -535,5 +485,110 @@ function NoTrip() {
       </div>
       <Suspense fallback={null}>{createOpen && <TripSheet open onClose={() => setCreateOpen(false)} />}</Suspense>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Trip costs with person / group filter
+// ---------------------------------------------------------------------------
+
+function CostsCard({ snap }: { snap: TripSnapshot }) {
+  const { trip, travelers, expenses, settlements, bookings } = snap;
+  const base = trip.baseCurrency;
+  const [selected, setSelected] = useState<string[]>([]);
+  const filtered = selected.length > 0;
+  const group = tripCostOverview(base, expenses, bookings);
+  const person = filtered ? personCostOverview(base, selected, expenses, settlements, bookings) : null;
+  const costs = person ?? group;
+  const toggle = (id: string) =>
+    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : travelers.filter((x) => x.id === id || cur.includes(x.id)).map((x) => x.id)));
+  const recent = filtered
+    ? expenses
+        .map((e) => ({ e, share: e.shares.filter((x) => selected.includes(x.travelerId)).reduce((a, x) => a + x.baseShareMinor, 0) }))
+        .filter((x) => x.share > 0)
+        .slice(0, 3)
+    : expenses.slice(0, 3).map((e) => ({ e, share: null as number | null }));
+
+  return (
+    <Card className="p-5">
+      {travelers.length > 1 && (
+        <>
+          <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label={t.home.tripCosts}>
+            <Chip active={!filtered} onClick={() => setSelected([])}>
+              {t.home.costsAll}
+            </Chip>
+            {travelers.map((x) => (
+              <Chip key={x.id} active={selected.includes(x.id)} onClick={() => toggle(x.id)} icon={<span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color }} />}>
+                {x.name}
+              </Chip>
+            ))}
+          </div>
+          <p className="mb-3 mt-1 text-[12px] text-text-3">{t.home.costsFilterHint}</p>
+        </>
+      )}
+      <p className="text-[13px] font-semibold text-text-3">{filtered ? t.home.costsShare : t.home.costsSpent}</p>
+      <p className="mt-1 font-display text-[30px] font-semibold tabular">{money(costs.spentMinor, base)}</p>
+      <dl className="mt-3 space-y-1.5 border-t border-line pt-3 text-[14px]">
+        {person && (
+          <>
+            <div className="flex justify-between gap-3">
+              <dt className="min-w-0 text-text-2">{t.home.costsNetPaid}</dt>
+              <dd className="shrink-0 tabular">{money(person.netPaidMinor, base)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="min-w-0 text-text-2">
+                {person.balanceMinor > 0 ? t.home.costsBalanceGet : person.balanceMinor < 0 ? t.home.costsBalanceOwe : t.home.costsBalanceZero}
+              </dt>
+              <dd className={cx('shrink-0 tabular', person.balanceMinor > 0 ? 'text-success' : person.balanceMinor < 0 ? 'text-danger' : 'text-text-3')}>
+                {person.balanceMinor === 0 ? '✓' : money(Math.abs(person.balanceMinor), base)}
+              </dd>
+            </div>
+          </>
+        )}
+        {costs.bookedNotInWalletMinor > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="min-w-0 text-text-2">{t.home.costsBookedOpen}</dt>
+            <dd className="shrink-0 tabular">{money(costs.bookedNotInWalletMinor, base)}</dd>
+          </div>
+        )}
+        {costs.plannedMinor > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="min-w-0 text-text-2">{t.home.costsPlanned}</dt>
+            <dd className="shrink-0 tabular text-info">≈ {money(costs.plannedMinor, base)}</dd>
+          </div>
+        )}
+        {costs.budgetCapMinor > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="min-w-0 text-text-2">{t.home.costsCaps}</dt>
+            <dd className="shrink-0 tabular text-info">≤ {money(costs.budgetCapMinor, base)}</dd>
+          </div>
+        )}
+        <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
+          <dt className="min-w-0">{t.home.costsProjected}</dt>
+          <dd className="shrink-0 tabular">{money(costs.projectedMinor, base)}</dd>
+        </div>
+      </dl>
+      {person && person.unassignedMinor > 0 && <p className="mt-2 text-[12px] text-warn">{t.home.costsUnassigned(money(person.unassignedMinor, base))}</p>}
+      {costs.otherCurrencies.length > 0 && (
+        <p className="mt-2 text-[13px] text-text-3">
+          {t.home.costsOther}: {costs.otherCurrencies.map((c) => money(c.minor, c.currency)).join(' · ')}
+        </p>
+      )}
+      {recent.length > 0 && (
+        <ul className="mt-4 space-y-2 border-t border-line pt-3">
+          {recent.map(({ e, share }) => (
+            <li key={e.id} className="flex items-center gap-2.5 text-[14px]">
+              <span className="text-text-3">
+                <ExpenseIcon category={e.category} size={16} />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{e.title}</span>
+              <span className="shrink-0 tabular text-text-2">{share !== null ? money(share, base) : money(e.amountMinor, e.currency)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {expenses.length === 0 && <p className="mt-2 text-[14px] text-text-3">{t.wallet.empty}</p>}
+      <p className="mt-3 text-[12px] leading-snug text-text-3">{t.home.costsHint}</p>
+    </Card>
   );
 }

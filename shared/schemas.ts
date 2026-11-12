@@ -278,6 +278,7 @@ const bookingFields = {
   paidByTravelerId: id.nullable().optional(),
   clarificationNote: optText(500),
   notes: optText(4000),
+  travelerIds: z.array(id).max(50).optional(),
 };
 
 const priceNeedsCurrency = (b: { priceMinor?: number | null; unitPriceMinor?: number | null; currency?: string | null }) =>

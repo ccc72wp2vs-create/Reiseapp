@@ -63,6 +63,7 @@ const bookings: BookingDto[] = THAILAND_2026.bookings.map((b) => ({
   clarificationNote: b.clarificationNote,
   notes: null,
   expenseId: null,
+  travelerIds: [],
   createdBy: null,
 }));
 const trip = { ...THAILAND_2026.trip };
@@ -148,5 +149,21 @@ describe('trip cost overview', () => {
     expect(o.plannedMinor).toBe(8000);
     expect(o.budgetCapMinor).toBe(6000);
     expect(o.projectedMinor).toBe(383100 + 8000 + 6000);
+  });
+});
+
+describe('person cost overview', () => {
+  it('attributes shares, planned costs and repayments to a person or couple', async () => {
+    const { personCostOverview } = await import('../../shared/costs');
+    const expenses = [
+      { baseAmountMinor: 383832, paidByTravelerId: 'john', shares: [{ travelerId: 'john', shareMinor: 191916, baseShareMinor: 191916, weight: null }, { travelerId: 'lilli', shareMinor: 191916, baseShareMinor: 191916, weight: null }] },
+    ];
+    const speedboat = { ...bookings.find((b) => b.id === 'transfer-lanta-kbv')!, priceMinor: 6600, costKind: 'estimate' as const, travelerIds: ['john', 'lilli'] };
+    const lilli = personCostOverview('EUR', ['lilli'], expenses, [], [speedboat]);
+    expect(lilli).toMatchObject({ spentMinor: 191916, plannedMinor: 3300, projectedMinor: 195216, netPaidMinor: 0, balanceMinor: -191916 });
+    const settled = personCostOverview('EUR', ['lilli'], expenses, [{ fromTravelerId: 'lilli', toTravelerId: 'john', baseAmountMinor: 191916 }], [speedboat]);
+    expect(settled).toMatchObject({ netPaidMinor: 191916, balanceMinor: 0 });
+    const couple = personCostOverview('EUR', ['john', 'lilli'], expenses, [], [speedboat]);
+    expect(couple).toMatchObject({ spentMinor: 383832, plannedMinor: 6600, netPaidMinor: 383832, balanceMinor: 0 });
   });
 });

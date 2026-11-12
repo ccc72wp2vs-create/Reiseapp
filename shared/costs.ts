@@ -9,7 +9,7 @@
  *    automatically and the booking is flagged for clarification
  */
 import type { BookingDto, ExpenseDto } from './types';
-import { divRoundHalfAwayFromZero } from './money';
+import { allocate, divRoundHalfAwayFromZero } from './money';
 
 export interface CostInfo {
   hasPrice: boolean;
@@ -143,6 +143,73 @@ export function tripCostOverview(
     if (b.costKind === 'budget_cap') o.budgetCapMinor += b.priceMinor;
     else if (b.costKind === 'estimate' || b.bookingStatus !== 'booked') o.plannedMinor += b.priceMinor;
     else o.bookedNotInWalletMinor += b.priceMinor;
+  }
+  o.projectedMinor = o.spentMinor + o.bookedNotInWalletMinor + o.plannedMinor + o.budgetCapMinor;
+  o.otherCurrencies = [...other].map(([currency, minor]) => ({ currency, minor }));
+  return o;
+}
+
+export interface PersonCostOverview extends TripCostOverview {
+  /** What the selected persons actually paid (after repayments). */
+  netPaidMinor: number;
+  /** > 0 gets money back, < 0 still owes. */
+  balanceMinor: number;
+  /** Booking amounts (base currency) not attributed to anyone. */
+  unassignedMinor: number;
+}
+
+/**
+ * Cost overview for one or more travelers (a "group", e.g. a couple).
+ * Expenses count with the travelers' shares; bookings not yet in the wallet
+ * count with an exact split among the booking's participants.
+ */
+export function personCostOverview(
+  baseCurrency: string,
+  travelerIds: readonly string[],
+  expenses: readonly Pick<ExpenseDto, 'baseAmountMinor' | 'paidByTravelerId' | 'shares'>[],
+  settlements: readonly { fromTravelerId: string; toTravelerId: string; baseAmountMinor: number }[],
+  bookings: readonly (CostFields & Pick<BookingDto, 'expenseId' | 'travelerIds'>)[],
+): PersonCostOverview {
+  const sel = new Set(travelerIds);
+  let spent = 0;
+  let paid = 0;
+  for (const e of expenses) {
+    for (const s of e.shares) if (sel.has(s.travelerId)) spent += s.baseShareMinor;
+    if (sel.has(e.paidByTravelerId)) paid += e.baseAmountMinor;
+  }
+  for (const s of settlements) {
+    if (sel.has(s.fromTravelerId)) paid += s.baseAmountMinor;
+    if (sel.has(s.toTravelerId)) paid -= s.baseAmountMinor;
+  }
+  const o: PersonCostOverview = {
+    baseCurrency,
+    spentMinor: spent,
+    bookedNotInWalletMinor: 0,
+    plannedMinor: 0,
+    budgetCapMinor: 0,
+    projectedMinor: 0,
+    otherCurrencies: [],
+    netPaidMinor: paid,
+    balanceMinor: paid - spent,
+    unassignedMinor: 0,
+  };
+  const other = new Map<string, number>();
+  for (const b of bookings) {
+    if (b.priceMinor == null || !b.currency || b.bookingStatus === 'cancelled' || b.expenseId) continue;
+    if (!b.travelerIds.length) {
+      if (b.currency === baseCurrency) o.unassignedMinor += b.priceMinor;
+      continue;
+    }
+    const parts = allocate(b.priceMinor, b.travelerIds.map(() => 1));
+    const mine = b.travelerIds.reduce((a, id, i) => a + (sel.has(id) ? parts[i] : 0), 0);
+    if (!mine) continue;
+    if (b.currency !== baseCurrency) {
+      other.set(b.currency, (other.get(b.currency) ?? 0) + mine);
+      continue;
+    }
+    if (b.costKind === 'budget_cap') o.budgetCapMinor += mine;
+    else if (b.costKind === 'estimate' || b.bookingStatus !== 'booked') o.plannedMinor += mine;
+    else o.bookedNotInWalletMinor += mine;
   }
   o.projectedMinor = o.spentMinor + o.bookedNotInWalletMinor + o.plannedMinor + o.budgetCapMinor;
   o.otherCurrencies = [...other].map(([currency, minor]) => ({ currency, minor }));

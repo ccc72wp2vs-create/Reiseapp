@@ -164,6 +164,8 @@ export interface BookingDto extends Versioned {
   notes: string | null;
   /** Linked wallet expense (prevents double counting). */
   expenseId: string | null;
+  /** Travelers this booking applies to (empty = not assigned). */
+  travelerIds: string[];
   createdBy: string | null;
 }
 
