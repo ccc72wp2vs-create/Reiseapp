@@ -222,8 +222,10 @@ input[type='time']::-webkit-date-and-time-value {
   background: var(--bg);
   transition: background-color 0.2s ease;
 }
+/* While the hero image sits behind the status bar it must show through
+   unchanged – a solid strip here reads as a dark bar over the photo. */
 :root[data-statusbar='hero'] .statusbar-backdrop {
-  background: #0b1524;
+  background: transparent;
 }
 /* Over the dark hero the canvas (and rubber-band overscroll) is dark too. */
 :root[data-statusbar='hero'] {
