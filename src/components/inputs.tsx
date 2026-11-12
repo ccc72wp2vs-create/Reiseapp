@@ -34,12 +34,12 @@ export function MoneyField({
           inputMode="decimal"
           autoComplete="off"
           placeholder="0,00"
-          className="tabular flex-1"
+          className="tabular min-w-0 flex-1"
           value={amount}
           aria-invalid={!!error}
           onChange={(e) => onAmount(e.target.value)}
         />
-        <Select aria-label={t.wallet.currency} className="w-28" value={currency} onChange={(e) => onCurrency(e.target.value)}>
+        <Select aria-label={t.wallet.currency} className="w-28 shrink-0" value={currency} onChange={(e) => onCurrency(e.target.value)}>
           {allowEmptyCurrency && <option value="">—</option>}
           {CURRENCY_CODES.map((c) => (
             <option key={c} value={c}>

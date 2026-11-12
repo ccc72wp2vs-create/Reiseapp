@@ -10,6 +10,8 @@ export function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
   window.addEventListener('load', async () => {
     try {
+      // Only reload on *updates* – never when the very first worker takes control.
+      const hadController = !!navigator.serviceWorker.controller;
       const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       const promptUpdate = (worker: ServiceWorker) => {
         toast(t.offline.updateAvailable, 'info', {
@@ -26,7 +28,7 @@ export function registerServiceWorker() {
       });
       let reloading = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloading) return;
+        if (reloading || !hadController) return;
         reloading = true;
         window.location.reload();
       });

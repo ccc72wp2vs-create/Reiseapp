@@ -478,7 +478,7 @@ export const THAILAND_2026: SeedTrip = {
       currency: 'EUR',
       personsCount: null,
       unitPriceMinor: 18000,
-      unitPriceNote: 'Ursprüngliche Einzelpreisangabe: 180 EUR',
+      unitPriceNote: 'Ursprüngliche Einzelpreisangabe',
       costKind: 'actual',
       bookingStatus: 'booked',
       paymentStatus: 'unknown',

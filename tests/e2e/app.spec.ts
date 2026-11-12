@@ -54,12 +54,13 @@ test('dashboard shows the current trip state and transfer reminder', async ({ pa
 
 test('bookings keep booked, paid, planned and unclear amounts apart', async ({ page }) => {
   await page.getByRole('navigation', { name: 'Hauptnavigation' }).getByRole('link', { name: 'Mehr' }).click();
-  await page.getByRole('link', { name: /Buchungen/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Mehr' })).toBeVisible();
+  await page.getByRole('link', { name: /^Buchungen/ }).click();
   await expect(page.getByRole('heading', { name: 'Buchungen' })).toBeVisible();
   await expect(page.getByText('Fähre oder Speedboat – Transportmittel und Buchung noch offen.')).toBeVisible();
   await expect(page.getByText('≈ 80,00 €')).toBeVisible();
   await expect(page.getByText('≤ 60,00 €').first()).toBeVisible();
-  await expect(page.getByText(/Ursprüngliche Einzelpreisangabe: 180 EUR: 180,00 €/)).toBeVisible();
+  await expect(page.getByText('Ursprüngliche Einzelpreisangabe: 180,00 €')).toBeVisible();
   await expect(page.getByText('37,50 € pro Person')).toBeVisible();
   await expect(page.getByText('Personenbezug unklar – keine automatische Aufteilung.').first()).toBeVisible();
 });
@@ -89,6 +90,8 @@ test('offline editing is queued and synchronised', async ({ page, context }, inf
   const title = `Offline-${info.project.name}`;
   await page.goto('/plan?tag=2026-11-16');
   await expect(page.getByRole('heading', { name: /16. November/ })).toBeVisible();
+  // The app shell must be cached by the service worker before going offline.
+  await page.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 30_000 });
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
   await page.getByRole('button', { name: 'Aktivität hinzufügen' }).first().click();

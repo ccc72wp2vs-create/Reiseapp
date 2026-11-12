@@ -149,15 +149,15 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[14px]">
             {phase.phase === 'during' && (
               <>
-                <span className="rounded-full bg-white/15 px-3 py-1.5 font-semibold backdrop-blur">{t.phase.during(phase.day, phase.totalDays)}</span>
-                <span className="rounded-full bg-white/10 px-3 py-1.5 backdrop-blur">{t.phase.remaining(phase.daysRemaining)}</span>
+                <span className="rounded-full bg-black/30 px-3 py-1.5 font-semibold text-white backdrop-blur">{t.phase.during(phase.day, phase.totalDays)}</span>
+                <span className="rounded-full bg-black/20 px-3 py-1.5 text-white backdrop-blur">{t.phase.remaining(phase.daysRemaining)}</span>
               </>
             )}
             {phase.phase === 'before' && (
-              <span className="rounded-full bg-white/15 px-3 py-1.5 font-semibold backdrop-blur">{t.phase.before(phase.daysUntilStart)}</span>
+              <span className="rounded-full bg-black/30 px-3 py-1.5 font-semibold text-white backdrop-blur">{t.phase.before(phase.daysUntilStart)}</span>
             )}
             {where.current && phase.phase === 'during' && (
-              <span className="rounded-full bg-white/10 px-3 py-1.5 backdrop-blur">{t.home.stayUntil(formatDateShort(where.current.departureDate))}</span>
+              <span className="rounded-full bg-black/20 px-3 py-1.5 text-white backdrop-blur">{t.home.stayUntil(formatDateShort(where.current.departureDate))}</span>
             )}
           </div>
           {phase.phase !== 'after' && <TripProgress snap={snap} today={today} />}

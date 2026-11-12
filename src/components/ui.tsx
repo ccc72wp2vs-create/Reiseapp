@@ -195,8 +195,10 @@ export function Progress({ value, className, label }: { value: number; className
 // Form fields
 // ---------------------------------------------------------------------------
 
+/** Width defaults to full unless the caller sets an explicit width utility. */
+const widthOf = (className?: string) => (/(^|\s)w-/.test(className ?? '') ? '' : 'w-full');
 const inputBase =
-  'w-full rounded-2xl border border-line bg-bg-elevated px-4 text-[16px] text-text placeholder:text-text-3 transition focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent-soft disabled:opacity-60';
+  'rounded-2xl border border-line bg-bg-elevated px-4 text-[16px] text-text placeholder:text-text-3 transition focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent-soft disabled:opacity-60';
 
 export function Field({
   label,
@@ -232,11 +234,11 @@ export function Field({
 }
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...rest }, ref) {
-  return <input ref={ref} className={cx(inputBase, 'h-12', className)} {...rest} />;
+  return <input ref={ref} className={cx(inputBase, widthOf(className), 'h-12', className)} {...rest} />;
 });
 
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cx(inputBase, 'min-h-[96px] py-3 leading-relaxed', className)} {...rest} />;
+  return <textarea className={cx(inputBase, 'w-full min-h-[96px] py-3 leading-relaxed', className)} {...rest} />;
 }
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -244,6 +246,7 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
     <select
       className={cx(
         inputBase,
+        widthOf(className),
         'h-12 appearance-none bg-[length:16px] bg-[right_1rem_center] bg-no-repeat pr-10',
         "bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237d8da1' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")]",
         className,

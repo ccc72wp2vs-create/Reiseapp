@@ -45,6 +45,11 @@ function Plan({ snap }: { snap: TripSnapshot }) {
   const [creating, setCreating] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
 
+  // Warm the editor chunk so it is available even if the connection drops.
+  useEffect(() => {
+    void import('./ActivitySheet');
+  }, []);
+
   useEffect(() => {
     const el = stripRef.current?.querySelector<HTMLElement>(`[data-day="${selected}"]`);
     el?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
