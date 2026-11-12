@@ -1,0 +1,523 @@
+import {
+  AlertTriangle,
+  ArrowRight,
+  BedDouble,
+  CalendarDays,
+  ChevronDown,
+  CircleHelp,
+  Download,
+  MapPin,
+  Plus,
+  Receipt,
+  Route,
+  Sparkles,
+} from 'lucide-react';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { costInfo, summarizeBookingCosts } from '../../../shared/costs';
+import {
+  bookingSortKey,
+  bookingsOnDate,
+  buildRoute,
+  destinationOn,
+  diffDays,
+  nextTransport,
+  todayIn,
+  transferReminders,
+  tripPhase,
+} from '../../../shared/trip';
+import type { BookingDto, TripSnapshot } from '../../../shared/types';
+import { pickDefaultTrip, useTrip } from '../../components/AppShell';
+import { CoverArt, Logo } from '../../components/CoverArt';
+import { BookingBadges, BookingIcon, CategoryIcon, ExpenseIcon, IconTile, ModeIcon } from '../../components/status';
+import { toast } from '../../components/toast';
+import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Skeleton, cx } from '../../components/ui';
+import { t } from '../../i18n';
+import { http } from '../../lib/api';
+import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
+import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
+
+const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
+const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
+const DestinationSheet = lazy(() => import('../trips/DestinationSheet'));
+const TripSheet = lazy(() => import('../trips/TripSheet'));
+
+export function HomePage() {
+  const { state, snap } = useTrip();
+  const { trips } = useTrips();
+
+  if (trips && trips.length === 0 && !state.tripId) return <NoTrip />;
+  if (state.status === 'error' && !snap) {
+    return (
+      <div className="px-safe pt-safe">
+        <div className="pt-6">
+          <ErrorState message={state.error ?? t.errors.generic} onRetry={() => void tripStore.refresh()} />
+        </div>
+      </div>
+    );
+  }
+  if (!snap) return <HomeSkeleton />;
+  return <Dashboard snap={snap} />;
+}
+
+function HomeSkeleton() {
+  return (
+    <div>
+      <Skeleton className="h-[52dvh] w-full rounded-none rounded-b-[2rem]" />
+      <div className="space-y-3 px-safe pt-6">
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+      </div>
+    </div>
+  );
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 11 ? t.home.greeting.morning : h < 18 ? t.home.greeting.day : t.home.greeting.evening;
+}
+
+type SheetKind = 'activity' | 'expense' | 'destination' | null;
+
+function Dashboard({ snap }: { snap: TripSnapshot }) {
+  const { canEdit, user } = useTrip();
+  const online = useOnline();
+  const navigate = useNavigate();
+  const [sheet, setSheet] = useState<SheetKind>(null);
+  const { trip, destinations, bookings, activities, expenses } = snap;
+
+  // "Today" is evaluated in the time zone of where the travelers currently are.
+  const homeToday = todayIn(trip.homeTimezone);
+  const probe = destinationOn(destinations, homeToday).current ?? destinations[0];
+  const tz = probe?.timezone ?? trip.homeTimezone;
+  const today = todayIn(tz);
+  const phase = tripPhase(trip, today);
+  const where = destinationOn(destinations, today);
+  const heroDest = phase.phase === 'before' ? destinations[0] : phase.phase === 'after' ? null : (where.current ?? where.leaving);
+
+  const todays = activities.filter((a) => a.date === today);
+  const todaysBookings = bookingsOnDate(bookings, today);
+  const reminders = useMemo(() => transferReminders(trip, destinations, bookings, today), [trip, destinations, bookings, today]);
+  const clarifications = bookings.filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '9999') >= today && costInfo(b).needsClarification);
+  const transport = nextTransport(bookings, today);
+  const route = useMemo(() => buildRoute(trip, destinations, bookings), [trip, destinations, bookings]);
+  const nextLeg = route.legs.find((l) => l.date !== null && l.date >= today);
+  const stayBooking = where.current ? bookings.find((b) => b.type === 'hotel' && b.destinationId === where.current!.id && b.bookingStatus !== 'cancelled') : null;
+  const upcoming = bookings
+    .filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '') > today)
+    .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)))
+    .slice(0, 3);
+  const spent = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
+  const costTotals = summarizeBookingCosts(bookings);
+
+  return (
+    <div>
+      {/* ------------------------------------------------------------------ Hero */}
+      <section className="relative">
+        <CoverArt
+          name={heroDest?.name ?? trip.name}
+          imageUrl={heroDest?.coverImageUrl ?? trip.coverImageUrl}
+          className="h-[56dvh] min-h-[380px] w-full rounded-b-[2.25rem]"
+          label={heroDest?.name ?? trip.name}
+        />
+        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#0b1524] via-[#0b1524]/35 to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 top-0 px-safe pt-safe">
+          <div className="flex items-center justify-between pt-2 text-sand">
+            <Logo size={30} withWordmark={false} />
+            <Link
+              to="/reisen"
+              className="glass inline-flex h-10 max-w-[70%] items-center gap-1.5 rounded-full border border-white/15 px-4 text-[14px] font-semibold text-text"
+            >
+              {trip.isDemo && <span className="text-warn">{t.trips.demoBadge}</span>}
+              <span className="truncate">{trip.name}</span>
+              <ChevronDown size={16} className="shrink-0 opacity-70" />
+            </Link>
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f4f7fa]">
+          <p className="text-[14px] font-medium text-white/75">
+            {greeting()}
+            {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}
+          </p>
+          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#5ee3cf]">
+            {phase.phase === 'during' ? t.home.currentDestination : phase.phase === 'before' ? t.home.beforeTrip : t.phase.after}
+          </p>
+          <h1 className="font-display text-[clamp(44px,13vw,68px)] font-semibold leading-[0.95]">
+            {phase.phase === 'after' ? trip.name : (heroDest?.name ?? trip.name)}
+          </h1>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[14px]">
+            {phase.phase === 'during' && (
+              <>
+                <span className="rounded-full bg-white/15 px-3 py-1.5 font-semibold backdrop-blur">{t.phase.during(phase.day, phase.totalDays)}</span>
+                <span className="rounded-full bg-white/10 px-3 py-1.5 backdrop-blur">{t.phase.remaining(phase.daysRemaining)}</span>
+              </>
+            )}
+            {phase.phase === 'before' && (
+              <span className="rounded-full bg-white/15 px-3 py-1.5 font-semibold backdrop-blur">{t.phase.before(phase.daysUntilStart)}</span>
+            )}
+            {where.current && phase.phase === 'during' && (
+              <span className="rounded-full bg-white/10 px-3 py-1.5 backdrop-blur">{t.home.stayUntil(formatDateShort(where.current.departureDate))}</span>
+            )}
+          </div>
+          {phase.phase !== 'after' && <TripProgress snap={snap} today={today} />}
+        </div>
+      </section>
+
+      <div className="px-safe">
+        {/* ------------------------------------------------------------ Reminders */}
+        {(reminders.length > 0 || clarifications.length > 0) && phase.phase !== 'after' && (
+          <section aria-label={t.home.reminders} className="mt-5 space-y-2.5">
+            {reminders.slice(0, 3).map((r, i) => {
+              const days = r.date ? diffDays(today, r.date) : null;
+              return (
+                <Link
+                  key={i}
+                  to="/buchungen"
+                  className="flex items-start gap-3 rounded-[1.25rem] border border-warn/35 bg-warn-soft p-4 transition active:scale-[0.99]"
+                >
+                  <AlertTriangle className="mt-0.5 shrink-0 text-warn" size={20} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-semibold leading-snug">
+                      {r.kind === 'transfer_unconfirmed' ? t.home.transferUnconfirmed(r.fromName, r.toName) : t.home.transportMissing(r.fromName, r.toName)}
+                    </p>
+                    {r.date && (
+                      <p className="mt-0.5 text-[13px] text-text-2">
+                        {formatDate(r.date)}
+                        {days === 0 ? ` · ${t.common.today}` : days === 1 ? ` · ${t.common.tomorrow}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <ArrowRight size={18} className="mt-0.5 shrink-0 text-warn" />
+                </Link>
+              );
+            })}
+            {clarifications.length > 0 && (
+              <Link to="/buchungen" className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
+                <CircleHelp className="shrink-0 text-warn" size={20} />
+                <p className="flex-1 text-[14px] text-text-2">
+                  <span className="font-semibold text-text">{clarifications.length}</span> {clarifications.length === 1 ? 'Buchung' : 'Buchungen'} mit offenen Angaben
+                </p>
+                <ArrowRight size={18} className="text-text-3" />
+              </Link>
+            )}
+          </section>
+        )}
+
+        {/* ------------------------------------------------------- Quick actions */}
+        <section aria-label={t.home.quickActions} className="mt-6 grid grid-cols-4 gap-2">
+          {[
+            { label: t.home.addActivity, icon: <Plus size={20} />, onClick: () => setSheet('activity'), disabled: !canEdit },
+            { label: t.home.addExpense, icon: <Receipt size={20} />, onClick: () => setSheet('expense'), disabled: !canEdit || !online },
+            { label: t.home.addDestination, icon: <MapPin size={20} />, onClick: () => setSheet('destination'), disabled: !canEdit || !online },
+            { label: t.home.viewPlan, icon: <CalendarDays size={20} />, onClick: () => navigate('/plan') },
+          ].map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              onClick={a.onClick}
+              disabled={a.disabled}
+              className="flex flex-col items-center gap-2 rounded-[1.25rem] py-2 text-[12px] font-semibold text-text-2 transition active:scale-95 disabled:opacity-40"
+            >
+              <span className="grid h-14 w-14 place-items-center rounded-[1.25rem] border border-line bg-surface text-accent shadow-card">{a.icon}</span>
+              {a.label}
+            </button>
+          ))}
+        </section>
+
+        {/* ------------------------------------------------------------- Today */}
+        {phase.phase === 'during' && (
+          <>
+            <SectionTitle action={<Link to={`/plan?tag=${today}`} className="text-[14px] font-semibold text-accent">{t.home.viewPlan}</Link>}>
+              {t.home.todayPlan}
+            </SectionTitle>
+            <Card className="divide-y divide-line overflow-hidden">
+              {todaysBookings.map((b) => (
+                <Link key={b.id} to="/buchungen" className="flex items-center gap-3 p-4">
+                  <IconTile tone={b.bookingStatus === 'booked' ? 'accent' : 'warn'}>
+                    <BookingIcon type={b.type} />
+                  </IconTile>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{b.title}</p>
+                    <p className="text-[13px] text-text-3">{b.startDate === today ? formatTime(b.startTime) || t.plan.allDay : `${t.bookings.arrival} ${formatTime(b.endTime)}`}</p>
+                  </div>
+                  <BookingBadges booking={b} compact />
+                </Link>
+              ))}
+              {todays.map((a) => (
+                <Link key={a.id} to={`/plan?tag=${today}`} className="flex items-center gap-3 p-4">
+                  <IconTile tone="neutral">
+                    <CategoryIcon category={a.category} />
+                  </IconTile>
+                  <div className="min-w-0 flex-1">
+                    <p className={cx('truncate font-semibold', a.completed && 'text-text-3 line-through')}>{a.title}</p>
+                    <p className="text-[13px] text-text-3">
+                      {a.startTime ? `${a.startTime}${a.endTime ? `–${a.endTime}` : ''}` : t.plan.allDay}
+                      {a.locationName ? ` · ${a.locationName}` : ''}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+              {todays.length === 0 && todaysBookings.length === 0 && (
+                <div className="flex items-center justify-between gap-3 p-4">
+                  <p className="text-[15px] text-text-2">{t.home.noActivitiesToday}</p>
+                  {canEdit && (
+                    <Button size="sm" variant="soft" icon={<Plus size={16} />} onClick={() => setSheet('activity')}>
+                      {t.common.add}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Card>
+          </>
+        )}
+
+        {/* ---------------------------------------------- Stay & next move */}
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          {where.current && phase.phase === 'during' && (
+            <Card className="p-5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
+                <BedDouble size={15} /> {t.home.currentStay}
+              </div>
+              <p className="mt-3 font-display text-[22px] font-semibold leading-tight">{where.current.accommodationName ?? where.current.name}</p>
+              <p className="mt-1 text-[14px] text-text-2">
+                {where.current.accommodationName ? (where.current.accommodationAddress ?? where.current.name) : t.home.accommodationUnknown}
+              </p>
+              <p className="mt-3 text-[13px] text-text-3">
+                {formatDateShort(where.current.arrivalDate)} – {formatDate(where.current.departureDate)} · {t.common.nights(diffDays(where.current.arrivalDate, where.current.departureDate))}
+              </p>
+              {stayBooking && (
+                <div className="mt-3">
+                  <BookingBadges booking={stayBooking} />
+                </div>
+              )}
+            </Card>
+          )}
+          {nextLeg && (
+            <Card className="p-5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
+                <Route size={15} /> {t.home.nextMove}
+              </div>
+              <p className="mt-3 font-display text-[22px] font-semibold leading-tight">
+                {nextLeg.from.name} <span className="text-accent">→</span> {nextLeg.to.name}
+              </p>
+              <p className="mt-1 flex items-center gap-1.5 text-[14px] text-text-2">
+                <ModeIcon mode={nextLeg.mode} /> {t.transportModes[nextLeg.mode]}
+                {nextLeg.date && (
+                  <>
+                    {' · '}
+                    {formatDate(nextLeg.date)}
+                    {diffDays(today, nextLeg.date) > 0 && ` (${t.home.arrivalIn(diffDays(today, nextLeg.date))})`}
+                  </>
+                )}
+              </p>
+              {nextLeg.booking ? (
+                <div className="mt-3">
+                  <BookingBadges booking={nextLeg.booking} compact />
+                </div>
+              ) : (
+                <div className="mt-3">
+                  <Badge tone="warn">{t.transportModes.unknown}</Badge>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+
+        {/* ---------------------------------------------------- Next transport */}
+        {transport && transport.id !== nextLeg?.booking?.id && (
+          <>
+            <SectionTitle>{t.home.nextTransport}</SectionTitle>
+            <BookingRow booking={transport} />
+          </>
+        )}
+
+        {/* ---------------------------------------------------------- Upcoming */}
+        {upcoming.length > 0 && (
+          <>
+            <SectionTitle action={<Link to="/buchungen" className="text-[14px] font-semibold text-accent">{t.bookings.title}</Link>}>
+              {t.home.upcoming}
+            </SectionTitle>
+            <div className="space-y-2.5">
+              {upcoming.map((b) => (
+                <BookingRow key={b.id} booking={b} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ------------------------------------------------------------ Wallet */}
+        <SectionTitle action={<Link to="/kasse" className="text-[14px] font-semibold text-accent">{t.wallet.title}</Link>}>
+          {t.home.expenses}
+        </SectionTitle>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Card className="p-5">
+            <p className="text-[13px] font-semibold text-text-3">{t.home.spentTotal}</p>
+            <p className="mt-1 font-display text-[30px] font-semibold tabular">{money(spent, trip.baseCurrency)}</p>
+            <ul className="mt-3 space-y-2">
+              {expenses.slice(0, 3).map((e) => (
+                <li key={e.id} className="flex items-center gap-2.5 text-[14px]">
+                  <span className="text-text-3">
+                    <ExpenseIcon category={e.category} size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
+                  <span className="tabular text-text-2">{money(e.amountMinor, e.currency)}</span>
+                </li>
+              ))}
+              {expenses.length === 0 && <li className="text-[14px] text-text-3">{t.wallet.empty}</li>}
+            </ul>
+          </Card>
+          {costTotals.length > 0 && (
+            <Card className="p-5">
+              <p className="text-[13px] font-semibold text-text-3">{t.home.bookingCosts}</p>
+              {costTotals.map((c) => (
+                <dl key={c.currency} className="mt-2 space-y-1.5 text-[14px]">
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-text-2">{t.bookings.committed}</dt>
+                    <dd className="font-semibold tabular">{money(c.committedMinor, c.currency)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2 pl-3 text-[13px]">
+                    <dt className="text-text-3">{t.bookings.paid}</dt>
+                    <dd className="tabular text-text-2">{money(c.paidMinor, c.currency)}</dd>
+                  </div>
+                  {c.estimatedMinor > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-text-2">{t.bookings.estimated}</dt>
+                      <dd className="tabular text-info">{money(c.estimatedMinor, c.currency)}</dd>
+                    </div>
+                  )}
+                  {c.budgetCapMinor > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-text-2">{t.bookings.budgetCap}</dt>
+                      <dd className="tabular text-info">≤ {money(c.budgetCapMinor, c.currency)}</dd>
+                    </div>
+                  )}
+                </dl>
+              ))}
+              <p className="mt-3 text-[12px] leading-snug text-text-3">{t.bookings.notSpentHint}</p>
+            </Card>
+          )}
+        </div>
+
+        <div className="mt-8 flex flex-wrap gap-2">
+          <Link to="/route" className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-[14px] font-semibold">
+            <Route size={16} className="text-accent" /> {t.home.viewRoute}
+          </Link>
+          <Link to="/reise" className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-[14px] font-semibold">
+            <MapPin size={16} className="text-accent" /> {t.destinations.title}
+          </Link>
+        </div>
+      </div>
+
+      <Suspense fallback={null}>
+        {sheet === 'activity' && <ActivitySheet open onClose={() => setSheet(null)} defaults={{ date: phase.phase === 'during' ? today : trip.startDate }} />}
+        {sheet === 'expense' && <ExpenseSheet open onClose={() => setSheet(null)} />}
+        {sheet === 'destination' && <DestinationSheet open onClose={() => setSheet(null)} />}
+      </Suspense>
+    </div>
+  );
+}
+
+function BookingRow({ booking }: { booking: BookingDto }) {
+  return (
+    <Link to="/buchungen" className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
+      <IconTile tone={booking.bookingStatus === 'booked' ? 'accent' : 'warn'}>
+        <BookingIcon type={booking.type} />
+      </IconTile>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold">{booking.title}</p>
+        <p className="text-[13px] text-text-3">
+          {booking.startDate ? formatDate(booking.startDate) : t.bookings.undated}
+          {booking.startTime ? ` · ${formatTime(booking.startTime)}` : ''}
+        </p>
+        <div className="mt-2">
+          <BookingBadges booking={booking} compact />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/** Mini route progress: one dot per destination. */
+function TripProgress({ snap, today }: { snap: TripSnapshot; today: string }) {
+  const ds = snap.destinations;
+  if (!ds.length) return null;
+  return (
+    <ol className="mt-5 flex items-center gap-1.5" aria-label={t.trips.route}>
+      {ds.map((d) => {
+        const state = d.departureDate <= today ? 'done' : d.arrivalDate <= today ? 'now' : 'next';
+        return (
+          <li key={d.id} className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span
+              className={cx(
+                'h-1.5 rounded-full',
+                state === 'done' ? 'bg-white/70' : state === 'now' ? 'bg-[#35d6be] shadow-[0_0_12px_#35d6be]' : 'bg-white/20',
+              )}
+            />
+            <span className={cx('truncate text-[11px]', state === 'now' ? 'font-semibold text-white' : 'text-white/55')}>{d.name}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// No trip yet
+// ---------------------------------------------------------------------------
+
+function NoTrip() {
+  const online = useOnline();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  async function importKey(key: 'thailand-2026' | 'demo-thailand') {
+    setBusy(key);
+    try {
+      const r = await http.post<{ tripId: string; created: boolean }>(`/imports/${key}`);
+      toast(r.created ? t.success.imported : t.success.alreadyImported, r.created ? 'success' : 'info');
+      const list = await tripsList.load();
+      await tripStore.select(r.tripId ?? pickDefaultTrip(list));
+    } catch (e) {
+      toast.error(e);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div>
+      <section className="relative">
+        <CoverArt name="Koh Lanta" className="h-[44dvh] min-h-[300px] w-full rounded-b-[2.25rem]" />
+        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#0b1524] to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 top-0 px-safe pt-safe">
+          <Logo size={32} className="pt-2 text-sand" />
+        </div>
+        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f4f7fa]">
+          <h1 className="font-display text-[44px] font-semibold leading-none">{t.home.noTrip}</h1>
+        </div>
+      </section>
+      <div className="px-safe pt-6">
+        <EmptyState
+          icon={<Sparkles size={26} />}
+          title={t.app.tagline}
+          text={t.home.noTripText}
+          action={
+            <div className="flex w-full flex-col gap-3">
+              <Button size="lg" icon={<Download size={18} />} loading={busy === 'thailand-2026'} disabled={!online} onClick={() => void importKey('thailand-2026')}>
+                {t.home.importThailand}
+              </Button>
+              <Button size="lg" variant="secondary" icon={<Plus size={18} />} disabled={!online} onClick={() => setCreateOpen(true)}>
+                {t.home.createTrip}
+              </Button>
+              <Button variant="ghost" loading={busy === 'demo-thailand'} disabled={!online} onClick={() => void importKey('demo-thailand')}>
+                {t.home.loadDemo}
+              </Button>
+            </div>
+          }
+        />
+      </div>
+      <Suspense fallback={null}>{createOpen && <TripSheet open onClose={() => setCreateOpen(false)} />}</Suspense>
+    </div>
+  );
+}

@@ -1,0 +1,5 @@
+# Local development secrets for `npm run dev` / wrangler (copy to .dev.vars).
+# NEVER commit .dev.vars. In production use: npx wrangler secret put SETUP_TOKEN
+APP_ENV=development
+# One-time code that allows creating the first owner account (min. 16 chars).
+SETUP_TOKEN=change-me-to-a-long-random-string
