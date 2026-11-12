@@ -236,6 +236,9 @@ export async function importSeedTrip(
           )
           .bind(id, s.travelerId, s.shareMinor, s.baseShareMinor),
       ),
+      db
+        .prepare('INSERT INTO expense_payers (expense_id, traveler_id, amount_minor, base_amount_minor) VALUES (?, ?, ?, ?)')
+        .bind(id, travelerIds[e.paidBy], e.amountMinor, base),
     );
   }
 

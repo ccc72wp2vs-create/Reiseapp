@@ -131,8 +131,8 @@ describe('balances & settlements', () => {
 
   it('computes balances that always sum to zero', () => {
     const expenses = [
-      { paidBy: 'anna', baseAmountMinor: 10000, shares: share(10000, ids) },
-      { paidBy: 'ben', baseAmountMinor: 3001, shares: share(3001, ['ben', 'clara', 'david']) },
+      { payers: [{ travelerId: 'anna', baseAmountMinor: 10000 }], baseAmountMinor: 10000, shares: share(10000, ids) },
+      { payers: [{ travelerId: 'ben', baseAmountMinor: 3001 }], baseAmountMinor: 3001, shares: share(3001, ['ben', 'clara', 'david']) },
     ];
     const b = computeBalances(ids, expenses, []);
     expect(sum(b.map((x) => x.balanceMinor))).toBe(0);
@@ -142,9 +142,9 @@ describe('balances & settlements', () => {
 
   it('suggests transfers that settle everything exactly', () => {
     const expenses = [
-      { paidBy: 'anna', baseAmountMinor: 12000, shares: share(12000, ids) },
-      { paidBy: 'ben', baseAmountMinor: 4001, shares: share(4001, ids) },
-      { paidBy: 'clara', baseAmountMinor: 999, shares: share(999, ['clara', 'david']) },
+      { payers: [{ travelerId: 'anna', baseAmountMinor: 12000 }], baseAmountMinor: 12000, shares: share(12000, ids) },
+      { payers: [{ travelerId: 'ben', baseAmountMinor: 4001 }], baseAmountMinor: 4001, shares: share(4001, ids) },
+      { payers: [{ travelerId: 'clara', baseAmountMinor: 999 }], baseAmountMinor: 999, shares: share(999, ['clara', 'david']) },
     ];
     const balances = computeBalances(ids, expenses, []);
     const transfers = suggestSettlements(balances);
@@ -158,14 +158,14 @@ describe('balances & settlements', () => {
   });
 
   it('treats recorded settlements as repayments, not expenses', () => {
-    const expenses = [{ paidBy: 'anna', baseAmountMinor: 2000, shares: share(2000, ['anna', 'ben']) }];
+    const expenses = [{ payers: [{ travelerId: 'anna', baseAmountMinor: 2000 }], baseAmountMinor: 2000, shares: share(2000, ['anna', 'ben']) }];
     const b = computeBalances(['anna', 'ben'], expenses, [{ fromTravelerId: 'ben', toTravelerId: 'anna', baseAmountMinor: 1000 }]);
     expect(b.find((x) => x.travelerId === 'ben')).toMatchObject({ owedMinor: 1000, settledOutMinor: 1000, balanceMinor: 0, paidMinor: 0 });
     expect(b.find((x) => x.travelerId === 'anna')).toMatchObject({ paidMinor: 2000, settledInMinor: 1000, balanceMinor: 0 });
   });
 
   it('handles partial settlements', () => {
-    const expenses = [{ paidBy: 'anna', baseAmountMinor: 3000, shares: share(3000, ['anna', 'ben', 'clara']) }];
+    const expenses = [{ payers: [{ travelerId: 'anna', baseAmountMinor: 3000 }], baseAmountMinor: 3000, shares: share(3000, ['anna', 'ben', 'clara']) }];
     const b = computeBalances(['anna', 'ben', 'clara'], expenses, [{ fromTravelerId: 'ben', toTravelerId: 'anna', baseAmountMinor: 400 }]);
     const t = suggestSettlements(b);
     expect(t).toEqual([
@@ -178,8 +178,8 @@ describe('balances & settlements', () => {
     // John advances 3 838,32 € for John & Lilli, Annika 3 903,32 € for Annika & Tim
     const ids4 = ['john', 'lilli', 'tim', 'annika'];
     const expenses = [
-      { paidBy: 'john', baseAmountMinor: 383832, shares: share(383832, ['john', 'lilli']) },
-      { paidBy: 'annika', baseAmountMinor: 390332, shares: share(390332, ['annika', 'tim']) },
+      { payers: [{ travelerId: 'john', baseAmountMinor: 383832 }], baseAmountMinor: 383832, shares: share(383832, ['john', 'lilli']) },
+      { payers: [{ travelerId: 'annika', baseAmountMinor: 390332 }], baseAmountMinor: 390332, shares: share(390332, ['annika', 'tim']) },
     ];
     const before = computeBalances(ids4, expenses, []);
     expect(before.map(netPaidMinor)).toEqual([383832, 0, 0, 390332]);
@@ -192,5 +192,15 @@ describe('balances & settlements', () => {
     expect(after.map(netPaidMinor)).toEqual(after.map((b) => b.owedMinor));
     expect(after.map(netPaidMinor)).toEqual([191916, 191916, 195166, 195166]);
     expect(sum(after.map(netPaidMinor))).toBe(383832 + 390332);
+  });
+
+  it('supports several payers for one expense', () => {
+    // 100 € dinner for four; John paid 60 €, Annika 40 €
+    const ids4 = ['john', 'lilli', 'tim', 'annika'];
+    const e = { payers: [{ travelerId: 'john', baseAmountMinor: 6000 }, { travelerId: 'annika', baseAmountMinor: 4000 }], baseAmountMinor: 10000, shares: share(10000, ids4) };
+    const b = computeBalances(ids4, [e], []);
+    expect(b.map((x) => x.balanceMinor)).toEqual([3500, -2500, -2500, 1500]);
+    expect(sum(b.map((x) => x.balanceMinor))).toBe(0);
+    expect(b.map(netPaidMinor)).toEqual([6000, 0, 0, 4000]);
   });
 });

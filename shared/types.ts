@@ -176,6 +176,14 @@ export interface ExpenseShareDto {
   weight: number | null;
 }
 
+export interface ExpensePayerDto {
+  travelerId: string;
+  /** Paid amount in the expense currency. */
+  amountMinor: number;
+  /** Paid amount in the trip base currency. */
+  baseAmountMinor: number;
+}
+
 export interface ExpenseDto extends Versioned {
   tripId: string;
   title: string;
@@ -192,6 +200,8 @@ export interface ExpenseDto extends Versioned {
   notes: string | null;
   bookingId: string | null;
   shares: ExpenseShareDto[];
+  /** Who paid how much (one or more travelers; sums to the total). */
+  payers: ExpensePayerDto[];
   createdBy: string | null;
 }
 

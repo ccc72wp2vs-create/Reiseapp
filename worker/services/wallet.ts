@@ -5,7 +5,7 @@
  */
 import type { ExpenseCategory, FxSource, SplitMethod } from '../../shared/constants';
 import { computeShares, SplitError, type SplitInput } from '../../shared/finance';
-import { convertMinor, normalizeRate } from '../../shared/money';
+import { allocate, convertMinor, normalizeRate, sum } from '../../shared/money';
 import type { ExchangeRateDto, ExpenseDto, SettlementDto } from '../../shared/types';
 import { ApiError } from '../lib/errors';
 import { nowIso, uuid } from '../lib/util';
@@ -65,13 +65,29 @@ export interface ExpenseInput extends FxInput {
   date: string;
   category: ExpenseCategory;
   paidByTravelerId: string;
+  payers?: { travelerId: string; amountMinor: number }[];
   splitMethod: SplitMethod;
   splits: SplitInput[];
   notes?: string | null;
 }
 
+/** Normalises payers: several payers must sum exactly to the total. */
+function resolvePayers(input: ExpenseInput) {
+  const payers = input.payers?.length ? input.payers : [{ travelerId: input.paidByTravelerId, amountMinor: input.amountMinor }];
+  if (new Set(payers.map((p) => p.travelerId)).size !== payers.length) {
+    throw new ApiError('validation_failed', 'Eine Person ist bei „Bezahlt von“ doppelt ausgewählt', [{ path: 'payers' }]);
+  }
+  if (sum(payers.map((p) => p.amountMinor)) !== input.amountMinor) {
+    throw new ApiError('validation_failed', 'Die bezahlten Beträge ergeben nicht den Gesamtbetrag', [{ path: 'payers' }]);
+  }
+  // Main payer (kept on the expense row): the one who paid the most.
+  const main = [...payers].sort((a, b) => b.amountMinor - a.amountMinor)[0].travelerId;
+  return { payers, main };
+}
+
 async function prepareExpense(db: D1Database, tripId: string, baseCurrency: string, input: ExpenseInput) {
-  await assertTravelers(db, tripId, [input.paidByTravelerId, ...input.splits.map((s) => s.travelerId)]);
+  const { payers, main } = resolvePayers(input);
+  await assertTravelers(db, tripId, [...payers.map((p) => p.travelerId), ...input.splits.map((s) => s.travelerId)]);
   const fx = resolveFx(input, baseCurrency, input.date);
   let baseAmount: number;
   try {
@@ -86,7 +102,26 @@ async function prepareExpense(db: D1Database, tripId: string, baseCurrency: stri
     if (e instanceof SplitError) throw new ApiError('validation_failed', SPLIT_MESSAGES[e.code], [{ path: 'splits' }]);
     throw e;
   }
-  return { fx, baseAmount, shares };
+  const basePaid = allocate(baseAmount, payers.map((p) => p.amountMinor));
+  const payerRows = payers.map((p, i) => ({ ...p, baseAmountMinor: basePaid[i] }));
+  return { fx, baseAmount, shares, payerRows, main };
+}
+
+function payerInserts(
+  db: D1Database,
+  expenseId: string,
+  rows: { travelerId: string; amountMinor: number; baseAmountMinor: number }[],
+  guardSql = '',
+  guardBinds: unknown[] = [],
+) {
+  return rows.map((p) =>
+    db
+      .prepare(
+        `INSERT INTO expense_payers (expense_id, traveler_id, amount_minor, base_amount_minor)
+         SELECT ?, ?, ?, ? ${guardSql}`,
+      )
+      .bind(expenseId, p.travelerId, p.amountMinor, p.baseAmountMinor, ...guardBinds),
+  );
 }
 
 function splitInserts(db: D1Database, expenseId: string, shares: ReturnType<typeof computeShares>, guardSql = '', guardBinds: unknown[] = []) {
@@ -108,7 +143,7 @@ export async function createExpense(
   input: ExpenseInput,
   bookingId: string | null = null,
 ): Promise<ExpenseDto> {
-  const { fx, baseAmount, shares } = await prepareExpense(db, tripId, baseCurrency, input);
+  const { fx, baseAmount, shares, payerRows, main } = await prepareExpense(db, tripId, baseCurrency, input);
   const id = input.id ?? uuid();
   const now = nowIso();
   try {
@@ -128,7 +163,7 @@ export async function createExpense(
           input.currency,
           input.date,
           input.category,
-          input.paidByTravelerId,
+          main,
           input.splitMethod,
           fx.rate,
           fx.source,
@@ -141,6 +176,7 @@ export async function createExpense(
           now,
         ),
       ...splitInserts(db, id, shares),
+      ...payerInserts(db, id, payerRows),
     ]);
   } catch (e) {
     const msg = String(e);
@@ -166,7 +202,7 @@ export async function updateExpense(
   if (existing.version !== expectedVersion) {
     throw new ApiError('version_conflict', 'Die Ausgabe wurde inzwischen geändert.', { current: existing });
   }
-  const { fx, baseAmount, shares } = await prepareExpense(db, tripId, baseCurrency, input);
+  const { fx, baseAmount, shares, payerRows, main } = await prepareExpense(db, tripId, baseCurrency, input);
   const now = nowIso();
   const newVersion = expectedVersion + 1;
   // The write token (version + updated_at) guards the split rewrite so that it
@@ -187,7 +223,7 @@ export async function updateExpense(
         input.currency,
         input.date,
         input.category,
-        input.paidByTravelerId,
+        main,
         input.splitMethod,
         fx.rate,
         fx.source,
@@ -202,6 +238,8 @@ export async function updateExpense(
       ),
     db.prepare(`DELETE FROM expense_splits WHERE expense_id = ? AND EXISTS (SELECT 1 FROM expenses WHERE id = ? AND version = ? AND updated_at = ?)`).bind(id, ...guardBinds),
     ...splitInserts(db, id, shares, guard, guardBinds),
+    db.prepare(`DELETE FROM expense_payers WHERE expense_id = ? AND EXISTS (SELECT 1 FROM expenses WHERE id = ? AND version = ? AND updated_at = ?)`).bind(id, ...guardBinds),
+    ...payerInserts(db, id, payerRows, guard, guardBinds),
   ]);
   const updated = (await getExpense(db, tripId, id))!;
   if (updated.version !== newVersion || updated.updatedAt !== now) {
@@ -210,8 +248,11 @@ export async function updateExpense(
   return updated;
 }
 
-function expenseRowToDto(r: Row, shares: ExpenseDto['shares']): ExpenseDto {
+function expenseRowToDto(r: Row, shares: ExpenseDto['shares'], payers?: ExpenseDto['payers']): ExpenseDto {
   return {
+    payers: payers?.length
+      ? payers
+      : [{ travelerId: r.paid_by_traveler_id as string, amountMinor: r.amount_minor as number, baseAmountMinor: r.base_amount_minor as number }],
     id: r.id as string,
     tripId: r.trip_id as string,
     version: r.version as number,
@@ -236,7 +277,7 @@ function expenseRowToDto(r: Row, shares: ExpenseDto['shares']): ExpenseDto {
 }
 
 export async function listExpenses(db: D1Database, tripId: string): Promise<ExpenseDto[]> {
-  const [exp, splits] = await db.batch<Row>([
+  const [exp, splits, payerRows] = await db.batch<Row>([
     db.prepare('SELECT * FROM expenses WHERE trip_id = ? ORDER BY date DESC, created_at DESC').bind(tripId),
     db
       .prepare(
@@ -245,7 +286,20 @@ export async function listExpenses(db: D1Database, tripId: string): Promise<Expe
          WHERE e.trip_id = ? ORDER BY t.sort_order, t.created_at`,
       )
       .bind(tripId),
+    db
+      .prepare(
+        `SELECT p.* FROM expense_payers p JOIN expenses e ON e.id = p.expense_id
+         JOIN travelers t ON t.id = p.traveler_id
+         WHERE e.trip_id = ? ORDER BY t.sort_order, t.created_at`,
+      )
+      .bind(tripId),
   ]);
+  const payersBy = new Map<string, ExpenseDto['payers']>();
+  for (const p of payerRows.results) {
+    const list = payersBy.get(p.expense_id as string) ?? [];
+    list.push({ travelerId: p.traveler_id as string, amountMinor: p.amount_minor as number, baseAmountMinor: p.base_amount_minor as number });
+    payersBy.set(p.expense_id as string, list);
+  }
   const byExpense = new Map<string, ExpenseDto['shares']>();
   for (const s of splits.results) {
     const list = byExpense.get(s.expense_id as string) ?? [];
@@ -257,7 +311,7 @@ export async function listExpenses(db: D1Database, tripId: string): Promise<Expe
     });
     byExpense.set(s.expense_id as string, list);
   }
-  return exp.results.map((r) => expenseRowToDto(r, byExpense.get(r.id as string) ?? []));
+  return exp.results.map((r) => expenseRowToDto(r, byExpense.get(r.id as string) ?? [], payersBy.get(r.id as string)));
 }
 
 export async function getExpense(db: D1Database, tripId: string, id: string): Promise<ExpenseDto | null> {
@@ -270,6 +324,15 @@ export async function getExpense(db: D1Database, tripId: string, id: string): Pr
     )
     .bind(id)
     .all<Row>();
+  const payers = (
+    await db
+      .prepare(
+        `SELECT p.* FROM expense_payers p JOIN travelers t ON t.id = p.traveler_id
+         WHERE p.expense_id = ? ORDER BY t.sort_order, t.created_at`,
+      )
+      .bind(id)
+      .all<Row>()
+  ).results.map((p) => ({ travelerId: p.traveler_id as string, amountMinor: p.amount_minor as number, baseAmountMinor: p.base_amount_minor as number }));
   return expenseRowToDto(
     row,
     results.map((s) => ({
@@ -278,6 +341,7 @@ export async function getExpense(db: D1Database, tripId: string, id: string): Pr
       baseShareMinor: s.base_share_minor as number,
       weight: (s.weight as number) ?? null,
     })),
+    payers,
   );
 }
 

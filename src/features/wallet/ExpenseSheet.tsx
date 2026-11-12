@@ -39,7 +39,8 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
       currency: defaultCurrency,
       date,
       category: (expense?.category ?? 'food') as ExpenseCategory,
-      paidBy: expense?.paidByTravelerId ?? me?.id ?? travelers[0]?.id ?? '',
+      payers: expense ? expense.payers.map((p) => p.travelerId) : [me?.id ?? travelers[0]?.id ?? ''],
+      payerValues: Object.fromEntries((expense?.payers ?? []).map((p) => [p.travelerId, minorToInput(p.amountMinor, expense!.currency)])) as Record<string, string>,
       participants: expense ? expense.shares.map((s) => s.travelerId) : travelers.map((x) => x.id),
       method: (expense?.splitMethod ?? 'equal') as SplitMethod,
       values: Object.fromEntries(
@@ -83,6 +84,29 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
     return { vals: [], bad: false, remaining: 0, unit: 'none' as const };
   }, [form.participants, form.method, form.values, form.currency, amountMinor]);
 
+  // Several payers: each enters what they paid; must add up to the total.
+  const multiPay = form.payers.length > 1;
+  const pay = useMemo(() => {
+    const vals = form.payers.map((id) => (form.payerValues[id]?.trim() ? parseAmount(form.payerValues[id], form.currency) : 0));
+    const bad = vals.some((v) => v === null || v < 0);
+    return { vals: vals as number[], bad, remaining: (amountMinor ?? 0) - (bad ? 0 : sum(vals as number[])) };
+  }, [form.payers, form.payerValues, form.currency, amountMinor]);
+
+  function togglePayer(id: string) {
+    if (form.payers.includes(id)) {
+      if (form.payers.length > 1) set('payers', form.payers.filter((x) => x !== id));
+    } else {
+      set('payers', travelers.filter((x) => x.id === id || form.payers.includes(x.id)).map((x) => x.id));
+    }
+  }
+
+  function fillPayersEvenly() {
+    if (!amountMinor) return;
+    const n = form.payers.length;
+    const each = Math.floor(amountMinor / n);
+    set('payerValues', Object.fromEntries(form.payers.map((id, i) => [id, minorToInput(each + (i < amountMinor - each * n ? 1 : 0), form.currency)])));
+  }
+
   function toggleParticipant(id: string) {
     set('participants', form.participants.includes(id) ? form.participants.filter((x) => x !== id) : travelers.filter((x) => x.id === id || form.participants.includes(x.id)).map((x) => x.id));
   }
@@ -110,13 +134,15 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
     if (!form.participants.length) return setError(t.wallet.participants + ': ' + t.errors.required);
     if (needsRate && !rateNorm) return setError(t.wallet.rate + ': ' + t.errors.validation);
     if (split.bad || (form.method !== 'equal' && split.remaining !== 0)) return setError(t.errors.validation + ' – ' + t.wallet.splitMethod);
+    if (multiPay && (pay.bad || pay.remaining !== 0 || pay.vals.some((v) => v <= 0))) return setError(t.wallet.payersMismatch);
     const payload = {
       title: form.title.trim(),
       amountMinor,
       currency: form.currency,
       date: form.date,
       category: form.category,
-      paidByTravelerId: form.paidBy,
+      paidByTravelerId: form.payers[0],
+      ...(multiPay ? { payers: form.payers.map((travelerId, i) => ({ travelerId, amountMinor: pay.vals[i] })) } : {}),
       splitMethod: form.method,
       splits: form.participants.map((travelerId, i) => ({ travelerId, ...(form.method === 'equal' ? {} : { value: split.vals[i] as number }) })),
       ...(needsRate ? { fxRate: rateNorm!, fxSource: form.rateSource === 'cached' ? 'cached' : 'manual', fxDate: form.rateSource === 'cached' ? form.rateDate : form.date } : {}),
@@ -206,7 +232,7 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
               <p className="mt-2 text-[12px] text-text-3">{t.wallet.historicNote}</p>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
             <TextField label={t.wallet.date} type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
             <SelectField label={t.wallet.category} value={form.category} onChange={(e) => set('category', e.target.value as ExpenseCategory)}>
               {EXPENSE_CATEGORIES.map((c) => (
@@ -216,13 +242,58 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
               ))}
             </SelectField>
           </div>
-          <SelectField label={t.wallet.paidBy} value={form.paidBy} onChange={(e) => set('paidBy', e.target.value)}>
-            {travelers.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-          </SelectField>
+          <Field label={t.wallet.paidBy} hint={!multiPay ? t.wallet.payersHint : undefined}>
+            <div className="flex flex-wrap gap-2">
+              {travelers.map((x) => {
+                const on = form.payers.includes(x.id);
+                return (
+                  <button
+                    key={x.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => togglePayer(x.id)}
+                    className={cx('inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-[14px] font-semibold', on ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2')}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color }} />
+                    {x.name}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+          {multiPay && (
+            <div className="space-y-2 rounded-[1.25rem] border border-line bg-surface p-4">
+              <p className="text-[13px] font-semibold text-text-2">{t.wallet.payersAmounts}</p>
+              {form.payers.map((id) => {
+                const x = travelers.find((tr) => tr.id === id)!;
+                return (
+                  <label key={id} className="flex items-center gap-3">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: x.color }} />
+                    <span className="min-w-0 flex-1 truncate text-[15px]">{x.name}</span>
+                    <Input
+                      inputMode="decimal"
+                      className="h-11 w-32 text-right tabular"
+                      placeholder="0,00"
+                      value={form.payerValues[id] ?? ''}
+                      onChange={(e) => set('payerValues', { ...form.payerValues, [id]: e.target.value })}
+                      aria-label={`${x.name} ${t.wallet.paid} ${form.currency}`}
+                    />
+                    <span className="w-9 shrink-0 text-[13px] text-text-3">{form.currency}</span>
+                  </label>
+                );
+              })}
+              <div className="flex items-center justify-between gap-2 pt-2 text-[13px]">
+                {pay.remaining === 0 && !pay.bad ? (
+                  <span className="font-semibold text-success">{t.wallet.payersOk}</span>
+                ) : (
+                  <span className="font-semibold text-warn">{t.wallet.splitRemaining(money(pay.remaining, form.currency))}</span>
+                )}
+                <Button size="sm" variant="ghost" onClick={fillPayersEvenly}>
+                  {t.wallet.split.equal}
+                </Button>
+              </div>
+            </div>
+          )}
 
           <Field label={t.wallet.participants}>
             <div className="flex flex-wrap gap-2">

@@ -108,7 +108,8 @@ export function toBase(amountMinor: number, currency: string, baseCurrency: stri
 // ---------------------------------------------------------------------------
 
 export interface LedgerExpense {
-  paidBy: string;
+  /** Who paid (base currency); amounts sum to baseAmountMinor. */
+  payers: readonly { travelerId: string; baseAmountMinor: number }[];
   baseAmountMinor: number;
   shares: readonly { travelerId: string; baseShareMinor: number }[];
 }
@@ -149,7 +150,7 @@ export function computeBalances(
   };
   travelerIds.forEach(get);
   for (const e of expenses) {
-    get(e.paidBy).paidMinor += e.baseAmountMinor;
+    for (const p of e.payers) get(p.travelerId).paidMinor += p.baseAmountMinor;
     for (const s of e.shares) get(s.travelerId).owedMinor += s.baseShareMinor;
   }
   for (const s of settlements) {

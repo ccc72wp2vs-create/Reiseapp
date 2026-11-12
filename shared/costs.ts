@@ -166,7 +166,7 @@ export interface PersonCostOverview extends TripCostOverview {
 export function personCostOverview(
   baseCurrency: string,
   travelerIds: readonly string[],
-  expenses: readonly Pick<ExpenseDto, 'baseAmountMinor' | 'paidByTravelerId' | 'shares'>[],
+  expenses: readonly Pick<ExpenseDto, 'baseAmountMinor' | 'payers' | 'shares'>[],
   settlements: readonly { fromTravelerId: string; toTravelerId: string; baseAmountMinor: number }[],
   bookings: readonly (CostFields & Pick<BookingDto, 'expenseId' | 'travelerIds'>)[],
 ): PersonCostOverview {
@@ -175,7 +175,7 @@ export function personCostOverview(
   let paid = 0;
   for (const e of expenses) {
     for (const s of e.shares) if (sel.has(s.travelerId)) spent += s.baseShareMinor;
-    if (sel.has(e.paidByTravelerId)) paid += e.baseAmountMinor;
+    for (const p of e.payers) if (sel.has(p.travelerId)) paid += p.baseAmountMinor;
   }
   for (const s of settlements) {
     if (sel.has(s.fromTravelerId)) paid += s.baseAmountMinor;

@@ -317,6 +317,12 @@ const expenseFields = {
   date: dateStr,
   category: z.enum(EXPENSE_CATEGORIES).default('other'),
   paidByTravelerId: id,
+  /** Several payers: amounts in the expense currency, must sum to amountMinor. */
+  payers: z
+    .array(z.object({ travelerId: id, amountMinor: z.number().int().min(1).max(1e13) }))
+    .min(1)
+    .max(50)
+    .optional(),
   splitMethod: z.enum(SPLIT_METHODS).default('equal'),
   splits: z.array(splitInputSchema).min(1).max(50),
   /** Required unless currency equals trip base currency. */

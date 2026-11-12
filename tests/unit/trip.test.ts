@@ -156,7 +156,7 @@ describe('person cost overview', () => {
   it('attributes shares, planned costs and repayments to a person or couple', async () => {
     const { personCostOverview } = await import('../../shared/costs');
     const expenses = [
-      { baseAmountMinor: 383832, paidByTravelerId: 'john', shares: [{ travelerId: 'john', shareMinor: 191916, baseShareMinor: 191916, weight: null }, { travelerId: 'lilli', shareMinor: 191916, baseShareMinor: 191916, weight: null }] },
+      { baseAmountMinor: 383832, payers: [{ travelerId: 'john', amountMinor: 383832, baseAmountMinor: 383832 }], shares: [{ travelerId: 'john', shareMinor: 191916, baseShareMinor: 191916, weight: null }, { travelerId: 'lilli', shareMinor: 191916, baseShareMinor: 191916, weight: null }] },
     ];
     const speedboat = { ...bookings.find((b) => b.id === 'transfer-lanta-kbv')!, priceMinor: 6600, costKind: 'estimate' as const, travelerIds: ['john', 'lilli'] };
     const lilli = personCostOverview('EUR', ['lilli'], expenses, [], [speedboat]);

@@ -278,7 +278,7 @@ r.get('/:tripId/balances', async (c) => {
   ]);
   const balances = computeBalances(
     travelers.results.map((x) => x.id),
-    expenses.map((e) => ({ paidBy: e.paidByTravelerId, baseAmountMinor: e.baseAmountMinor, shares: e.shares })),
+    expenses.map((e) => ({ payers: e.payers, baseAmountMinor: e.baseAmountMinor, shares: e.shares })),
     settlements.map((s) => ({ fromTravelerId: s.fromTravelerId, toTravelerId: s.toTravelerId, baseAmountMinor: s.baseAmountMinor })),
   );
   return c.json({ baseCurrency: t.baseCurrency, balances, suggestions: suggestSettlements(balances) });

@@ -315,4 +315,34 @@ describe('wallet API', () => {
     });
     expect(r.status).toBe(403);
   });
+
+  it('supports several payers per expense', async () => {
+    const { tripId, ids } = await setup();
+    const bad = await owner.post(`/trips/${tripId}/expenses`, {
+      title: 'Abendessen', amountMinor: 10000, currency: 'EUR', date: '2026-11-12', category: 'food',
+      paidByTravelerId: ids[0], payers: [{ travelerId: ids[0], amountMinor: 6000 }, { travelerId: ids[3], amountMinor: 3000 }],
+      splits: ids.map((travelerId) => ({ travelerId })),
+    });
+    expect(bad.status).toBe(422);
+    const ok = await owner.post(`/trips/${tripId}/expenses`, {
+      title: 'Abendessen', amountMinor: 100000, currency: 'THB', date: '2026-11-12', category: 'food', fxRate: '0.0262',
+      paidByTravelerId: ids[0], payers: [{ travelerId: ids[0], amountMinor: 60000 }, { travelerId: ids[3], amountMinor: 40000 }],
+      splits: ids.map((travelerId) => ({ travelerId })),
+    });
+    expect(ok.status).toBe(201);
+    const e = ok.body.expense;
+    expect(e.payers).toHaveLength(2);
+    expect(e.payers.reduce((a: number, p: { baseAmountMinor: number }) => a + p.baseAmountMinor, 0)).toBe(e.baseAmountMinor);
+    const bal = (await owner.get(`/trips/${tripId}/balances`)).body.balances;
+    expect(bal.reduce((a: number, b: { balanceMinor: number }) => a + b.balanceMinor, 0)).toBe(0);
+    expect(bal.find((b: { travelerId: string }) => b.travelerId === ids[3]).paidMinor).toBe(e.payers[1].baseAmountMinor);
+    // Edit back to a single payer
+    const ed = await owner.put(`/trips/${tripId}/expenses/${e.id}`, {
+      version: e.version, title: 'Abendessen', amountMinor: 100000, currency: 'THB', date: '2026-11-12', category: 'food', fxRate: '0.0262',
+      paidByTravelerId: ids[3], splits: ids.map((travelerId) => ({ travelerId })),
+    });
+    expect(ed.status).toBe(200);
+    expect(ed.body.expense.payers).toEqual([{ travelerId: ids[3], amountMinor: 100000, baseAmountMinor: 2620 }]);
+    expect(ed.body.expense.paidByTravelerId).toBe(ids[3]);
+  });
 });

@@ -48,7 +48,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
     () =>
       computeBalances(
         travelers.map((x) => x.id),
-        expenses.map((e) => ({ paidBy: e.paidByTravelerId, baseAmountMinor: e.baseAmountMinor, shares: e.shares })),
+        expenses.map((e) => ({ payers: e.payers, baseAmountMinor: e.baseAmountMinor, shares: e.shares })),
         settlements.map((s) => ({ fromTravelerId: s.fromTravelerId, toTravelerId: s.toTravelerId, baseAmountMinor: s.baseAmountMinor })),
       ),
     [travelers, expenses, settlements],
@@ -282,7 +282,7 @@ function ExpenseList({ expenses, snap, onOpen, shareOf }: { expenses: ExpenseDto
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold">{e.title}</span>
               <span className="block truncate text-[13px] text-text-3">
-                {formatDateShort(e.date)} · {name(e.paidByTravelerId)} · {t.wallet.split[e.splitMethod]} ({e.shares.length})
+                {formatDateShort(e.date)} · {e.payers.map((p) => name(p.travelerId)).join(' & ')} · {t.wallet.split[e.splitMethod]} ({e.shares.length})
               </span>
             </span>
             {shareOf ? (
