@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, ArrowDown, ArrowUp, BedDouble, Copy, Download, Link2, Pencil, Plus, Route, Trash2, UserPlus, Users } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowDown, ArrowUp, BedDouble, Copy, Download, Link2, Pencil, Send, Share2, Plus, Route, Trash2, UserPlus, Users } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ROLES, type Role } from '../../../shared/constants';
@@ -215,7 +215,8 @@ function Details({ snap }: { snap: TripSnapshot }) {
 }
 
 function Travelers({ snap }: { snap: TripSnapshot }) {
-  const { canEdit, user } = useTrip();
+  const { canEdit, isOwner, user } = useTrip();
+  const [inviteFor, setInviteFor] = useState<string | null>(null);
   const online = useOnline();
   const [name, setName] = useState('');
   const [editing, setEditing] = useState<TravelerDto | null>(null);
@@ -250,6 +251,17 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
                 {x.name} {x.userId === user?.id && <span className="text-[13px] font-normal text-text-3">({t.travelers.you})</span>}
               </p>
               <p className="text-[12px] text-text-3">{x.userId ? t.travelers.linked : t.travelers.noAccount}</p>
+              {isOwner && !x.userId && (
+                <button
+                  type="button"
+                  disabled={!online}
+                  onClick={() => setInviteFor(x.id)}
+                  aria-label={t.members.inviteFor(x.name)}
+                  className="mt-2 inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-accent-soft px-3.5 text-[13px] font-semibold text-accent disabled:opacity-50"
+                >
+                  <Send size={14} /> {t.members.inviteShort}
+                </button>
+              )}
             </div>
             {canEdit && (
               <>
@@ -278,6 +290,7 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
           </form>
         )}
       </Card>
+      {inviteFor && <InviteSheet snap={snap} presetTravelerId={inviteFor} onClose={() => setInviteFor(null)} />}
       {editing && <RenameTraveler traveler={editing} tripId={trip.id} onClose={() => setEditing(null)} />}
       <ConfirmDialog
         open={!!removing}
@@ -338,10 +351,6 @@ function Members({ snap }: { snap: TripSnapshot }) {
   const trip = snap.trip;
   const [invites, setInvites] = useState<InvitationDto[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [role, setRole] = useState<Role>('editor');
-  const [travelerId, setTravelerId] = useState('');
-  const [hours, setHours] = useState(72);
-  const [link, setLink] = useState<string | null>(null);
 
   const load = () =>
     http
@@ -353,22 +362,12 @@ function Members({ snap }: { snap: TripSnapshot }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip.id, online]);
 
-  async function create() {
-    try {
-      const r = await http.post<{ path: string }>(`/trips/${trip.id}/invitations`, { role, travelerId: travelerId || null, expiresInHours: hours });
-      setLink(`${window.location.origin}${r.path}`);
-      void load();
-    } catch (e) {
-      toast.error(e);
-    }
-  }
-
   const now = new Date().toISOString();
   return (
     <>
       <SectionTitle
         action={
-          <Button size="sm" variant="soft" icon={<Link2 size={16} />} disabled={!online} onClick={() => { setLink(null); setCreating(true); }}>
+          <Button size="sm" variant="soft" icon={<Link2 size={16} />} disabled={!online} onClick={() => setCreating(true)}>
             {t.members.invite}
           </Button>
         }
@@ -445,58 +444,122 @@ function Members({ snap }: { snap: TripSnapshot }) {
           })}
         </ul>
       )}
-      <Sheet open={creating} onClose={() => setCreating(false)} title={t.members.invite}>
-        {link ? (
-          <div className="space-y-4">
-            <p className="font-semibold text-success">{t.members.created}</p>
-            <p className="text-[14px] text-text-2">{t.members.linkOnce}</p>
-            <Input readOnly value={link} onFocus={(e) => e.target.select()} />
-            <Button
-              block
-              icon={<Copy size={16} />}
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(link);
-                  toast(t.common.copied);
-                } catch {
-                  toast(t.errors.generic, 'error');
-                }
-              }}
-            >
-              {t.common.copy}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-[14px] text-text-2">{t.members.inviteHint}</p>
-            <SelectField label={t.members.role} value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {t.roles[r]}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField label={t.members.linkTraveler} optional value={travelerId} onChange={(e) => setTravelerId(e.target.value)}>
-              <option value="">{t.common.none}</option>
-              {snap.travelers.filter((x) => !x.userId).map((x) => (
+      {creating && <InviteSheet snap={snap} onClose={() => setCreating(false)} onCreated={() => void load()} />}
+    </>
+  );
+}
+
+/**
+ * Creates a single-use invitation link. When created for an existing person
+ * of the travel group, the new account is linked to exactly that person.
+ */
+function InviteSheet({
+  snap,
+  presetTravelerId,
+  onClose,
+  onCreated,
+}: {
+  snap: TripSnapshot;
+  presetTravelerId?: string;
+  onClose: () => void;
+  onCreated?: () => void;
+}) {
+  const trip = snap.trip;
+  const unlinked = snap.travelers.filter((x) => !x.userId);
+  const [role, setRole] = useState<Role>('editor');
+  const [travelerId, setTravelerId] = useState(presetTravelerId ?? unlinked[0]?.id ?? '');
+  const [hours, setHours] = useState(72);
+  const [link, setLink] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const person = snap.travelers.find((x) => x.id === travelerId);
+
+  async function create() {
+    setBusy(true);
+    try {
+      const r = await http.post<{ path: string }>(`/trips/${trip.id}/invitations`, { role, travelerId: travelerId || null, expiresInHours: hours });
+      setLink(`${window.location.origin}${r.path}`);
+      onCreated?.();
+    } catch (e) {
+      toast.error(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function share() {
+    if (!link) return;
+    const text = t.members.shareText(person?.name ?? '', trip.name);
+    try {
+      if (navigator.share) await navigator.share({ title: 'TRAVIO', text, url: link });
+      else {
+        await navigator.clipboard.writeText(`${text} ${link}`);
+        toast(t.common.copied);
+      }
+    } catch {
+      /* user cancelled the share sheet */
+    }
+  }
+
+  return (
+    <Sheet open onClose={onClose} title={person ? t.members.inviteFor(person.name) : t.members.invite}>
+      {link ? (
+        <div className="space-y-4">
+          <p className="font-semibold text-success">{t.members.created}</p>
+          {person && <p className="text-[14px] text-text-2">{t.members.linkedTo(person.name)}</p>}
+          <p className="text-[14px] text-text-2">{t.members.linkOnce}</p>
+          <Input readOnly value={link} onFocus={(e) => e.target.select()} />
+          <Button block icon={<Share2 size={16} />} onClick={() => void share()}>
+            {t.members.share}
+          </Button>
+          <Button
+            block
+            variant="secondary"
+            icon={<Copy size={16} />}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(link);
+                toast(t.common.copied);
+              } catch {
+                toast(t.errors.generic, 'error');
+              }
+            }}
+          >
+            {t.common.copy}
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-[14px] text-text-2">{t.members.inviteHint}</p>
+          {!presetTravelerId && (
+            <SelectField label={t.members.whoIsInvited} value={travelerId} onChange={(e) => setTravelerId(e.target.value)}>
+              {unlinked.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.name}
                 </option>
               ))}
+              <option value="">{t.members.newPerson}</option>
             </SelectField>
-            <SelectField label={t.members.expires} value={String(hours)} onChange={(e) => setHours(Number(e.target.value))}>
-              {[24, 72, 168].map((h) => (
-                <option key={h} value={h}>
-                  {t.members.hours(h)}
-                </option>
-              ))}
-            </SelectField>
-            <Button block icon={<Link2 size={16} />} onClick={() => void create()}>
-              {t.members.invite}
-            </Button>
-          </div>
-        )}
-      </Sheet>
-    </>
+          )}
+          {!travelerId && unlinked.length > 0 && <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[13px] text-warn">{t.members.newPersonWarn}</p>}
+          <SelectField label={t.members.role} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {t.roles[r]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label={t.members.expires} value={String(hours)} onChange={(e) => setHours(Number(e.target.value))}>
+            {[24, 72, 168].map((h) => (
+              <option key={h} value={h}>
+                {t.members.hours(h)}
+              </option>
+            ))}
+          </SelectField>
+          <Button block loading={busy} icon={<Link2 size={16} />} onClick={() => void create()}>
+            {t.members.createLink}
+          </Button>
+        </div>
+      )}
+    </Sheet>
   );
 }

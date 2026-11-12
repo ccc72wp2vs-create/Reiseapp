@@ -255,12 +255,30 @@ invitations.post('/:token/accept', async (c) => {
     .bind(tripId, userId)
     .first();
   if (!hasTraveler) {
+    // 1. the person the invitation was created for (if still unlinked)
+    // 2. otherwise exactly one unlinked person with the same name
+    // 3. otherwise a new person
+    let target: string | null = null;
     if (inv.traveler_id) {
+      const tr = await c.env.DB.prepare('SELECT id FROM travelers WHERE id = ? AND trip_id = ? AND user_id IS NULL')
+        .bind(inv.traveler_id, tripId)
+        .first<{ id: string }>();
+      target = tr?.id ?? null;
+    }
+    if (!target) {
+      const { results } = await c.env.DB.prepare(
+        'SELECT id FROM travelers WHERE trip_id = ? AND user_id IS NULL AND lower(trim(name)) = lower(trim(?))',
+      )
+        .bind(tripId, displayName)
+        .all<{ id: string }>();
+      if (results.length === 1) target = results[0].id;
+    }
+    if (target) {
       stmts.push(
         c.env.DB.prepare('UPDATE travelers SET user_id = ?, version = version + 1, updated_at = ? WHERE id = ? AND trip_id = ? AND user_id IS NULL').bind(
           userId,
           now,
-          inv.traveler_id,
+          target,
           tripId,
         ),
       );

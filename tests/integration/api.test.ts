@@ -200,4 +200,28 @@ describe('offline sync', () => {
     });
     expect(sneaky.body.results[0].status).toBe('rejected');
   });
+
+  it('links invited accounts to the right traveler instead of duplicating', async () => {
+    const owner = await setupOwner(t);
+    const tripId = (await owner.post('/imports/thailand-2026')).body.tripId;
+    let snap = (await owner.get(`/trips/${tripId}/snapshot`)).body;
+    const [, t2, t3, t4] = snap.travelers;
+    for (const [tr, n] of [[t2, 'Lilli'], [t3, 'Tim'], [t4, 'Annika']] as const) {
+      await owner.patch(`/trips/${tripId}/travelers/${tr.id}`, { name: n, version: tr.version });
+    }
+    // 1. invitation created for a specific person
+    const inv = await owner.post(`/trips/${tripId}/invitations`, { role: 'editor', travelerId: t2.id });
+    await new Client(t).post(`/invitations/${inv.body.token}/accept`, { account: { email: 'x@example.com', displayName: 'Lilli M.', password: 'passwort-123456' } });
+    // 2. no person selected, but the display name matches exactly one unlinked person
+    const inv2 = await owner.post(`/trips/${tripId}/invitations`, { role: 'editor' });
+    await new Client(t).post(`/invitations/${inv2.body.token}/accept`, { account: { email: 'tim@example.com', displayName: 'tim', password: 'passwort-123456' } });
+    // 3. a genuinely new person
+    const inv3 = await owner.post(`/trips/${tripId}/invitations`, { role: 'viewer' });
+    await new Client(t).post(`/invitations/${inv3.body.token}/accept`, { account: { email: 'max@example.com', displayName: 'Max', password: 'passwort-123456' } });
+    snap = (await owner.get(`/trips/${tripId}/snapshot`)).body;
+    expect(snap.travelers.map((x: { name: string }) => x.name)).toEqual(['Owner', 'Lilli', 'Tim', 'Annika', 'Max']);
+    expect(snap.travelers.filter((x: { userId: string | null }) => x.userId).length).toBe(4);
+    expect(snap.travelers.find((x: { id: string }) => x.id === t2.id).userId).not.toBeNull();
+    expect(snap.travelers.find((x: { id: string }) => x.id === t3.id).userId).not.toBeNull();
+  });
 });
