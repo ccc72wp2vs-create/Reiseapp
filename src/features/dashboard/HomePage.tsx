@@ -12,6 +12,7 @@ import {
   Receipt,
   Route,
   Sparkles,
+  Languages,
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -225,7 +226,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           {[
             { label: t.home.addActivity, icon: <Plus size={20} />, onClick: () => setSheet('activity'), disabled: !canEdit },
             { label: t.home.addExpense, icon: <Receipt size={20} />, onClick: () => setSheet('expense'), disabled: !canEdit || !online },
-            { label: t.home.addDestination, icon: <MapPin size={20} />, onClick: () => setSheet('destination'), disabled: !canEdit || !online },
+            { label: t.thai.quick, icon: <Languages size={20} />, onClick: () => navigate('/thai'), disabled: false },
             { label: t.home.viewPlan, icon: <CalendarDays size={20} />, onClick: () => navigate('/plan') },
           ].map((a) => (
             <button
