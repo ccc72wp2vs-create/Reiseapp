@@ -107,7 +107,7 @@ export function Spinner({ className }: { className?: string }) {
 
 export function Card({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cx('rounded-[1.5rem] border border-line bg-surface shadow-card', className)} {...rest}>
+    <div className={cx('min-w-0 rounded-[1.5rem] border border-line bg-surface shadow-card', className)} {...rest}>
       {children}
     </div>
   );

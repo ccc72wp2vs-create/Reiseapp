@@ -12,7 +12,7 @@ import {
   Route,
   Sparkles,
 } from 'lucide-react';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { costInfo, summarizeBookingCosts } from '../../../shared/costs';
 import {
@@ -36,13 +36,28 @@ import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
+import { setStatusBarOverHero } from '../../lib/theme';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
 const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
 const DestinationSheet = lazy(() => import('../trips/DestinationSheet'));
 const TripSheet = lazy(() => import('../trips/TripSheet'));
 
+/** Keeps the status bar dark while the dark hero image is behind it. */
+function useHeroStatusBar() {
+  useEffect(() => {
+    const update = () => setStatusBarOverHero(window.scrollY < window.innerHeight * 0.45);
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', update);
+      setStatusBarOverHero(false);
+    };
+  }, []);
+}
+
 export function HomePage() {
+  useHeroStatusBar();
   const { state, snap } = useTrip();
   const { trips } = useTrips();
 

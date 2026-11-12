@@ -186,6 +186,21 @@ textarea {
   font-size: 16px; /* prevents iOS zoom on focus */
 }
 
+/* Solid status bar area: prevents content from scrolling visibly under the
+   iOS status bar and keeps the system blur tinted correctly. */
+.statusbar-backdrop {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: env(safe-area-inset-top);
+  z-index: 35;
+  pointer-events: none;
+  background: var(--bg);
+  transition: background-color 0.2s ease;
+}
+:root[data-statusbar='hero'] .statusbar-backdrop {
+  background: #0b1524;
+}
+
 /* Safe area helpers */
 .pt-safe {
   padding-top: max(env(safe-area-inset-top), 0.75rem);

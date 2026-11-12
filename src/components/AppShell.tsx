@@ -61,6 +61,7 @@ export function AppShell() {
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-3xl">
+      <div className="statusbar-backdrop" aria-hidden />
       <SyncIndicator />
       <main className="pb-nav">
         <Outlet />
