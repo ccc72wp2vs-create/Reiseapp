@@ -41,7 +41,13 @@ function serviceWorker(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare(), serviceWorker()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // TRAVIO_PERSIST lets E2E tests use an isolated local D1 state.
+    cloudflare({ persistState: process.env.TRAVIO_PERSIST ? { path: process.env.TRAVIO_PERSIST } : true }),
+    serviceWorker(),
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },

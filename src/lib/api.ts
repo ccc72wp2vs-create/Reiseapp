@@ -46,7 +46,7 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
     throw new ApiError(0, 'network', t.errors.network);
   }
   const text = await res.text();
-  let json: unknown = null;
+  let json: unknown;
   try {
     json = text ? JSON.parse(text) : null;
   } catch {

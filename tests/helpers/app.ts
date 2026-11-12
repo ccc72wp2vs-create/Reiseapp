@@ -40,7 +40,8 @@ export class Client {
       if (m) this.cookie = m[1] ? `travio_session=${m[1]}` : '';
     }
     const text = await res.text();
-    let json: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let json: any;
     try {
       json = text ? JSON.parse(text) : null;
     } catch {

@@ -64,7 +64,7 @@ export function currencyExponent(code: string): number {
  */
 export function parseAmount(input: string, currency: string): number | null {
   const exp = currencyExponent(currency);
-  let s = input.trim().replace(/\s| /g, '');
+  let s = input.trim().replace(/[\s\u00a0]/g, '');
   if (!s) return null;
   const neg = s.startsWith('-');
   if (neg) s = s.slice(1);
