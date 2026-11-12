@@ -210,3 +210,67 @@ export function suggestSettlements(balances: readonly TravelerBalance[]): Sugges
   }
   return transfers;
 }
+
+// ---------------------------------------------------------------------------
+// Balance breakdown ("wofür?")
+// ---------------------------------------------------------------------------
+
+export interface BreakdownExpense {
+  id: string;
+  title: string;
+  date: string;
+  payers: readonly { travelerId: string; baseAmountMinor: number }[];
+  shares: readonly { travelerId: string; baseShareMinor: number }[];
+}
+
+export interface BreakdownSettlement {
+  id: string;
+  date: string;
+  fromTravelerId: string;
+  toTravelerId: string;
+  baseAmountMinor: number;
+}
+
+export interface BalanceItem {
+  kind: 'expense' | 'settlement';
+  id: string;
+  title: string | null;
+  date: string;
+  /** > 0: the traveler gets this back, < 0: the traveler owes it. */
+  amountMinor: number;
+  /** Who the money is owed to / comes from (for expenses: the other side). */
+  counterpartIds: string[];
+}
+
+/**
+ * Explains a traveler's balance item by item. Every expense where the
+ * traveler paid more or less than their share contributes; repayments too.
+ * The items always sum exactly to the balance from computeBalances().
+ */
+export function balanceBreakdown(
+  travelerId: string,
+  expenses: readonly BreakdownExpense[],
+  settlements: readonly BreakdownSettlement[],
+): BalanceItem[] {
+  const items: BalanceItem[] = [];
+  for (const e of expenses) {
+    const paid = e.payers.filter((p) => p.travelerId === travelerId).reduce((a, p) => a + p.baseAmountMinor, 0);
+    const share = e.shares.filter((s) => s.travelerId === travelerId).reduce((a, s) => a + s.baseShareMinor, 0);
+    const net = paid - share;
+    if (net === 0) continue;
+    const netOf = (id: string) =>
+      e.payers.filter((p) => p.travelerId === id).reduce((a, p) => a + p.baseAmountMinor, 0) -
+      e.shares.filter((s) => s.travelerId === id).reduce((a, s) => a + s.baseShareMinor, 0);
+    const ids = [...new Set([...e.payers.map((p) => p.travelerId), ...e.shares.map((s) => s.travelerId)])];
+    const counterpartIds = ids.filter((id) => id !== travelerId && (net < 0 ? netOf(id) > 0 : netOf(id) < 0));
+    items.push({ kind: 'expense', id: e.id, title: e.title, date: e.date, amountMinor: net, counterpartIds });
+  }
+  for (const s of settlements) {
+    if (s.fromTravelerId === travelerId) {
+      items.push({ kind: 'settlement', id: s.id, title: null, date: s.date, amountMinor: s.baseAmountMinor, counterpartIds: [s.toTravelerId] });
+    } else if (s.toTravelerId === travelerId) {
+      items.push({ kind: 'settlement', id: s.id, title: null, date: s.date, amountMinor: -s.baseAmountMinor, counterpartIds: [s.fromTravelerId] });
+    }
+  }
+  return items.sort((a, b) => a.date.localeCompare(b.date));
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBalances, computeShares, netPaidMinor, SplitError, suggestSettlements } from '../../shared/finance';
+import { balanceBreakdown, computeBalances, computeShares, netPaidMinor, SplitError, suggestSettlements } from '../../shared/finance';
 import { allocate, convertMinor, formatMoney, minorToInput, normalizeRate, parseAmount, parseRate, sum } from '../../shared/money';
 
 describe('parseAmount (German & international input)', () => {
@@ -202,5 +202,26 @@ describe('balances & settlements', () => {
     expect(b.map((x) => x.balanceMinor)).toEqual([3500, -2500, -2500, 1500]);
     expect(sum(b.map((x) => x.balanceMinor))).toBe(0);
     expect(b.map(netPaidMinor)).toEqual([6000, 0, 0, 4000]);
+  });
+
+  it('explains each balance item by item (sums to the balance)', () => {
+    const ids4 = ['john', 'lilli', 'tim', 'annika'];
+    const own = (amount: number) => share(amount, ids4).map((x) => ({ travelerId: x.travelerId, baseAmountMinor: x.baseShareMinor }));
+    const expenses = [
+      { id: 'flight', title: 'Hinflug', date: '2026-11-06', payers: own(284000), shares: share(284000, ids4) },
+      { id: 'boat', title: 'Speedboat', date: '2026-11-13', payers: [{ travelerId: 'lilli', baseAmountMinor: 15077 }], shares: share(15077, ids4) },
+      { id: 'dinner', title: 'Abendessen', date: '2026-11-14', payers: [{ travelerId: 'john', baseAmountMinor: 6000 }, { travelerId: 'annika', baseAmountMinor: 4000 }], shares: share(10000, ids4) },
+    ];
+    const settlements = [{ id: 's1', date: '2026-11-15', fromTravelerId: 'tim', toTravelerId: 'lilli', baseAmountMinor: 3769 }];
+    const balances = computeBalances(ids4, expenses.map((e) => ({ payers: e.payers, baseAmountMinor: e.payers.reduce((a, p) => a + p.baseAmountMinor, 0), shares: e.shares })), settlements);
+    for (const id of ids4) {
+      const items = balanceBreakdown(id, expenses, settlements);
+      expect(sum(items.map((i) => i.amountMinor))).toBe(balances.find((b) => b.travelerId === id)!.balanceMinor);
+      expect(items.some((i) => i.id === 'flight')).toBe(false); // everyone paid their own share
+    }
+    const tim = balanceBreakdown('tim', expenses, settlements);
+    expect(tim.find((i) => i.id === 'boat')).toMatchObject({ amountMinor: -3769, counterpartIds: ['lilli'] });
+    expect(tim.find((i) => i.id === 'dinner')).toMatchObject({ amountMinor: -2500, counterpartIds: ['john', 'annika'] });
+    expect(tim.find((i) => i.id === 's1')).toMatchObject({ kind: 'settlement', amountMinor: 3769, counterpartIds: ['lilli'] });
   });
 });

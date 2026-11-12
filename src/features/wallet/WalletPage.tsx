@@ -1,8 +1,8 @@
-import { ArrowRight, ArrowRightLeft, Calculator, Coins, HandCoins, Plus, Receipt, Trash2 } from 'lucide-react';
+import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, HandCoins, Plus, Receipt, Trash2 } from 'lucide-react';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
-import { computeBalances, netPaidMinor, suggestSettlements } from '../../../shared/finance';
+import { balanceBreakdown, computeBalances, netPaidMinor, suggestSettlements } from '../../../shared/finance';
 import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
 import type { ExpenseDto, SettlementDto, TripSnapshot } from '../../../shared/types';
@@ -11,7 +11,7 @@ import { MoneyField } from '../../components/inputs';
 import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
 import { ExpenseIcon } from '../../components/status';
 import { toast } from '../../components/toast';
-import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, IconButton, Input, Progress, Segmented, SectionTitle, Select, Skeleton, TextField, cx } from '../../components/ui';
+import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, IconButton, Input, Progress, Segmented, SectionTitle, Select, Sheet, Skeleton, TextField, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatRate, money } from '../../lib/format';
@@ -60,6 +60,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   const mine = me ? balances.find((b) => b.travelerId === me.id) : null;
   const canWrite = canEdit && online;
   const selection = usePersonSelection(travelers);
+  const [explain, setExplain] = useState<string | null>(null);
   const sel = selection.filtered ? personCostOverview(base, selection.selected, expenses, settlements, snap.bookings) : null;
   const selectionLabel = selection.selected.map(name).join(' & ');
   /** Expense amount in base currency – the selected persons' share when filtered. */
@@ -209,8 +210,13 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
           <>
             <Card className="divide-y divide-line">
               {balances.map((b) => (
-                <div key={b.travelerId} className="flex items-center gap-3 p-4">
-                  <span className="grid h-10 w-10 place-items-center rounded-full text-[14px] font-bold text-[#0b1524]" style={{ background: color(b.travelerId) }}>
+                <button
+                  type="button"
+                  key={b.travelerId}
+                  onClick={() => setExplain(b.travelerId)}
+                  className="flex w-full items-center gap-3 p-4 text-left transition active:bg-surface-2"
+                >
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[14px] font-bold text-[#0b1524]" style={{ background: color(b.travelerId) }}>
                     {name(b.travelerId).slice(0, 1).toUpperCase()}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -221,9 +227,11 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                     {b.balanceMinor > 0 ? '+' : ''}
                     {money(b.balanceMinor, base)}
                   </span>
-                </div>
+                  <ChevronRight size={18} className="shrink-0 text-text-3" />
+                </button>
               ))}
             </Card>
+            <p className="mt-2 text-[12px] text-text-3">{t.wallet.tapForDetails}</p>
             <SectionTitle>{t.wallet.suggestions}</SectionTitle>
             <p className="-mt-1 mb-3 text-[13px] text-text-3">{t.wallet.suggestionsText}</p>
             {suggestions.length === 0 ? (
@@ -238,17 +246,21 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                       <span className="font-semibold">{name(s.toTravelerId)}</span>
                       <span className="ml-auto font-display text-[19px] font-semibold tabular">{money(s.amountMinor, base)}</span>
                     </div>
-                    {canEdit && (
-                      <Button
-                        size="sm"
-                        variant="soft"
-                        className="mt-3"
-                        disabled={!canWrite}
-                        onClick={() => setSheet({ kind: 'settlement', preset: { from: s.fromTravelerId, to: s.toTravelerId, amountMinor: s.amountMinor } })}
-                      >
-                        {t.wallet.recordThis}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" icon={<HelpCircle size={16} />} onClick={() => setExplain(s.fromTravelerId)}>
+                        {t.wallet.whatFor}
                       </Button>
-                    )}
+                      {canEdit && (
+                        <Button
+                          size="sm"
+                          variant="soft"
+                          disabled={!canWrite}
+                          onClick={() => setSheet({ kind: 'settlement', preset: { from: s.fromTravelerId, to: s.toTravelerId, amountMinor: s.amountMinor } })}
+                        >
+                          {t.wallet.recordThis}
+                        </Button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -260,6 +272,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
         {tab === 'rates' && <Rates snap={snap} />}
       </div>
 
+      {explain && <BalanceSheet snap={snap} travelerId={explain} onClose={() => setExplain(null)} />}
       <Suspense fallback={null}>
         {sheet?.kind === 'expense' && <ExpenseSheet key={sheet.expense?.id ?? 'new'} open expense={sheet.expense} onClose={() => setSheet(null)} />}
         {sheet?.kind === 'settlement' && <SettlementSheet open preset={sheet.preset} onClose={() => setSheet(null)} />}
@@ -488,5 +501,72 @@ function Rates({ snap }: { snap: TripSnapshot }) {
       )}
       <p className="mt-4 text-[12px] text-text-3">{t.wallet.liveRatesPlanned}</p>
     </>
+  );
+}
+
+/** "Wofür?" – explains a traveler's open balance item by item. */
+function BalanceSheet({ snap, travelerId, onClose }: { snap: TripSnapshot; travelerId: string; onClose: () => void }) {
+  const base = snap.trip.baseCurrency;
+  const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
+  const items = balanceBreakdown(
+    travelerId,
+    snap.expenses.map((e) => ({ id: e.id, title: e.title, date: e.date, payers: e.payers, shares: e.shares })),
+    snap.settlements.map((s) => ({ id: s.id, date: s.date, fromTravelerId: s.fromTravelerId, toTravelerId: s.toTravelerId, baseAmountMinor: s.baseAmountMinor })),
+  );
+  const total = items.reduce((a, i) => a + i.amountMinor, 0);
+  const owes = items.filter((i) => i.amountMinor < 0 && i.kind === 'expense');
+  const gets = items.filter((i) => i.amountMinor > 0 && i.kind === 'expense');
+  const repayments = items.filter((i) => i.kind === 'settlement');
+  const row = (i: (typeof items)[number]) => (
+    <li key={i.kind + i.id} className="flex items-start gap-3 py-3">
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium leading-snug">{i.kind === 'expense' ? i.title : t.wallet.settlement}</span>
+        <span className="block text-[13px] text-text-3">
+          {formatDate(i.date)} ·{' '}
+          {i.kind === 'settlement'
+            ? i.amountMinor > 0
+              ? t.wallet.repaidTo(name(i.counterpartIds[0]))
+              : t.wallet.repaidFrom(name(i.counterpartIds[0]))
+            : i.amountMinor < 0
+              ? t.wallet.owedTo(i.counterpartIds.map(name).join(' & '))
+              : t.wallet.advancedFor(i.counterpartIds.map(name).join(', '))}
+        </span>
+      </span>
+      <span className={cx('shrink-0 font-semibold tabular', i.amountMinor > 0 ? 'text-success' : 'text-danger')}>
+        {i.amountMinor > 0 ? '+' : ''}
+        {money(i.amountMinor, base)}
+      </span>
+    </li>
+  );
+  return (
+    <Sheet open onClose={onClose} title={t.wallet.breakdownTitle(name(travelerId))}>
+      <div className="rounded-[1.25rem] bg-surface p-4">
+        <p className="text-[13px] text-text-3">{total > 0 ? t.wallet.youGet : total < 0 ? t.wallet.youOwe : t.wallet.settled}</p>
+        <p className={cx('font-display text-[30px] font-semibold tabular', total > 0 ? 'text-success' : total < 0 ? 'text-danger' : '')}>
+          {total > 0 ? '+' : ''}
+          {money(total, base)}
+        </p>
+      </div>
+      {items.length === 0 && <p className="mt-4 text-[14px] text-text-2">{t.wallet.breakdownNone}</p>}
+      {owes.length > 0 && (
+        <>
+          <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">{t.wallet.breakdownOwes}</h3>
+          <ul className="divide-y divide-line">{owes.map(row)}</ul>
+        </>
+      )}
+      {gets.length > 0 && (
+        <>
+          <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">{t.wallet.breakdownGets}</h3>
+          <ul className="divide-y divide-line">{gets.map(row)}</ul>
+        </>
+      )}
+      {repayments.length > 0 && (
+        <>
+          <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">{t.wallet.breakdownRepayments}</h3>
+          <ul className="divide-y divide-line">{repayments.map(row)}</ul>
+        </>
+      )}
+      <p className="mt-4 text-[12px] text-text-3">{t.wallet.breakdownHint}</p>
+    </Sheet>
   );
 }
