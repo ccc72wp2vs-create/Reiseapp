@@ -24,15 +24,40 @@ export function storedRateFor(rates: ExchangeRateDto[], currency: string, date: 
   );
 }
 
+export interface SuggestedRate {
+  rate: string;
+  effectiveDate: string;
+  from: 'stored' | 'lastUsed';
+}
+
+/**
+ * Rate to prefill: the stored trip rate, otherwise the rate last used for an
+ * expense in that currency. Never invented – null if neither exists.
+ */
+export function suggestedRate(
+  rates: ExchangeRateDto[],
+  expenses: Pick<ExpenseDto, 'currency' | 'fxRate' | 'fxSource' | 'fxDate' | 'date' | 'createdAt'>[],
+  currency: string,
+  date: string,
+): SuggestedRate | null {
+  const stored = storedRateFor(rates, currency, date);
+  if (stored) return { rate: stored.rate, effectiveDate: stored.effectiveDate, from: 'stored' };
+  const last = expenses
+    .filter((e) => e.currency === currency && e.fxSource !== 'identity')
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
+  return last ? { rate: last.fxRate, effectiveDate: last.fxDate ?? last.date, from: 'lastUsed' } : null;
+}
+
 export default function ExpenseSheet({ open, onClose, expense }: { open: boolean; onClose: () => void; expense?: ExpenseDto | null }) {
   const { snap, me } = useTrip();
   const online = useOnline();
-  const { trip, travelers, exchangeRates } = snap!;
+  const { trip, travelers, exchangeRates, expenses } = snap!;
   const base = trip.baseCurrency;
   const defaultCurrency = expense?.currency ?? trip.localCurrency ?? base;
   const [form, setForm] = useState(() => {
     const date = expense?.date ?? todayIn(snap!.destinations[0]?.timezone ?? trip.homeTimezone);
-    const initialRate = expense ? (expense.fxSource === 'identity' ? '' : expense.fxRate) : (storedRateFor(exchangeRates, defaultCurrency, date)?.rate ?? '');
+    const sugg = defaultCurrency !== base ? suggestedRate(exchangeRates, expenses, defaultCurrency, date) : null;
+    const initialRate = expense ? (expense.fxSource === 'identity' ? '' : expense.fxRate) : (sugg?.rate ?? '');
     return {
       title: expense?.title ?? '',
       amount: expense ? minorToInput(expense.amountMinor, expense.currency) : '',
@@ -51,7 +76,7 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
       ) as Record<string, string>,
       rate: initialRate.replace('.', ','),
       rateSource: (expense ? (expense.fxSource === 'identity' ? 'manual' : expense.fxSource) : initialRate ? 'cached' : 'manual') as FxSource,
-      rateDate: expense?.fxDate ?? (initialRate ? (storedRateFor(exchangeRates, defaultCurrency, date)?.effectiveDate ?? null) : null),
+      rateDate: expense?.fxDate ?? (initialRate ? (sugg?.effectiveDate ?? null) : null),
       notes: expense?.notes ?? '',
     };
   });
@@ -63,7 +88,10 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
   const amountMinor = form.amount.trim() ? parseAmount(form.amount, form.currency) : null;
   const needsRate = form.currency !== base;
   const rateNorm = needsRate ? normalizeRate(form.rate) : '1';
-  const stored = needsRate ? storedRateFor(exchangeRates, form.currency, form.date) : null;
+  const stored = needsRate ? suggestedRate(exchangeRates, expenses, form.currency, form.date) : null;
+  const [saveRate, setSaveRate] = useState(true);
+  const hasStoredRate = needsRate && !!storedRateFor(exchangeRates, form.currency, form.date);
+  const offerSave = needsRate && form.rateSource === 'manual' && !!rateNorm && (!hasStoredRate || stored?.rate !== rateNorm);
   const converted = amountMinor && rateNorm ? convertMinor(amountMinor, form.currency, base, rateNorm) : null;
 
   // Split preview & validation
@@ -150,9 +178,15 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
     };
     setBusy(true);
     try {
-      await tripStore.mutate(() =>
-        expense ? http.put(`/trips/${trip.id}/expenses/${expense.id}`, { ...payload, version: expense.version }) : http.post(`/trips/${trip.id}/expenses`, payload),
-      );
+      await tripStore.mutate(async () => {
+        // Remember a manually entered rate so it is prefilled next time.
+        if (offerSave && saveRate) {
+          await http.post(`/trips/${trip.id}/exchange-rates`, { currency: form.currency, rate: rateNorm, effectiveDate: form.date });
+        }
+        return expense
+          ? http.put(`/trips/${trip.id}/expenses/${expense.id}`, { ...payload, version: expense.version })
+          : http.post(`/trips/${trip.id}/expenses`, payload);
+      });
       toast(t.success.saved);
       onClose();
     } catch (err) {
@@ -198,7 +232,7 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
             currency={form.currency}
             onAmount={(v) => set('amount', v)}
             onCurrency={(c) => {
-              const r = c !== base ? storedRateFor(exchangeRates, c, form.date) : null;
+              const r = c !== base ? suggestedRate(exchangeRates, expenses, c, form.date) : null;
               setForm((f) => ({ ...f, currency: c, rate: r ? r.rate.replace('.', ',') : '', rateSource: r ? 'cached' : 'manual', rateDate: r?.effectiveDate ?? null }));
             }}
             error={form.amount && amountMinor === null ? t.errors.invalidAmount : null}
@@ -215,7 +249,11 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
               </Field>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
                 <Badge tone={form.rateSource === 'cached' ? 'info' : 'neutral'}>{t.wallet.rateSource[form.rateSource]}</Badge>
-                {form.rateSource === 'cached' && form.rateDate && <span className="text-text-3">{t.wallet.rateFrom(formatDate(form.rateDate))}</span>}
+                {form.rateSource === 'cached' && form.rateDate && (
+                  <span className="text-text-3">
+                    {stored?.from === 'lastUsed' && stored.rate === normalizeRate(form.rate) ? t.wallet.rateLastUsed(formatDate(form.rateDate)) : t.wallet.rateFrom(formatDate(form.rateDate))}
+                  </span>
+                )}
                 {converted != null && <span className="ml-auto font-semibold tabular">{t.wallet.convertedTo(money(converted, base))}</span>}
               </div>
               {stored && form.rateSource !== 'cached' && (
@@ -229,6 +267,12 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
                 </Button>
               )}
               {!stored && <p className="mt-2 text-[12px] text-text-3">{t.wallet.noStoredRate}</p>}
+              {offerSave && (
+                <label className="mt-3 flex items-center gap-2.5 text-[14px]">
+                  <input type="checkbox" className="h-5 w-5 accent-[var(--accent)]" checked={saveRate} onChange={(e) => setSaveRate(e.target.checked)} />
+                  {t.wallet.saveRateForLater(form.currency)}
+                </label>
+              )}
               <p className="mt-2 text-[12px] text-text-3">{t.wallet.historicNote}</p>
             </div>
           )}

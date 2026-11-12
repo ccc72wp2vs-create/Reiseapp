@@ -384,6 +384,8 @@ export const de = {
     rateHelp: (cur: string, base: string) => `1 ${cur} = ? ${base}`,
     rateSource: { identity: 'Basiswährung', manual: 'Manuell eingegeben', cached: 'Gespeicherter Kurs', provider: 'Kursanbieter' },
     rateFrom: (date: string) => `Stand ${date}`,
+    rateLastUsed: (date: string) => `zuletzt verwendet am ${date}`,
+    saveRateForLater: (cur: string) => `Kurs für künftige ${cur}-Ausgaben speichern`,
     useStoredRate: 'Gespeicherten Kurs verwenden',
     noStoredRate: 'Kein gespeicherter Kurs – bitte manuell eingeben.',
     convertedTo: (s: string) => `≈ ${s}`,

@@ -194,6 +194,15 @@ input[type='time'] {
   appearance: none;
   display: block;
   text-align: left;
+  /* iOS places the value at the top – center it in the 48px field */
+  line-height: 2.875rem;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+input[type='date']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value {
+  margin: 0;
+  line-height: 2.875rem;
 }
 input[type='date']::-webkit-date-and-time-value,
 input[type='time']::-webkit-date-and-time-value {

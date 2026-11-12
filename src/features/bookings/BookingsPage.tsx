@@ -12,7 +12,7 @@ import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatTime, money, tzLabel } from '../../lib/format';
 import { tripStore, useOnline } from '../../lib/store';
-import { storedRateFor } from '../wallet/ExpenseSheet';
+import { suggestedRate } from '../wallet/ExpenseSheet';
 
 const BookingSheet = lazy(() => import('./BookingSheet'));
 
@@ -263,7 +263,7 @@ function ToWalletSheet({ booking, snap, onClose }: { booking: BookingDto; snap: 
         : travelers.map((x) => x.id),
   );
   const needsRate = booking.currency !== trip.baseCurrency;
-  const stored = needsRate ? storedRateFor(exchangeRates, booking.currency!, booking.startDate ?? '9999') : null;
+  const stored = needsRate ? suggestedRate(exchangeRates, snap.expenses, booking.currency!, booking.startDate ?? '9999') : null;
   const [rate, setRate] = useState(stored?.rate.replace('.', ',') ?? '');
   const [busy, setBusy] = useState(false);
 

@@ -9,7 +9,7 @@ import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { money } from '../../lib/format';
 import { tripStore, useOnline } from '../../lib/store';
-import { storedRateFor } from './ExpenseSheet';
+import { suggestedRate } from './ExpenseSheet';
 
 export default function SettlementSheet({
   open,
@@ -22,7 +22,7 @@ export default function SettlementSheet({
 }) {
   const { snap } = useTrip();
   const online = useOnline();
-  const { trip, travelers, exchangeRates } = snap!;
+  const { trip, travelers, exchangeRates, expenses } = snap!;
   const base = trip.baseCurrency;
   const [form, setForm] = useState({
     from: preset?.from ?? travelers[0]?.id ?? '',
@@ -38,7 +38,7 @@ export default function SettlementSheet({
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const amountMinor = form.amount ? parseAmount(form.amount, form.currency) : null;
   const needsRate = form.currency !== base;
-  const stored = needsRate ? storedRateFor(exchangeRates, form.currency, form.date) : null;
+  const stored = needsRate ? suggestedRate(exchangeRates, expenses, form.currency, form.date) : null;
   const rate = needsRate ? normalizeRate(form.rate) : '1';
 
   async function submit(e: FormEvent) {
@@ -109,7 +109,7 @@ export default function SettlementSheet({
           amount={form.amount}
           currency={form.currency}
           onAmount={(v) => set('amount', v)}
-          onCurrency={(c) => setForm((f) => ({ ...f, currency: c, rate: c !== base ? (storedRateFor(exchangeRates, c, f.date)?.rate.replace('.', ',') ?? '') : '' }))}
+          onCurrency={(c) => setForm((f) => ({ ...f, currency: c, rate: c !== base ? (suggestedRate(exchangeRates, expenses, c, f.date)?.rate.replace('.', ',') ?? '') : '' }))}
         />
         {needsRate && (
           <Field label={`${t.wallet.rate} · ${t.wallet.rateHelp(form.currency, base)}`} hint={stored ? `${t.wallet.rateSource.cached}: ${stored.rate}` : t.wallet.noStoredRate}>
