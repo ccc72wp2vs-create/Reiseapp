@@ -30,7 +30,6 @@ import {
 import type { BookingDto, TripSnapshot } from '../../../shared/types';
 import { pickDefaultTrip, useTrip } from '../../components/AppShell';
 import { CoverArt, Logo } from '../../components/CoverArt';
-import { WeatherCard } from '../../components/WeatherCard';
 import { BookingBadges, BookingIcon, CategoryIcon, ExpenseIcon, IconTile, ModeIcon } from '../../components/status';
 import { toast } from '../../components/toast';
 import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
@@ -99,7 +98,6 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const where = destinationOn(destinations, today);
   const heroDest = phase.phase === 'before' ? destinations[0] : phase.phase === 'after' ? null : (where.current ?? where.leaving);
 
-  const weatherDest = where.current ?? where.leaving ?? (phase.phase === 'before' ? destinations[0] : null);
   const todays = activities.filter((a) => a.date === today);
   const todaysBookings = bookingsOnDate(bookings, today);
   const reminders = useMemo(() => transferReminders(trip, destinations, bookings, today), [trip, destinations, bookings, today]);
@@ -167,13 +165,6 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
       </section>
 
       <div className="px-safe">
-        {/* ------------------------------------------------------------- Weather */}
-        {weatherDest && weatherDest.lat != null && weatherDest.lng != null && phase.phase !== 'after' && (
-          <div className="mt-5">
-            <WeatherCard lat={weatherDest.lat} lng={weatherDest.lng} timezone={weatherDest.timezone} place={weatherDest.name} />
-          </div>
-        )}
-
         {/* ------------------------------------------------------------ Reminders */}
         {(reminders.length > 0 || clarifications.length > 0) && phase.phase !== 'after' && (
           <section aria-label={t.home.reminders} className="mt-5 space-y-2.5">

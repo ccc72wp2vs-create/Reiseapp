@@ -6,8 +6,6 @@ import trips from './api/trips';
 import { ApiError } from './lib/errors';
 import { bodyLimit, csrfProtection, currentUser, parseJson, requestContext, requireUser, sessionLoader } from './middleware/core';
 import { deleteDemoTrips, importSeedTrip } from './services/seed';
-import { getWeather } from './services/weather';
-import { isValidTimeZone } from '../shared/schemas';
 import { DEMO_TRIP, THAILAND_2026 } from './services/seedData';
 import type { AppEnv } from './types';
 
@@ -46,18 +44,6 @@ export function createApp() {
     await parseJson(c, z.object({}).passthrough());
     const n = await deleteDemoTrips(c.env.DB, currentUser(c).id);
     return c.json({ ok: true, deleted: n });
-  });
-
-  /** Weather for a place (signed-in users only; coordinates rounded). */
-  app.use('/weather', requireUser);
-  app.get('/weather', async (c) => {
-    const lat = Number(c.req.query('lat'));
-    const lng = Number(c.req.query('lng'));
-    const tz = c.req.query('tz') ?? 'UTC';
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || !isValidTimeZone(tz)) {
-      throw new ApiError('validation_failed', 'Ungültiger Ort');
-    }
-    return c.json({ weather: await getWeather(lat, lng, tz) });
   });
 
   app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Endpunkt nicht gefunden' } }, 404));
