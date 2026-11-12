@@ -9,7 +9,17 @@ import { Button, ConfirmDialog, SelectField, Sheet, TextAreaField, TextField, To
 import { t } from '../../i18n';
 import { isOnline, tripStore } from '../../lib/store';
 
-export default function PlaceSheet({ open, onClose, place }: { open: boolean; onClose: () => void; place?: PlaceDto | null }) {
+export default function PlaceSheet({
+  open,
+  onClose,
+  place,
+  defaultDestinationId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  place?: PlaceDto | null;
+  defaultDestinationId?: string | null;
+}) {
   const { snap } = useTrip();
   const [form, setForm] = useState(() => ({
     name: place?.name ?? '',
@@ -21,7 +31,7 @@ export default function PlaceSheet({ open, onClose, place }: { open: boolean; on
     externalUrl: place?.externalUrl ?? '',
     notes: place?.notes ?? '',
     favorite: place?.favorite ?? false,
-    destinationId: place?.destinationId ?? '',
+    destinationId: place ? (place.destinationId ?? '') : (defaultDestinationId ?? ''),
   }));
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);

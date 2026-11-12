@@ -1,6 +1,7 @@
-import { CalendarPlus, Compass, ExternalLink, List, Map as MapIcon, Navigation, Plus, Search, Star } from 'lucide-react';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { CalendarPlus, Compass, ExternalLink, List, Map as MapIcon, MapPin, Navigation, Plus, Route, Search, Star } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { PLACE_CATEGORIES, type PlaceCategory } from '../../../shared/constants';
+import { destinationOn, sortDestinations, todayIn, tripPhase } from '../../../shared/trip';
 import type { PlaceDto, TripSnapshot } from '../../../shared/types';
 import { PageHeader, useTrip } from '../../components/AppShell';
 import { MapView, type MapMarker } from '../../components/MapView';
@@ -12,6 +13,25 @@ import { tripStore } from '../../lib/store';
 
 const PlaceSheet = lazy(() => import('./PlaceSheet'));
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
+
+/** Destination the travelers are at today (null outside the trip). */
+function currentStopId(snap: TripSnapshot): string | null {
+  const { trip, destinations } = snap;
+  const probe = destinationOn(destinations, todayIn(trip.homeTimezone)).current ?? sortDestinations(destinations)[0];
+  const today = todayIn(probe?.timezone ?? trip.homeTimezone);
+  if (tripPhase(trip, today).phase !== 'during') return null;
+  const where = destinationOn(destinations, today);
+  return (where.current ?? where.leaving ?? where.next)?.id ?? null;
+}
+
+/** Initial route filter: today's stop, before the trip the first stop, otherwise everything. */
+function defaultStop(snap: TripSnapshot): string {
+  const cur = currentStopId(snap);
+  if (cur) return cur;
+  const first = sortDestinations(snap.destinations)[0];
+  const today = todayIn(first?.timezone ?? snap.trip.homeTimezone);
+  return first && tripPhase(snap.trip, today).phase === 'before' ? first.id : 'all';
+}
 
 export default function ExplorePage() {
   const { snap } = useTrip();
@@ -37,16 +57,31 @@ function Explore({ snap }: { snap: TripSnapshot }) {
   const [planning, setPlanning] = useState<PlaceDto | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const { places, destinations } = snap;
+  const route = useMemo(() => sortDestinations(destinations), [destinations]);
+  const currentId = currentStopId(snap);
+  // Default: the place where the travelers are right now (before the trip: the first stop).
+  const [stop, setStop] = useState<string>(() => defaultStop(snap));
+  useEffect(() => {
+    if (stop !== 'all' && stop !== 'none' && !route.some((d) => d.id === stop)) setStop('all');
+  }, [route, stop]);
+  // Where we are right now comes first, then the rest of the route in travel order.
+  const stops = currentId ? [...route.filter((d) => d.id === currentId), ...route.filter((d) => d.id !== currentId)] : route;
+  const unassigned = (p: PlaceDto) => !route.some((d) => d.id === p.destinationId);
+  const inStop = useMemo(
+    () => places.filter((p) => stop === 'all' || (stop === 'none' ? !route.some((d) => d.id === p.destinationId) : p.destinationId === stop)),
+    [places, stop, route],
+  );
+  const stopName = route.find((d) => d.id === stop)?.name;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return places.filter(
+    return inStop.filter(
       (p) =>
         (cat === 'all' || (cat === 'fav' ? p.favorite : p.category === cat)) &&
         (!q || p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)),
     );
-  }, [places, query, cat]);
-  const usedCats = PLACE_CATEGORIES.filter((c) => places.some((p) => p.category === c));
+  }, [inStop, query, cat]);
+  const usedCats = PLACE_CATEGORIES.filter((c) => inStop.some((p) => p.category === c));
   const markers: MapMarker[] = filtered
     .filter((p) => p.lat != null && p.lng != null)
     .map((p) => ({ id: p.id, lat: p.lat!, lng: p.lng!, label: p.favorite ? '★' : '•', title: p.name, kind: p.favorite ? 'fav' : 'place' }));
@@ -99,7 +134,23 @@ function Explore({ snap }: { snap: TripSnapshot }) {
               ]}
             />
           </div>
-          <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-safe pb-1">
+          <div role="group" aria-label={t.explore.routeFilter} className="no-scrollbar mt-3 flex gap-2 overflow-x-auto px-safe pb-1">
+            {stops.map((d) => (
+              <Chip key={d.id} active={stop === d.id} onClick={() => setStop(d.id)} icon={<MapPin size={14} />}>
+                {d.name}
+                {d.id === currentId ? ` · ${t.explore.now}` : ''} ({places.filter((p) => p.destinationId === d.id).length})
+              </Chip>
+            ))}
+            <Chip active={stop === 'all'} onClick={() => setStop('all')} icon={<Route size={14} />}>
+              {t.explore.wholeRoute} ({places.length})
+            </Chip>
+            {places.some(unassigned) && (
+              <Chip active={stop === 'none'} onClick={() => setStop('none')}>
+                {t.explore.noStop}
+              </Chip>
+            )}
+          </div>
+          <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto px-safe pb-1">
             <Chip active={cat === 'all'} onClick={() => setCat('all')}>
               {t.common.all}
             </Chip>
@@ -122,11 +173,13 @@ function Explore({ snap }: { snap: TripSnapshot }) {
               </div>
             )}
             {view === 'list' && (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
                 {filtered.map((p) => (
                   <PlaceCard key={p.id} place={p} snap={snap} onEdit={() => setEditing(p)} onPlan={() => setPlanning(p)} />
                 ))}
-                {filtered.length === 0 && <p className="py-8 text-center text-text-3 sm:col-span-2">{t.explore.noResults}</p>}
+                {filtered.length === 0 && (
+                  <p className="py-8 text-center text-text-3 sm:col-span-2">{inStop.length === 0 && stopName ? t.explore.noPlacesAt(stopName) : t.explore.noResults}</p>
+                )}
               </div>
             )}
             <p className="mt-8 text-center text-[12px] text-text-3">{t.explore.futureSearch}</p>
@@ -135,7 +188,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
       )}
 
       <Suspense fallback={null}>
-        {creating && <PlaceSheet open onClose={() => setCreating(false)} />}
+        {creating && <PlaceSheet open onClose={() => setCreating(false)} defaultDestinationId={route.some((d) => d.id === stop) ? stop : null} />}
         {editing && <PlaceSheet key={editing.id} open place={editing} onClose={() => setEditing(null)} />}
         {planning && (
           <ActivitySheet
@@ -163,7 +216,7 @@ function PlaceCard({ place, snap, onEdit, onPlan, highlight }: { place: PlaceDto
   const dest = snap.destinations.find((d) => d.id === place.destinationId);
   const target = { lat: place.lat, lng: place.lng, query: place.address ?? place.name };
   return (
-    <article className={cx('rounded-[1.5rem] border bg-surface p-4 shadow-card', highlight ? 'mt-3 border-accent/50' : 'border-line')}>
+    <article className={cx('min-w-0 rounded-[1.5rem] border bg-surface p-4 shadow-card', highlight ? 'mt-3 border-accent/50' : 'border-line')}>
       <div className="flex items-start gap-3">
         <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent">
           <CategoryIcon category={place.category} size={20} />
