@@ -8,6 +8,9 @@ import { cx } from './ui';
 
 type Scene = 'city' | 'island' | 'karst' | 'mountains' | 'coast';
 
+/** Callers may position the art themselves (e.g. absolute); default is relative. */
+const pos = (className?: string) => (/(^|\s)(absolute|fixed|sticky)(\s|$)/.test(className ?? '') ? '' : 'relative');
+
 function hash(s: string) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
@@ -36,7 +39,7 @@ export function CoverArt({ name, imageUrl, className, label }: { name: string; i
   const [imgFailed, setImgFailed] = useState(false);
   if (imageUrl && !imgFailed) {
     return (
-      <div className={cx('relative overflow-hidden bg-surface-2', className)}>
+      <div className={cx(pos(className), 'overflow-hidden bg-surface-2', className)}>
         <img
           src={imageUrl}
           alt={label ?? ''}
@@ -56,7 +59,7 @@ export function CoverArt({ name, imageUrl, className, label }: { name: string; i
   const sunY = 120 + ((h >> 5) % 40);
   const id = `c${h.toString(36)}`;
   return (
-    <div className={cx('relative overflow-hidden', className)} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+    <div className={cx(pos(className), 'overflow-hidden', className)} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
       <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full">
         <defs>
           <linearGradient id={`${id}s`} x1="0" y1="0" x2="0" y2="1">
