@@ -71,7 +71,7 @@ describe('check-in', () => {
   it('only links to https pages of the airline itself', () => {
     for (const a of AIRLINES) {
       if (a.url) expect(a.url).toMatch(/^https:\/\/www\.[a-z]+\.com\//);
-      if (!a.windowConfirmed) expect(a.url).toBeNull();
+      if (!a.windowConfirmed && a.code !== 'FD') expect(a.url).toBeNull();
     }
   });
 

@@ -39,8 +39,10 @@ export const AIRLINES: readonly AirlineCheckin[] = [
   { code: 'TK', name: 'Turkish Airlines', url: 'https://www.turkishairlines.com/en-int/any-questions/check-in/', opensHours: 24, closesMinutes: 90, windowConfirmed: true },
   // eurowings.com: earliest 72 h, latest 3 h before departure (40 min at most German airports)
   { code: 'EW', name: 'Eurowings', url: 'https://www.eurowings.com/en/faq/check-in/online-check-in.html', opensHours: 72, closesMinutes: 180, windowConfirmed: true },
+  // Link confirmed by the travelers (forwarded there from their booking); the window differs between sources.
+  { code: 'FD', name: 'Thai AirAsia', url: 'https://www.airasia.com/check-in/v2/en/gb',
+    opensHours: 24, closesMinutes: 60, windowConfirmed: false },
   // Published windows differ between sources — remind conservatively, no deep link.
-  { code: 'FD', name: 'Thai AirAsia', url: null, opensHours: 24, closesMinutes: 60, windowConfirmed: false },
   { code: 'VZ', name: 'Thai Vietjet', url: null, opensHours: 24, closesMinutes: 60, windowConfirmed: false },
   { code: 'SL', name: 'Thai Lion Air', url: null, opensHours: 24, closesMinutes: 60, windowConfirmed: false },
   { code: 'DD', name: 'Nok Air', url: null, opensHours: 24, closesMinutes: 60, windowConfirmed: false },
