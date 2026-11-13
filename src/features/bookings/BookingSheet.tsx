@@ -1,4 +1,4 @@
-import { FileText, Trash2 } from 'lucide-react';
+import { CalendarCheck, CalendarX, DoorOpen, FileText, Flag, KeyRound, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import {
   BOOKING_STATUSES,
@@ -62,6 +62,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
   const [confirm, setConfirm] = useState(false);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const isTransport = TRANSPORT_BOOKING_TYPES.includes(form.type);
+  const L = PHASE_LABELS[form.type];
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -169,23 +170,23 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
             <TextField label={t.bookings.reference} optional value={form.reference} onChange={(e) => set('reference', e.target.value)} />
           </div>
 
-          <fieldset className="space-y-3 rounded-[1.25rem] border border-line p-4">
-            <legend className="px-1 text-[13px] font-semibold text-text-2">{isTransport ? t.bookings.departure : t.bookings.start}</legend>
-            <div className="grid grid-cols-2 gap-3">
+          <fieldset className="space-y-3 rounded-[1.25rem] border border-line bg-surface p-4">
+            <PhaseLegend icon={L.startIcon} label={L.start} />
+            <div className="clear-both grid grid-cols-2 gap-3 [&>*]:min-w-0">
               <TextField label={t.bookings.date} type="date" value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
               <TextField label={t.bookings.time} type="time" optional value={form.startTime} onChange={(e) => set('startTime', e.target.value)} />
             </div>
             <TimeZoneSelect label={t.bookings.timezone} value={form.startTimezone} onChange={(v) => set('startTimezone', v)} />
-            {isTransport && <TextField label={t.bookings.from} optional value={form.fromLocation} onChange={(e) => set('fromLocation', e.target.value)} />}
+            {isTransport && <TextField label={L.from} optional placeholder={L.fromPlaceholder} value={form.fromLocation} onChange={(e) => set('fromLocation', e.target.value)} />}
           </fieldset>
-          <fieldset className="space-y-3 rounded-[1.25rem] border border-line p-4">
-            <legend className="px-1 text-[13px] font-semibold text-text-2">{isTransport ? t.bookings.arrival : t.bookings.end}</legend>
-            <div className="grid grid-cols-2 gap-3">
+          <fieldset className="space-y-3 rounded-[1.25rem] border border-line bg-surface p-4">
+            <PhaseLegend icon={L.endIcon} label={L.end} />
+            <div className="clear-both grid grid-cols-2 gap-3 [&>*]:min-w-0">
               <TextField label={t.bookings.date} type="date" value={form.endDate} onChange={(e) => set('endDate', e.target.value)} />
               <TextField label={t.bookings.time} type="time" optional value={form.endTime} onChange={(e) => set('endTime', e.target.value)} />
             </div>
             <TimeZoneSelect label={t.bookings.timezone} value={form.endTimezone} onChange={(v) => set('endTimezone', v)} />
-            {isTransport && <TextField label={t.bookings.to} optional value={form.toLocation} onChange={(e) => set('toLocation', e.target.value)} />}
+            {isTransport && <TextField label={L.to} optional placeholder={L.toPlaceholder} value={form.toLocation} onChange={(e) => set('toLocation', e.target.value)} />}
           </fieldset>
 
           {isTransport ? (
@@ -207,7 +208,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
               ))}
             </SelectField>
           )}
-          <TextField label={t.bookings.location} optional value={form.location} onChange={(e) => set('location', e.target.value)} />
+          <TextField label={L.location} optional placeholder={L.locationPlaceholder} value={form.location} onChange={(e) => set('location', e.target.value)} />
 
           <Field label={t.bookings.forWhom} hint={t.bookings.forWhomHint}>
             <div className="flex flex-wrap gap-2">
@@ -310,5 +311,42 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
         />
       )}
     </>
+  );
+}
+
+interface PhaseLabels {
+  start: string;
+  end: string;
+  startIcon: LucideIcon;
+  endIcon: LucideIcon;
+  from: string;
+  to: string;
+  fromPlaceholder?: string;
+  toPlaceholder?: string;
+  location: string;
+  locationPlaceholder?: string;
+}
+
+/** Wording of the two time blocks depends on what was booked. */
+const PHASE_LABELS: Record<BookingType, PhaseLabels> = {
+  flight: { start: 'Abflug', end: 'Landung', startIcon: PlaneTakeoff, endIcon: PlaneLanding, from: 'Abflughafen', to: 'Zielflughafen', fromPlaceholder: 'z. B. DMK Bangkok', toPlaceholder: 'z. B. HKT Phuket', location: 'Terminal / Hinweis', locationPlaceholder: 'z. B. Terminal 1' },
+  ferry: { start: 'Abfahrt', end: 'Ankunft', startIcon: Ship, endIcon: Flag, from: 'Abfahrtshafen', to: 'Zielhafen', fromPlaceholder: 'z. B. Rassada Pier', toPlaceholder: 'z. B. Saladan Pier', location: 'Treffpunkt', locationPlaceholder: 'z. B. Abholung am Hotel' },
+  train: { start: 'Abfahrt', end: 'Ankunft', startIcon: DoorOpen, endIcon: Flag, from: 'Abfahrtsbahnhof', to: 'Zielbahnhof', location: 'Gleis / Wagen' },
+  bus: { start: 'Abfahrt', end: 'Ankunft', startIcon: DoorOpen, endIcon: Flag, from: 'Abfahrt von', to: 'Ankunft in', location: 'Treffpunkt / Haltestelle' },
+  car: { start: 'Abholung', end: 'Rückgabe', startIcon: KeyRound, endIcon: Undo2, from: 'Abholort', to: 'Rückgabeort', fromPlaceholder: 'z. B. Flughafen Krabi', toPlaceholder: 'z. B. Flughafen Krabi', location: 'Fahrzeug / Hinweis', locationPlaceholder: 'z. B. Kleinwagen, Vollkasko' },
+  hotel: { start: 'Check-in', end: 'Check-out', startIcon: CalendarCheck, endIcon: CalendarX, from: '', to: '', location: 'Adresse', locationPlaceholder: 'z. B. Straße, Ort' },
+  activity: { start: 'Beginn', end: 'Ende', startIcon: CalendarCheck, endIcon: Flag, from: '', to: '', location: 'Treffpunkt', locationPlaceholder: 'z. B. Hotel-Lobby' },
+  other: { start: 'Beginn', end: 'Ende', startIcon: CalendarCheck, endIcon: Flag, from: '', to: '', location: 'Ort' },
+};
+
+function PhaseLegend({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    // float + w-full keeps the legend inside the box instead of on its border
+    <legend className="float-left mb-3 flex w-full items-center gap-2 text-[15px] font-semibold">
+      <span className="grid h-8 w-8 place-items-center rounded-xl bg-accent-soft text-accent">
+        <Icon size={16} />
+      </span>
+      {label}
+    </legend>
   );
 }
