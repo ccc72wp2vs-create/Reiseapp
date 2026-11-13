@@ -307,7 +307,10 @@ export function splitJointPayment(input: Pick<JointPaymentInput, 'contributions'
   if (total !== input.costMinor + depositMinor) {
     throw new ApiError('validation_failed', 'Die Beiträge (abzüglich Wechselgeld) ergeben nicht Betrag + Kaution', [{ path: 'contributions' }]);
   }
-  const costParts = input.costMinor > 0 ? allocate(input.costMinor, entries.map(([, v]) => v)) : entries.map(() => 0);
+  // Round to whole units (e.g. full baht) when all amounts allow it – nicer to read.
+  const unit = [input.costMinor, ...entries.map(([, v]) => v)].every((v) => v % 100 === 0) ? 100 : 1;
+  const costParts =
+    input.costMinor > 0 ? allocate(input.costMinor / unit, entries.map(([, v]) => v / unit)).map((x) => x * unit) : entries.map(() => 0);
   const costPayers = entries.map(([id], i) => ({ travelerId: id, amountMinor: costParts[i] })).filter((p) => p.amountMinor > 0);
   const depositPayers = entries.map(([id, v], i) => ({ travelerId: id, amountMinor: v - costParts[i] })).filter((p) => p.amountMinor > 0);
   return { costPayers, depositPayers };
