@@ -8,6 +8,7 @@ import { moveId, SortableList } from '../../components/SortableList';
 import { BookingBadges, BookingIcon, CategoryIcon, IconTile } from '../../components/status';
 import { Badge, Button, EmptyState, IconButton, Segmented, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
+import { bookingTimeLabel } from '../../lib/bookingLabels';
 import { formatDateShort, formatDayNum, formatLongDate, formatMonthShort, formatTime, formatWeekday, money, tzLabel } from '../../lib/format';
 import { appleMapsUrl, googleMapsUrl, hasMapTarget } from '../../lib/maps';
 import { tripStore, usePendingIds } from '../../lib/store';
@@ -183,13 +184,7 @@ function DayView({
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold leading-snug">{b.title}</p>
                     <p className="text-[13px] text-text-3">
-                      {b.startDate === date
-                        ? b.startTime
-                          ? `${t.bookings.departure} ${formatTime(b.startTime)}`
-                          : b.type === 'hotel'
-                            ? 'Check-in'
-                            : t.common.notSet
-                        : `${t.bookings.arrival} ${formatTime(b.endTime)}`}
+                      {bookingTimeLabel(b, date, formatTime, t.common.notSet)}
                     </p>
                     <div className="mt-2">
                       <BookingBadges booking={b} compact />

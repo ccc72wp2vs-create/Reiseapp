@@ -42,6 +42,7 @@ import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
 import { CurrencyConverter } from '../../components/CurrencyConverter';
 import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
+import { bookingTimeLabel } from '../../lib/bookingLabels';
 import { setStatusBarOverHero } from '../../lib/theme';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
@@ -292,7 +293,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
                   </IconTile>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">{b.title}</p>
-                    <p className="text-[13px] text-text-3">{b.startDate === today ? formatTime(b.startTime) || t.plan.allDay : `${t.bookings.arrival} ${formatTime(b.endTime)}`}</p>
+                    <p className="text-[13px] text-text-3">{bookingTimeLabel(b, today, formatTime, t.plan.allDay)}</p>
                     <div className="mt-2">
                       <BookingBadges booking={b} compact />
                     </div>
