@@ -265,7 +265,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                   onClick={() => setExplain(b.travelerId)}
                   className="flex w-full items-center gap-3 p-4 text-left transition active:bg-surface-2"
                 >
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[14px] font-bold text-[#0b1524]" style={{ background: color(b.travelerId) }}>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[14px] font-bold text-[#101b33]" style={{ background: color(b.travelerId) }}>
                     {name(b.travelerId).slice(0, 1).toUpperCase()}
                   </span>
                   <div className="min-w-0 flex-1">

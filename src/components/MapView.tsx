@@ -27,9 +27,9 @@ export interface MapLine {
 
 const LINE_STYLE: Record<MapLine['mode'], Leaflet.PolylineOptions> = {
   flight: { color: '#8EA8FF', weight: 2.5, dashArray: '2 8', lineCap: 'round' },
-  boat: { color: '#35D6BE', weight: 3, dashArray: '10 8', lineCap: 'round' },
+  boat: { color: '#79AFC7', weight: 3, dashArray: '10 8', lineCap: 'round' },
   land: { color: '#F2B45A', weight: 3.5 },
-  unknown: { color: '#A4B2C3', weight: 2, dashArray: '4 6', opacity: 0.8 },
+  unknown: { color: '#52677D', weight: 2, dashArray: '4 6', opacity: 0.8 },
 };
 
 /** Great-circle-ish arc so flights read differently from surface legs. */

@@ -78,8 +78,8 @@ function Recap({ snap }: { snap: TripSnapshot }) {
       <div className="px-safe pt-4">
         <section className="relative overflow-hidden rounded-[1.75rem]">
           <CoverArt name={stops[stops.length - 1]?.name ?? trip.name} imageUrl={trip.coverImageUrl} className="h-48 w-full" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0b1524] via-[#0b1524]/30 to-transparent" aria-hidden />
-          <div className="absolute inset-x-0 bottom-0 p-5 text-[#f4f7fa]">
+          <div className="absolute inset-0 bg-gradient-to-t from-[#101b33] via-[#101b33]/30 to-transparent" aria-hidden />
+          <div className="absolute inset-x-0 bottom-0 p-5 text-[#f5f9fc]">
             <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-white/70">{r.finished ? t.recap.done : t.recap.soFar}</p>
             <p className="font-display text-[30px] font-semibold leading-tight">{trip.name}</p>
             <p className="text-[14px] text-white/80">{formatRange(trip.startDate, trip.endDate)}</p>

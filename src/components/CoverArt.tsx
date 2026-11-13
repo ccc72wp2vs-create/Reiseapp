@@ -69,7 +69,7 @@ export function CoverArt({ name, imageUrl, className, label }: { name: string; i
           </linearGradient>
           <linearGradient id={`${id}w`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor={mid} stopOpacity="0.9" />
-            <stop offset="1" stopColor="#0b1524" />
+            <stop offset="1" stopColor="#101b33" />
           </linearGradient>
           <radialGradient id={`${id}g`} cx="0.5" cy="0.5" r="0.5">
             <stop offset="0" stopColor="#fff7e0" stopOpacity="0.95" />
@@ -77,8 +77,8 @@ export function CoverArt({ name, imageUrl, className, label }: { name: string; i
             <stop offset="1" stopColor={low} stopOpacity="0" />
           </radialGradient>
           <linearGradient id={`${id}f`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0.4" stopColor="#0b1524" stopOpacity="0" />
-            <stop offset="1" stopColor="#0b1524" stopOpacity="0.85" />
+            <stop offset="0.4" stopColor="#101b33" stopOpacity="0" />
+            <stop offset="1" stopColor="#101b33" stopOpacity="0.85" />
           </linearGradient>
         </defs>
         <rect width="400" height="300" fill={`url(#${id}s)`} />
@@ -112,10 +112,10 @@ function City() {
       <path
         d="M0 230 V190 h18 v-22 h14 v22 h10 v-40 h20 v40 h8 v-28 h16 v28 h12 v-60 h6 v-8 h4 v8 h6 v60 h14 v-34 h22 v34 h10
            l8 -30 l4 -26 l3 -18 l3 18 l4 26 l8 30 h10 v-48 h18 v48 h12 v-20 h16 v20 h14 v-70 h24 v70 h10 v-30 h20 v30 h20 v-44 h16 v44 h12 V230 Z"
-        fill="#0b1524"
+        fill="#101b33"
         opacity="0.82"
       />
-      <path d="M0 230 H400 V300 H0 Z" fill="#0b1524" opacity="0.9" />
+      <path d="M0 230 H400 V300 H0 Z" fill="#101b33" opacity="0.9" />
       {[30, 90, 160, 250, 330].map((x, i) => (
         <rect key={i} x={x} y={240 + (i % 3) * 12} width={40 + i * 4} height="1.6" rx="1" fill="#f7c88b" opacity="0.35" />
       ))}
@@ -128,11 +128,11 @@ function Island({ h, id }: { h: number; id: string }) {
   return (
     <g>
       <Water id={id} y={210} />
-      <path d={`M${x - 120} 212 Q${x - 40} 170 ${x + 10} 178 Q${x + 70} 186 ${x + 140} 212 Z`} fill="#0b1524" opacity="0.88" />
-      <path d={`M${x - 10} 182 q4 -30 -6 -54`} stroke="#0b1524" strokeWidth="4" fill="none" opacity="0.9" />
+      <path d={`M${x - 120} 212 Q${x - 40} 170 ${x + 10} 178 Q${x + 70} 186 ${x + 140} 212 Z`} fill="#101b33" opacity="0.88" />
+      <path d={`M${x - 10} 182 q4 -30 -6 -54`} stroke="#101b33" strokeWidth="4" fill="none" opacity="0.9" />
       <path
         d={`M${x - 16} 128 q-22 -6 -34 10 q18 -6 34 -10 q-10 -16 -30 -16 q20 0 30 16 q8 -18 28 -18 q-18 4 -28 18 q20 -4 34 10 q-20 -10 -34 -10 Z`}
-        fill="#0b1524"
+        fill="#101b33"
         opacity="0.9"
       />
     </g>
@@ -143,11 +143,11 @@ function Karst({ id }: { id: string }) {
   return (
     <g>
       <Water id={id} y={215} />
-      <path d="M40 216 C40 150 58 120 78 118 C98 120 104 160 106 216 Z" fill="#0b1524" opacity="0.7" />
-      <path d="M250 216 C252 130 270 92 296 90 C322 94 330 150 334 216 Z" fill="#0b1524" opacity="0.85" />
-      <path d="M318 216 C320 170 336 150 352 150 C368 152 372 190 374 216 Z" fill="#0b1524" opacity="0.6" />
-      <path d="M150 216 C154 186 166 172 178 172 C190 174 194 196 196 216 Z" fill="#0b1524" opacity="0.55" />
-      <path d="M120 236 l50 0 l-6 6 l-40 0 Z M150 236 v-16" stroke="#0b1524" strokeWidth="2.5" fill="#0b1524" opacity="0.9" />
+      <path d="M40 216 C40 150 58 120 78 118 C98 120 104 160 106 216 Z" fill="#101b33" opacity="0.7" />
+      <path d="M250 216 C252 130 270 92 296 90 C322 94 330 150 334 216 Z" fill="#101b33" opacity="0.85" />
+      <path d="M318 216 C320 170 336 150 352 150 C368 152 372 190 374 216 Z" fill="#101b33" opacity="0.6" />
+      <path d="M150 216 C154 186 166 172 178 172 C190 174 194 196 196 216 Z" fill="#101b33" opacity="0.55" />
+      <path d="M120 236 l50 0 l-6 6 l-40 0 Z M150 236 v-16" stroke="#101b33" strokeWidth="2.5" fill="#101b33" opacity="0.9" />
     </g>
   );
 }
@@ -155,10 +155,10 @@ function Karst({ id }: { id: string }) {
 function Mountains() {
   return (
     <g>
-      <path d="M0 210 L60 160 L110 190 L170 130 L240 185 L300 150 L400 205 V300 H0 Z" fill="#0b1524" opacity="0.35" />
-      <path d="M0 235 L70 190 L130 220 L200 170 L270 215 L340 185 L400 225 V300 H0 Z" fill="#0b1524" opacity="0.6" />
-      <path d="M0 262 L90 225 L170 250 L250 222 L330 252 L400 240 V300 H0 Z" fill="#0b1524" opacity="0.9" />
-      <path d="M196 172 l4 -14 l4 14 Z M193 172 h14 v6 h-14 Z" fill="#0b1524" opacity="0.8" />
+      <path d="M0 210 L60 160 L110 190 L170 130 L240 185 L300 150 L400 205 V300 H0 Z" fill="#101b33" opacity="0.35" />
+      <path d="M0 235 L70 190 L130 220 L200 170 L270 215 L340 185 L400 225 V300 H0 Z" fill="#101b33" opacity="0.6" />
+      <path d="M0 262 L90 225 L170 250 L250 222 L330 252 L400 240 V300 H0 Z" fill="#101b33" opacity="0.9" />
+      <path d="M196 172 l4 -14 l4 14 Z M193 172 h14 v6 h-14 Z" fill="#101b33" opacity="0.8" />
     </g>
   );
 }
@@ -167,12 +167,12 @@ function Coast({ id }: { id: string }) {
   return (
     <g>
       <Water id={id} y={200} />
-      <path d="M0 200 C40 170 90 160 140 176 C180 188 200 196 230 200 Z" fill="#0b1524" opacity="0.8" />
+      <path d="M0 200 C40 170 90 160 140 176 C180 188 200 196 230 200 Z" fill="#101b33" opacity="0.8" />
       <path d="M0 300 V250 C80 236 180 238 260 256 C320 270 360 290 400 300 Z" fill="#f2d6a6" opacity="0.25" />
-      <path d="M330 260 q2 -40 -10 -70" stroke="#0b1524" strokeWidth="4" fill="none" opacity="0.9" />
+      <path d="M330 260 q2 -40 -10 -70" stroke="#101b33" strokeWidth="4" fill="none" opacity="0.9" />
       <path
         d="M320 190 q-24 -4 -36 12 q18 -8 36 -12 q-12 -18 -32 -16 q20 2 32 16 q8 -20 30 -20 q-20 6 -30 20 q22 -2 34 14 q-20 -10 -34 -14 Z"
-        fill="#0b1524"
+        fill="#101b33"
         opacity="0.9"
       />
     </g>
@@ -186,14 +186,14 @@ export function Logo({ size = 28, withWordmark = true, className }: { size?: num
       <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden>
         <defs>
           <linearGradient id="travio-logo" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#5ee3cf" />
-            <stop offset="1" stopColor="#1fae98" />
+            <stop offset="0" stopColor="#d8e9f0" />
+            <stop offset="1" stopColor="#79afc7" />
           </linearGradient>
         </defs>
-        <rect width="512" height="512" rx="144" fill="#0b1524" />
+        <rect width="512" height="512" rx="144" fill="#101b33" />
         {/* "T" whose crossbar is the travel route */}
-        <path d="M130 176 Q 256 120 382 176" fill="none" stroke="#f8f6f1" strokeWidth="22" strokeLinecap="round" strokeDasharray="0.1 40" />
-        <circle cx="130" cy="176" r="32" fill="#f8f6f1" />
+        <path d="M130 176 Q 256 120 382 176" fill="none" stroke="#f5f9fc" strokeWidth="22" strokeLinecap="round" strokeDasharray="0.1 40" />
+        <circle cx="130" cy="176" r="32" fill="#f5f9fc" />
         <circle cx="382" cy="176" r="32" fill="url(#travio-logo)" />
         <rect x="226" y="176" width="60" height="220" rx="30" fill="url(#travio-logo)" />
       </svg>

@@ -47,8 +47,8 @@ export default function TripsPage() {
     <li key={trip.id}>
       <button type="button" onClick={() => void select(trip.id)} className="group relative block w-full overflow-hidden rounded-[1.75rem] text-left shadow-card">
         <CoverArt name={trip.destinationCountry ?? trip.name} imageUrl={trip.coverImageUrl} className="h-44 w-full transition duration-500 group-active:scale-[1.02]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b1524] via-[#0b1524]/40 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-5 text-[#f4f7fa]">
+        <div className="absolute inset-0 bg-gradient-to-t from-[#101b33] via-[#101b33]/40 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-5 text-[#f5f9fc]">
           <div className="mb-2 flex flex-wrap gap-1.5">
             {trip.isDemo && <Badge tone="warn">{t.trips.demoBadge}</Badge>}
             <Badge className="border-white/20 bg-white/15 text-white">{t.tripStatus[trip.status]}</Badge>

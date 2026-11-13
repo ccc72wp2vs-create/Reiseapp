@@ -243,7 +243,7 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
       <Card className="divide-y divide-line">
         {snap.travelers.map((x) => (
           <div key={x.id} className="flex items-center gap-3 p-4">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[14px] font-bold text-[#0b1524]" style={{ background: x.color }}>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[14px] font-bold text-[#101b33]" style={{ background: x.color }}>
               {x.name.slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">

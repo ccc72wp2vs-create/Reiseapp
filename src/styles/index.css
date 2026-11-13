@@ -45,21 +45,21 @@
    ------------------------------------------------------------------------ */
 :root {
   color-scheme: dark;
-  --bg: #0b1524;
-  --bg-elevated: #0f1b2d;
-  --surface: #142338;
-  --surface-2: #1a2c45;
-  --surface-3: #22385a;
-  --line: rgb(164 178 195 / 0.14);
-  --line-strong: rgb(164 178 195 / 0.26);
-  --text: #f4f7fa;
-  --text-2: #a4b2c3;
-  --text-3: #7d8da1;
-  --accent: #35d6be;
-  --accent-strong: #5ee3cf;
-  --accent-ink: #062a25;
-  --accent-soft: rgb(53 214 190 / 0.14);
-  --sand: #f8f6f1;
+  --bg: #101b33; /* Midnight Navy */
+  --bg-elevated: #12203a; /* Midnight Navy → Deep Ocean */
+  --surface: #13253d;
+  --surface-2: #142942;
+  --surface-3: #193b55; /* Deep Ocean */
+  --line: rgb(121 175 199 / 0.14);
+  --line-strong: rgb(121 175 199 / 0.26);
+  --text: #f5f9fc; /* Arctic White */
+  --text-2: rgb(216 233 240 / 0.72); /* Soft Sky Blue */
+  --text-3: rgb(216 233 240 / 0.55);
+  --accent: #79afc7; /* Ice Blue */
+  --accent-strong: #a8ccdb;
+  --accent-ink: #101b33;
+  --accent-soft: rgb(121 175 199 / 0.16);
+  --sand: #f5f9fc;
   --warn: #f2b45a;
   --warn-soft: rgb(242 180 90 / 0.14);
   --danger: #ff7a85;
@@ -71,25 +71,25 @@
   --shadow-color: 0 0% 0%;
   --shadow-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.5);
   --shadow-2: 0 2px 4px rgb(0 0 0 / 0.25), 0 24px 48px -16px rgb(0 0 0 / 0.6);
-  --nav-bg: rgb(11 21 36 / 0.78);
+  --nav-bg: rgb(16 27 51 / 0.78);
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f8f6f1;
-  --bg-elevated: #fbfaf7;
-  --surface: #ffffff;
-  --surface-2: #f2efe8;
-  --surface-3: #e7e2d8;
-  --line: rgb(11 21 36 / 0.09);
-  --line-strong: rgb(11 21 36 / 0.18);
-  --text: #0b1524;
-  --text-2: #4a5a6e;
-  --text-3: #6b7a8d;
-  --accent: #0e8f7d;
-  --accent-strong: #0a7566;
-  --accent-ink: #ffffff;
-  --accent-soft: rgb(14 143 125 / 0.11);
+  --bg: #f5f9fc; /* Arctic White */
+  --bg-elevated: #ffffff;
+  --surface: #ffffff; /* Pure White */
+  --surface-2: #e7f1f6;
+  --surface-3: #d8e9f0; /* Soft Sky Blue */
+  --line: #e2eaf0; /* Subtle Border */
+  --line-strong: rgb(82 103 125 / 0.28);
+  --text: #101b33; /* Midnight Navy */
+  --text-2: #52677d; /* Slate Blue */
+  --text-3: rgb(82 103 125 / 0.85);
+  --accent: #79afc7; /* Ice Blue */
+  --accent-strong: #a8ccdb;
+  --accent-ink: #101b33;
+  --accent-soft: #d8e9f0; /* Soft Sky Blue */
   --warn: #a8640c;
   --warn-soft: rgb(214 140 30 / 0.14);
   --danger: #c4323f;
@@ -98,9 +98,16 @@
   --info-soft: rgb(61 91 217 / 0.1);
   --success: #1d8a55;
   --success-soft: rgb(29 138 85 / 0.1);
-  --shadow-1: 0 1px 2px rgb(11 21 36 / 0.06), 0 8px 24px -12px rgb(11 21 36 / 0.18);
-  --shadow-2: 0 2px 4px rgb(11 21 36 / 0.06), 0 24px 48px -16px rgb(11 21 36 / 0.25);
-  --nav-bg: rgb(248 246 241 / 0.82);
+  --shadow-1: 0 1px 2px rgb(16 27 51 / 0.06), 0 8px 24px -12px rgb(16 27 51 / 0.18);
+  --shadow-2: 0 2px 4px rgb(16 27 51 / 0.06), 0 24px 48px -16px rgb(16 27 51 / 0.25);
+  --nav-bg: rgb(245 249 252 / 0.82);
+}
+
+/* Light theme: Ice Blue stays the accent colour for fills, buttons and the
+   assistant button; accent-coloured text and icons use Deep Ocean so they
+   stay readable on white (Ice Blue on white is below 3:1). Colour only. */
+:root[data-theme='light'] .text-accent {
+  color: #193b55;
 }
 
 @theme inline {
@@ -229,7 +236,7 @@ input[type='time']::-webkit-date-and-time-value {
 }
 /* Over the dark hero the canvas (and rubber-band overscroll) is dark too. */
 :root[data-statusbar='hero'] {
-  background: #0b1524;
+  background: #101b33;
 }
 
 /* Safe area helpers */
@@ -355,7 +362,7 @@ input[type='time']::-webkit-date-and-time-value {
 }
 .travio-pin.is-home {
   background: var(--sand);
-  color: #0b1524;
+  color: #101b33;
 }
 .travio-pin.is-active {
   transform: scale(1.2);
@@ -370,5 +377,5 @@ input[type='time']::-webkit-date-and-time-value {
 }
 .travio-pin.is-fav {
   background: var(--warn);
-  color: #0b1524;
+  color: #101b33;
 }

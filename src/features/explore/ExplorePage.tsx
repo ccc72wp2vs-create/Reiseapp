@@ -273,7 +273,7 @@ function VoteButton({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) {
       {voters.length > 0 && (
         <span className="ml-0.5 flex -space-x-1.5" aria-hidden>
           {voters.slice(0, 4).map((v) => (
-            <span key={v.id} className="grid h-5 w-5 place-items-center rounded-full border border-surface text-[10px] font-bold text-[#0b1524]" style={{ background: v.color }}>
+            <span key={v.id} className="grid h-5 w-5 place-items-center rounded-full border border-surface text-[10px] font-bold text-[#101b33]" style={{ background: v.color }}>
               {v.name.slice(0, 1).toUpperCase()}
             </span>
           ))}

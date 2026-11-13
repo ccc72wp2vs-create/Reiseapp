@@ -23,7 +23,7 @@ export default function RoutePage() {
   return <RouteView snap={snap} />;
 }
 
-const MODE_COLOR = { flight: '#8EA8FF', boat: '#35D6BE', land: '#F2B45A', unknown: '#A4B2C3' } as const;
+const MODE_COLOR = { flight: '#8EA8FF', boat: '#79AFC7', land: '#F2B45A', unknown: '#52677D' } as const;
 
 function RouteView({ snap }: { snap: TripSnapshot }) {
   const { trip, destinations, bookings, activities } = snap;
@@ -162,7 +162,7 @@ function StopRow({ stop, active, today, onSelect }: { stop: RouteStop; active: b
       <span
         className={cx(
           'grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 font-bold',
-          stop.kind === 'home' ? 'border-sand bg-sand text-[#0b1524]' : isNow ? 'border-accent bg-accent text-accent-ink' : active ? 'border-accent text-accent' : 'border-line-strong text-text-2',
+          stop.kind === 'home' ? 'border-sand bg-sand text-[#101b33]' : isNow ? 'border-accent bg-accent text-accent-ink' : active ? 'border-accent text-accent' : 'border-line-strong text-text-2',
         )}
       >
         {stop.kind === 'home' ? <Home size={16} /> : <span className="h-2 w-2 rounded-full bg-current" />}

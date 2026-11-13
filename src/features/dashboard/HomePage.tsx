@@ -145,7 +145,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           className="h-[56dvh] min-h-[380px] w-full rounded-b-[2.25rem]"
           label={heroDest?.name ?? trip.name}
         />
-        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#0b1524] via-[#0b1524]/35 to-transparent" aria-hidden />
+        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#101b33] via-[#101b33]/35 to-transparent" aria-hidden />
         <div className="absolute inset-x-0 top-0 px-safe pt-safe">
           <div className="flex items-center justify-between pt-2 text-sand">
             <Logo size={30} withWordmark={false} />
@@ -159,12 +159,12 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             </Link>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f4f7fa]">
+        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f5f9fc]">
           <p className="text-[14px] font-medium text-white/75">
             {greeting()}
             {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}
           </p>
-          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#5ee3cf]">
+          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#79afc7]">
             {phase.phase === 'during' ? t.home.currentDestination : phase.phase === 'before' ? t.home.beforeTrip : t.phase.after}
           </p>
           <h1 className="font-display text-[clamp(44px,13vw,68px)] font-semibold leading-[0.95]">
@@ -462,7 +462,7 @@ function TripProgress({ snap, today }: { snap: TripSnapshot; today: string }) {
             <span
               className={cx(
                 'h-1.5 rounded-full',
-                state === 'done' ? 'bg-white/70' : state === 'now' ? 'bg-[#35d6be] shadow-[0_0_12px_#35d6be]' : 'bg-white/20',
+                state === 'done' ? 'bg-white/70' : state === 'now' ? 'bg-[#79afc7] shadow-[0_0_12px_#79afc7]' : 'bg-white/20',
               )}
             />
             <span className={cx('truncate text-[11px]', state === 'now' ? 'font-semibold text-white' : 'text-white/55')}>{d.name}</span>
@@ -500,11 +500,11 @@ function NoTrip() {
     <div>
       <section className="relative">
         <CoverArt name="Koh Lanta" className="h-[44dvh] min-h-[300px] w-full rounded-b-[2.25rem]" />
-        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#0b1524] to-transparent" aria-hidden />
+        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#101b33] to-transparent" aria-hidden />
         <div className="absolute inset-x-0 top-0 px-safe pt-safe">
           <Logo size={32} className="pt-2 text-sand" />
         </div>
-        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f4f7fa]">
+        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f5f9fc]">
           <h1 className="font-display text-[44px] font-semibold leading-none">{t.home.noTrip}</h1>
         </div>
       </section>

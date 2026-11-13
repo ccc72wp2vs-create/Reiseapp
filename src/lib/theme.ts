@@ -30,7 +30,7 @@ export function setStatusBarOverHero(overHero: boolean) {
 
 function syncThemeColor() {
   const root = document.documentElement;
-  const color = root.dataset.statusbar === 'hero' ? '#0B1524' : root.dataset.theme === 'light' ? '#F8F6F1' : '#0B1524';
+  const color = root.dataset.statusbar === 'hero' ? '#101B33' : root.dataset.theme === 'light' ? '#F5F9FC' : '#101B33';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 }
 
