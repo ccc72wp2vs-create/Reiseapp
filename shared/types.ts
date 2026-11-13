@@ -225,6 +225,8 @@ export interface SettlementDto extends Versioned {
   baseAmountMinor: number;
   date: string;
   notes: string | null;
+  /** Set for automatic deposit-return entries (managed via the deposit). */
+  depositId: string | null;
   createdBy: string | null;
 }
 
@@ -254,6 +256,8 @@ export interface DepositDto extends Versioned {
   keptMinor: number | null;
   /** Expense created for the kept part. */
   expenseId: string | null;
+  /** Who got the money back (cash). */
+  returnedToTravelerId: string | null;
   resolvedAt: string | null;
   notes: string | null;
   createdBy: string | null;

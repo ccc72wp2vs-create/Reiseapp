@@ -1,8 +1,9 @@
-import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, HandCoins, Lock, Plus, Receipt, Send, Trash2 } from 'lucide-react';
+import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, HandCoins, Lock, Plus, Receipt, Send, Trash2, Users } from 'lucide-react';
 import type { PayRequest } from './PaySheet';
 import { BudgetCard } from './BudgetCard';
 import { DepositsCard } from './DepositsCard';
 import { DepositSheet } from './DepositSheet';
+import { JointPaymentSheet } from './JointPaymentSheet';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
@@ -86,6 +87,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   const [pair, setPair] = useState<DirectTransfer | null>(null);
   const [paying, setPaying] = useState<PayRequest | null>(null);
   const [addingDeposit, setAddingDeposit] = useState(false);
+  const [joint, setJoint] = useState(false);
   const name = (id: string) => travelers.find((x) => x.id === id)?.name ?? '?';
   const color = (id: string) => travelers.find((x) => x.id === id)?.color ?? '#999';
   const total = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
@@ -180,6 +182,9 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                   </Button>
                   <Button size="sm" variant="secondary" icon={<Lock size={16} />} disabled={!canWrite} onClick={() => setAddingDeposit(true)}>
                     {t.deposits.short}
+                  </Button>
+                  <Button size="sm" variant="secondary" icon={<Users size={16} />} disabled={!canWrite || travelers.length < 2} onClick={() => setJoint(true)}>
+                    {t.joint.button}
                   </Button>
                 </div>
               )}
@@ -335,6 +340,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       </div>
 
       {explain && <BalanceSheet snap={snap} travelerId={explain} onClose={() => setExplain(null)} />}
+      {joint && <JointPaymentSheet snap={snap} onClose={() => setJoint(false)} />}
       {addingDeposit && <DepositSheet snap={snap} me={me?.id} onClose={() => setAddingDeposit(false)} />}
       {pair && <PairSheet snap={snap} transfer={pair} onClose={() => setPair(null)} />}
       <Suspense fallback={null}>
@@ -427,11 +433,22 @@ function History({ snap, onOpen }: { snap: TripSnapshot; onOpen: (e: ExpenseDto)
               <li key={s.id} className="flex items-center gap-3 rounded-[1.25rem] border border-dashed border-line-strong p-4">
                 <ArrowRightLeft size={18} className="shrink-0 text-accent" />
                 <span className="min-w-0 flex-1 text-[14px]">
-                  <span className="font-semibold">{name(s.fromTravelerId)}</span> → <span className="font-semibold">{name(s.toTravelerId)}</span>
-                  <span className="block text-[12px] text-text-3">{formatDate(s.date)}</span>
+                  {s.depositId ? (
+                    <span>
+                      <span className="font-semibold">{name(s.toTravelerId)}</span> {t.deposits.holdsShare(name(s.fromTravelerId), '')}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="font-semibold">{name(s.fromTravelerId)}</span> → <span className="font-semibold">{name(s.toTravelerId)}</span>
+                    </>
+                  )}
+                  <span className="block text-[12px] text-text-3">
+                    {formatDate(s.date)}
+                    {s.depositId ? ` · ${s.notes ?? t.deposits.returnInfo}` : ''}
+                  </span>
                 </span>
                 <span className="font-semibold tabular">{money(s.amountMinor, s.currency)}</span>
-                {canEdit && (
+                {canEdit && !s.depositId && (
                   <IconButton label={t.common.delete} disabled={!online} onClick={() => setDeleting(s)} className="h-9 w-9">
                     <Trash2 size={16} />
                   </IconButton>
@@ -585,7 +602,9 @@ function PairSheet({ snap, transfer, onClose }: { snap: TripSnapshot; transfer: 
         {transfer.items.map((i) => (
           <li key={i.kind + i.id} className="flex items-start gap-3 py-3">
             <span className="min-w-0 flex-1">
-              <span className="block font-medium leading-snug">{i.kind === 'expense' ? i.title : t.wallet.settlement}</span>
+              <span className="block font-medium leading-snug">
+                {i.kind === 'expense' ? i.title : snap.settlements.find((s) => s.id === i.id)?.depositId ? t.deposits.returnInfo : t.wallet.settlement}
+              </span>
               <span className="block text-[13px] text-text-3">
                 {formatDate(i.date)} · {i.kind === 'settlement' ? t.wallet.pairRepaid : i.amountMinor > 0 ? `${t.wallet.pairExpense}, ${t.wallet.owedTo(to)}` : t.wallet.pairCounter(to, from)}
               </span>
@@ -611,16 +630,21 @@ function BalanceSheet({ snap, travelerId, onClose }: { snap: TripSnapshot; trave
     snap.settlements.map((s) => ({ id: s.id, date: s.date, fromTravelerId: s.fromTravelerId, toTravelerId: s.toTravelerId, baseAmountMinor: s.baseAmountMinor })),
   );
   const total = items.reduce((a, i) => a + i.amountMinor, 0);
+  const depositSettlements = new Set(snap.settlements.filter((s) => s.depositId).map((s) => s.id));
   const owes = items.filter((i) => i.amountMinor < 0 && i.kind === 'expense');
   const gets = items.filter((i) => i.amountMinor > 0 && i.kind === 'expense');
   const repayments = items.filter((i) => i.kind === 'settlement');
   const row = (i: (typeof items)[number]) => (
     <li key={i.kind + i.id} className="flex items-start gap-3 py-3">
       <span className="min-w-0 flex-1">
-        <span className="block font-medium leading-snug">{i.kind === 'expense' ? i.title : t.wallet.settlement}</span>
+        <span className="block font-medium leading-snug">{i.kind === 'expense' ? i.title : depositSettlements.has(i.id) ? t.deposits.returnInfo : t.wallet.settlement}</span>
         <span className="block text-[13px] text-text-3">
           {formatDate(i.date)} ·{' '}
-          {i.kind === 'settlement'
+          {i.kind === 'settlement' && depositSettlements.has(i.id)
+            ? i.amountMinor > 0
+              ? t.deposits.heldBy(name(i.counterpartIds[0]))
+              : t.deposits.youHold(name(i.counterpartIds[0]))
+            : i.kind === 'settlement'
             ? i.amountMinor > 0
               ? t.wallet.repaidTo(name(i.counterpartIds[0]))
               : t.wallet.repaidFrom(name(i.counterpartIds[0]))

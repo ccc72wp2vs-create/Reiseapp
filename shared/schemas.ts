@@ -397,10 +397,42 @@ export const depositResolveSchema = z
     outcome: z.enum(['returned', 'partial', 'kept']),
     /** Kept amount in the deposit currency (partial only). */
     keptMinor: z.number().int().min(1).max(1e13).optional(),
+    /** Who received the returned money (defaults to the only payer). */
+    returnedToTravelerId: id.nullable().optional(),
     date: dateStr,
     version,
   })
   .refine((r) => r.outcome !== 'partial' || r.keptMinor != null, { message: 'Einbehaltenen Betrag angeben', path: ['keptMinor'] });
+
+/** One cash payment on the spot covering a cost and (optionally) a deposit. */
+export const jointPaymentSchema = z
+  .object({
+    title: reqText(160),
+    currency,
+    fxRate: z.string().max(40).optional(),
+    fxSource: z.enum(['manual', 'cached', 'provider']).optional(),
+    fxDate: optDate,
+    date: dateStr,
+    category: z.enum(EXPENSE_CATEGORIES).default('transportation'),
+    /** What each person handed over. */
+    contributions: z.array(z.object({ travelerId: id, amountMinor: z.number().int().min(1).max(1e13) })).min(1).max(50),
+    /** Change given back (to one person). */
+    change: z.object({ travelerId: id, amountMinor: z.number().int().min(1).max(1e13) }).nullable().optional(),
+    /** The actual cost (e.g. rent), shared equally by forTravelerIds. */
+    costMinor: z.number().int().min(0).max(1e13),
+    forTravelerIds: z.array(id).min(1).max(50),
+    deposit: z
+      .object({
+        amountMinor: z.number().int().min(1).max(1e13),
+        method: z.enum(['cash', 'card', 'transfer']).default('cash'),
+        returnDate: optDate,
+      })
+      .nullable()
+      .optional(),
+    bookingId: id.nullable().optional(),
+    notes: optText(2000),
+  })
+  .refine((j) => j.costMinor > 0 || !!j.deposit, { message: 'Betrag fehlt', path: ['costMinor'] });
 
 export const exchangeRateCreateSchema = z.object({
   currency,

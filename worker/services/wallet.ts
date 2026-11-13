@@ -376,6 +376,7 @@ function settlementRowToDto(r: Row): SettlementDto {
     baseAmountMinor: r.base_amount_minor as number,
     date: r.date as string,
     notes: (r.notes as string) ?? null,
+    depositId: (r.deposit_id as string) ?? null,
     createdBy: (r.created_by as string) ?? null,
   };
 }
@@ -438,6 +439,8 @@ export async function createSettlement(
 }
 
 export async function deleteSettlement(db: D1Database, tripId: string, id: string): Promise<void> {
+  const linked = await db.prepare('SELECT deposit_id FROM settlements WHERE id = ? AND trip_id = ?').bind(id, tripId).first<{ deposit_id: string | null }>();
+  if (linked?.deposit_id) throw new ApiError('conflict', 'Dieser Eintrag gehört zu einer Kaution – bitte dort „Wieder öffnen“ verwenden.');
   const res = await db.prepare('DELETE FROM settlements WHERE id = ? AND trip_id = ?').bind(id, tripId).run();
   if (res.meta.changes === 0) throw new ApiError('not_found', 'Rückzahlung nicht gefunden');
 }

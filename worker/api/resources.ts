@@ -13,6 +13,7 @@ import {
   depositCreateSchema,
   depositResolveSchema,
   depositUpdateSchema,
+  jointPaymentSchema,
   exchangeRateCreateSchema,
   expenseCreateSchema,
   expenseUpdateSchema,
@@ -284,6 +285,15 @@ r.post('/:tripId/deposits', async (c) => {
   const deposit = await deposits.createDeposit(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, depositCreateSchema));
   await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'deposit', entityId: deposit.id, action: 'create' });
   return c.json({ deposit }, 201);
+});
+
+/** Rent + deposit paid together on the spot (several contributors). */
+r.post('/:tripId/joint-payments', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const result = await deposits.createJointPayment(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, jointPaymentSchema));
+  await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'joint_payment', entityId: result.expense?.id ?? result.deposit!.id, action: 'create' });
+  return c.json(result, 201);
 });
 
 r.put('/:tripId/deposits/:id', async (c) => {

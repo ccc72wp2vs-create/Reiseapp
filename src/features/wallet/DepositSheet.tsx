@@ -1,6 +1,6 @@
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
-import { convertMinor, minorToInput, normalizeRate, parseAmount } from '../../../shared/money';
+import { allocate, convertMinor, minorToInput, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
 import type { DepositDto, DepositMethod, TripSnapshot } from '../../../shared/types';
 import { MoneyField } from '../../components/inputs';
@@ -224,6 +224,9 @@ export function ResolveDepositSheet({ snap, deposit, onClose }: { snap: TripSnap
   const [outcome, setOutcome] = useState<'returned' | 'partial' | 'kept'>('returned');
   const [kept, setKept] = useState('');
   const [date, setDate] = useState(localToday(snap));
+  const payers = deposit.payers ?? [{ travelerId: deposit.paidByTravelerId, amountMinor: deposit.amountMinor }];
+  const [receiver, setReceiver] = useState(payers.length === 1 ? payers[0].travelerId : '');
+  const nameOf = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const keptMinor = kept.trim() ? parseAmount(kept, deposit.currency) : null;
@@ -233,10 +236,17 @@ export function ResolveDepositSheet({ snap, deposit, onClose }: { snap: TripSnap
   async function save() {
     setError(null);
     if (outcome === 'partial' && (!keptMinor || keptMinor <= 0 || keptMinor > deposit.amountMinor)) return setError(t.deposits.keptInvalid(money(deposit.amountMinor, deposit.currency)));
+    if (outcome !== 'kept' && !receiver) return setError(`${t.deposits.returnedTo}: ${t.errors.required}`);
     setBusy(true);
     try {
       await tripStore.mutate(() =>
-        http.post(`/trips/${snap.trip.id}/deposits/${deposit.id}/resolve`, { outcome, ...(outcome === 'partial' ? { keptMinor } : {}), date, version: deposit.version }),
+        http.post(`/trips/${snap.trip.id}/deposits/${deposit.id}/resolve`, {
+          outcome,
+          ...(outcome === 'partial' ? { keptMinor } : {}),
+          ...(outcome !== 'kept' ? { returnedToTravelerId: receiver } : {}),
+          date,
+          version: deposit.version,
+        }),
       );
       toast(t.success.saved);
       onClose();
@@ -310,6 +320,40 @@ export function ResolveDepositSheet({ snap, deposit, onClose }: { snap: TripSnap
           </Field>
         )}
         <TextField label={t.wallet.date} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        {outcome !== 'kept' && (
+          <>
+            <SelectField label={t.deposits.returnedTo} value={receiver} onChange={(e) => setReceiver(e.target.value)}>
+              <option value="">–</option>
+              {snap.travelers.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </SelectField>
+            {receiver && payers.some((p) => p.travelerId !== receiver) && (
+              <div className="rounded-[1.25rem] bg-surface p-4 text-[14px]">
+                <p className="text-text-2">{t.deposits.returnedToHint}</p>
+                <ul className="mt-2 space-y-1">
+                  {(() => {
+                    const k = keptValue ?? 0;
+                    const parts = k > 0 && payers.length > 1 ? allocate(k, payers.map((p) => p.amountMinor)) : payers.map(() => 0);
+                    return payers
+                      .map((p, i) => ({ id: p.travelerId, a: p.amountMinor - parts[i] }))
+                      .filter((x) => x.id !== receiver && x.a > 0)
+                      .map((x) => (
+                        <li key={x.id} className="flex justify-between gap-2">
+                          <span>
+                            {nameOf(receiver)} {t.deposits.holdsShare(nameOf(x.id), '')}
+                          </span>
+                          <span className="font-semibold tabular">{money(x.a, deposit.currency)}</span>
+                        </li>
+                      ));
+                  })()}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
         <p className="text-[14px] text-text-2">
           {keptValue ? t.deposits.keptInfo(money(keptValue, deposit.currency), who.join(', ')) : t.deposits.returnedInfo}
         </p>

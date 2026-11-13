@@ -66,7 +66,7 @@ describe('deposits (Kautionen)', () => {
     expect((await owner.post(`/trips/${tripId}/deposits`, { ...base, payers: [{ travelerId: me.id, amountMinor: 10000 }, { travelerId: other.id, amountMinor: 10000 }] })).status).toBe(422);
     const dep = (await owner.post(`/trips/${tripId}/deposits`, { ...base, payers: [{ travelerId: me.id, amountMinor: 20000 }, { travelerId: other.id, amountMinor: 10000 }] })).body.deposit;
     expect(dep.payers).toEqual([{ travelerId: me.id, amountMinor: 20000 }, { travelerId: other.id, amountMinor: 10000 }]);
-    await owner.post(`/trips/${tripId}/deposits/${dep.id}/resolve`, { outcome: 'partial', keptMinor: 3000, date: '2026-11-21', version: dep.version });
+    await owner.post(`/trips/${tripId}/deposits/${dep.id}/resolve`, { outcome: 'partial', keptMinor: 3000, returnedToTravelerId: me.id, date: '2026-11-21', version: dep.version });
     const exp = (await owner.get(`/trips/${tripId}/snapshot`)).body.expenses[0];
     const paid = Object.fromEntries(exp.payers.map((p: { travelerId: string; amountMinor: number }) => [p.travelerId, p.amountMinor]));
     expect(paid).toEqual({ [me.id]: 2000, [other.id]: 1000 });

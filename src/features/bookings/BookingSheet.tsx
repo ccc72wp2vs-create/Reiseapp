@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarX, DoorOpen, FileText, Flag, KeyRound, Lock, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarX, DoorOpen, FileText, Flag, KeyRound, Lock, Users, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import {
   BOOKING_STATUSES,
@@ -17,6 +17,7 @@ import { suggestedRate } from '../../lib/rates';
 import { money } from '../../lib/format';
 import { DepositSheet, ResolveDepositSheet } from '../wallet/DepositSheet';
 import { PayersInput, resolvePayers, type PayersValue } from '../wallet/PayersInput';
+import { JointPaymentSheet } from '../wallet/JointPaymentSheet';
 import type { BookingDto, DepositDto, DepositMethod, TripSnapshot } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField, TimeZoneSelect } from '../../components/inputs';
@@ -32,6 +33,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
   const { trip, destinations, travelers } = snap!;
   const [editDeposit, setEditDeposit] = useState<DepositDto | null>(null);
   const [resolveDeposit, setResolveDeposit] = useState<DepositDto | null>(null);
+  const [joint, setJoint] = useState(false);
   // Optional deposit known in advance (e.g. rental car) – created together with the booking.
   const [dep, setDep] = useState(() => {
     const currency = trip.localCurrency ?? trip.baseCurrency;
@@ -341,6 +343,14 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
                 </div>
               </div>
             ))}
+            {b && !b.expenseId && (
+              <div className="rounded-2xl border border-dashed border-line-strong p-3">
+                <p className="text-[13px] text-text-2">{t.joint.fromBookingHint}</p>
+                <Button className="mt-2" size="sm" variant="soft" icon={<Users size={16} />} disabled={!online} onClick={() => setJoint(true)}>
+                  {t.joint.title}
+                </Button>
+              </div>
+            )}
             <Toggle checked={dep.on} onChange={(v) => setD('on', v)} label={linkedDeposits.length ? t.deposits.addAnother : t.deposits.inBooking} description={t.deposits.inBookingHint} />
             {dep.on && (
               <>
@@ -391,6 +401,25 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
           )}
         </form>
       </Sheet>
+      {joint && b && (
+        <JointPaymentSheet
+          snap={snap!}
+          preset={{
+            title: b.title,
+            costMinor: b.currency === (trip.localCurrency ?? trip.baseCurrency) ? b.priceMinor : null,
+            currency: b.currency === trip.baseCurrency || b.currency === trip.localCurrency ? b.currency : null,
+            date: b.startDate,
+            returnDate: b.endDate,
+            bookingId: b.id,
+            forTravelerIds: b.travelerIds,
+            category: b.type === 'hotel' ? 'accommodation' : b.type === 'activity' ? 'activities' : b.type === 'other' ? 'other' : 'transportation',
+          }}
+          onClose={() => {
+            setJoint(false);
+            onClose();
+          }}
+        />
+      )}
       {editDeposit && <DepositSheet snap={snap!} deposit={editDeposit} me={me?.id} onClose={() => setEditDeposit(null)} />}
       {resolveDeposit && <ResolveDepositSheet snap={snap!} deposit={resolveDeposit} onClose={() => setResolveDeposit(null)} />}
       {b && (

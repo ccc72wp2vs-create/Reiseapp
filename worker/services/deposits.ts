@@ -8,6 +8,7 @@ import type { FxSource } from '../../shared/constants';
 import type { DepositDto, DepositMethod, DepositStatus } from '../../shared/types';
 import { ApiError } from '../lib/errors';
 import { nowIso, uuid } from '../lib/util';
+import type { ExpenseCategory } from '../../shared/constants';
 import { createExpense, deleteExpense, resolveFx, type FxInput } from './wallet';
 
 type Row = Record<string, unknown>;
@@ -50,6 +51,7 @@ function toDto(r: Row, travelerIds: string[], payers: DepositDto['payers']): Dep
     status: r.status as DepositStatus,
     keptMinor: (r.kept_minor as number) ?? null,
     expenseId: (r.expense_id as string) ?? null,
+    returnedToTravelerId: (r.returned_to_traveler_id as string) ?? null,
     resolvedAt: (r.resolved_at as string) ?? null,
     notes: (r.notes as string) ?? null,
     createdBy: (r.created_by as string) ?? null,
@@ -170,7 +172,7 @@ export async function resolveDeposit(
   baseCurrency: string,
   userId: string,
   id: string,
-  r: { outcome: 'returned' | 'partial' | 'kept'; keptMinor?: number; date: string; version: number },
+  r: { outcome: 'returned' | 'partial' | 'kept'; keptMinor?: number; returnedToTravelerId?: string | null; date: string; version: number },
 ): Promise<DepositDto> {
   const d = await getDeposit(db, tripId, id);
   if (!d) throw new ApiError('not_found', 'Kaution nicht gefunden');
@@ -179,6 +181,14 @@ export async function resolveDeposit(
   const kept = r.outcome === 'returned' ? 0 : r.outcome === 'kept' ? d.amountMinor : r.keptMinor!;
   if (kept > d.amountMinor) throw new ApiError('validation_failed', 'Einbehalten kann nicht mehr sein als die Kaution', [{ path: 'keptMinor' }]);
   const status: DepositStatus = r.outcome === 'partial' && kept === d.amountMinor ? 'kept' : r.outcome;
+  const returned = d.amountMinor - kept;
+  // Who got the money back: given, or the only payer.
+  const receiver = returned > 0 ? (r.returnedToTravelerId ?? (d.payers.length === 1 ? d.payers[0].travelerId : null)) : null;
+  if (returned > 0 && !receiver) throw new ApiError('validation_failed', 'Bitte angeben, wer das Geld zurückbekommen hat', [{ path: 'returnedToTravelerId' }]);
+  if (receiver) {
+    const ok = await db.prepare('SELECT id FROM travelers WHERE id = ? AND trip_id = ?').bind(receiver, tripId).first();
+    if (!ok) throw new ApiError('validation_failed', 'Unbekannte Person in dieser Reise');
+  }
   let expenseId: string | null = null;
   if (kept > 0) {
     let participants = d.travelerIds;
@@ -207,11 +217,30 @@ export async function resolveDeposit(
     });
     expenseId = expense.id;
   }
-  const res = await db
-    .prepare('UPDATE deposits SET status = ?, kept_minor = ?, expense_id = ?, resolved_at = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?')
-    .bind(status, kept || null, expenseId, r.date, nowIso(), id, r.version)
-    .run();
-  if (res.meta.changes === 0) {
+  // Each contributor's share of the returned money is now held by the receiver:
+  // record it as an internal settlement contributor → receiver.
+  const keptParts = kept > 0 && d.payers.length > 1 ? allocate(kept, d.payers.map((p) => p.amountMinor)) : d.payers.map((p) => (kept > 0 ? Math.round((kept * p.amountMinor) / d.amountMinor) : 0));
+  const now = nowIso();
+  const transfers = receiver
+    ? d.payers
+        .map((p, i) => ({ from: p.travelerId, amount: p.amountMinor - keptParts[i] }))
+        .filter((x) => x.from !== receiver && x.amount > 0)
+    : [];
+  const res = await db.batch([
+    db
+      .prepare('UPDATE deposits SET status = ?, kept_minor = ?, expense_id = ?, returned_to_traveler_id = ?, resolved_at = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?')
+      .bind(status, kept || null, expenseId, receiver, r.date, now, id, r.version),
+    ...transfers.map((x) =>
+      db
+        .prepare(
+          `INSERT INTO settlements (id, trip_id, from_traveler_id, to_traveler_id, amount_minor, currency, fx_rate, fx_source,
+             fx_date, base_amount_minor, date, notes, deposit_id, created_by, version, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ? WHERE changes() > 0`,
+        )
+        .bind(uuid(), tripId, x.from, receiver, x.amount, d.currency, d.fxRate, d.fxSource, d.fxDate, convertMinor(x.amount, d.currency, baseCurrency, d.fxRate), r.date, `Kaution zurück: ${d.title}`, id, userId, now, now),
+    ),
+  ]);
+  if (res[0].meta.changes === 0) {
     if (expenseId) await deleteExpense(db, tripId, expenseId);
     throw new ApiError('version_conflict', 'Die Kaution wurde inzwischen geändert.');
   }
@@ -225,8 +254,9 @@ export async function reopenDeposit(db: D1Database, tripId: string, id: string, 
   if (d.version !== version) throw new ApiError('version_conflict', 'Die Kaution wurde inzwischen geändert.', { current: d });
   const stmts = [
     db
-      .prepare("UPDATE deposits SET status = 'open', kept_minor = NULL, expense_id = NULL, resolved_at = NULL, version = version + 1, updated_at = ? WHERE id = ?")
+      .prepare("UPDATE deposits SET status = 'open', kept_minor = NULL, expense_id = NULL, returned_to_traveler_id = NULL, resolved_at = NULL, version = version + 1, updated_at = ? WHERE id = ?")
       .bind(nowIso(), id),
+    db.prepare('DELETE FROM settlements WHERE deposit_id = ? AND trip_id = ?').bind(id, tripId),
   ];
   if (d.expenseId) stmts.unshift(db.prepare('DELETE FROM expenses WHERE id = ? AND trip_id = ?').bind(d.expenseId, tripId));
   await db.batch(stmts);
@@ -236,7 +266,100 @@ export async function reopenDeposit(db: D1Database, tripId: string, id: string, 
 export async function deleteDeposit(db: D1Database, tripId: string, id: string): Promise<void> {
   const d = await getDeposit(db, tripId, id);
   if (!d) throw new ApiError('not_found', 'Kaution nicht gefunden');
-  const stmts = [db.prepare('DELETE FROM deposits WHERE id = ?').bind(id)];
+  const stmts = [db.prepare('DELETE FROM settlements WHERE deposit_id = ?').bind(id), db.prepare('DELETE FROM deposits WHERE id = ?').bind(id)];
   if (d.expenseId) stmts.unshift(db.prepare('DELETE FROM expenses WHERE id = ? AND trip_id = ?').bind(d.expenseId, tripId));
   await db.batch(stmts);
+}
+
+// ---------------------------------------------------------------------------
+// Joint payment on the spot (e.g. rental car: rent + deposit, paid in cash
+// with whatever everyone had at hand)
+// ---------------------------------------------------------------------------
+
+export interface JointPaymentInput extends FxInput {
+  title: string;
+  date: string;
+  category: ExpenseCategory;
+  contributions: { travelerId: string; amountMinor: number }[];
+  change?: { travelerId: string; amountMinor: number } | null;
+  costMinor: number;
+  forTravelerIds: string[];
+  deposit?: { amountMinor: number; method: DepositMethod; returnDate?: string | null } | null;
+  bookingId?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Splits what everybody handed over into the cost part (an expense shared
+ * equally) and the deposit part. Each person's net contribution (minus
+ * change received) is divided proportionally, so nobody's parts are negative;
+ * the balances then show who still owes whom so that everyone ends up paying
+ * the same.
+ */
+export function splitJointPayment(input: Pick<JointPaymentInput, 'contributions' | 'change' | 'costMinor' | 'deposit'>) {
+  const net = new Map<string, number>();
+  for (const c of input.contributions) net.set(c.travelerId, (net.get(c.travelerId) ?? 0) + c.amountMinor);
+  if (input.change) net.set(input.change.travelerId, (net.get(input.change.travelerId) ?? 0) - input.change.amountMinor);
+  const entries = [...net].filter(([, v]) => v !== 0);
+  if (entries.some(([, v]) => v < 0)) throw new ApiError('validation_failed', 'Das Wechselgeld ist größer als der Beitrag dieser Person', [{ path: 'change' }]);
+  const total = sum(entries.map(([, v]) => v));
+  const depositMinor = input.deposit?.amountMinor ?? 0;
+  if (total !== input.costMinor + depositMinor) {
+    throw new ApiError('validation_failed', 'Die Beiträge (abzüglich Wechselgeld) ergeben nicht Betrag + Kaution', [{ path: 'contributions' }]);
+  }
+  const costParts = input.costMinor > 0 ? allocate(input.costMinor, entries.map(([, v]) => v)) : entries.map(() => 0);
+  const costPayers = entries.map(([id], i) => ({ travelerId: id, amountMinor: costParts[i] })).filter((p) => p.amountMinor > 0);
+  const depositPayers = entries.map(([id, v], i) => ({ travelerId: id, amountMinor: v - costParts[i] })).filter((p) => p.amountMinor > 0);
+  return { costPayers, depositPayers };
+}
+
+export async function createJointPayment(db: D1Database, tripId: string, baseCurrency: string, userId: string, input: JointPaymentInput) {
+  const { costPayers, depositPayers } = splitJointPayment(input);
+  const fxPart = input.currency !== baseCurrency ? { fxRate: input.fxRate, fxSource: input.fxSource, fxDate: input.fxDate } : {};
+  let bookingFree = false;
+  if (input.bookingId) {
+    const b = await db.prepare('SELECT id FROM bookings WHERE id = ? AND trip_id = ?').bind(input.bookingId, tripId).first();
+    if (!b) throw new ApiError('validation_failed', 'Unbekannte Buchung', [{ path: 'bookingId' }]);
+    bookingFree = !(await db.prepare('SELECT id FROM expenses WHERE booking_id = ?').bind(input.bookingId).first());
+  }
+  const expense =
+    input.costMinor > 0
+      ? await createExpense(
+          db,
+          tripId,
+          baseCurrency,
+          userId,
+          {
+            title: input.title,
+            amountMinor: input.costMinor,
+            currency: input.currency,
+            date: input.date,
+            category: input.category,
+            paidByTravelerId: costPayers[0].travelerId,
+            ...(costPayers.length > 1 ? { payers: costPayers } : {}),
+            splitMethod: 'equal',
+            splits: input.forTravelerIds.map((travelerId) => ({ travelerId })),
+            ...fxPart,
+            notes: input.notes ?? null,
+          },
+          bookingFree ? input.bookingId! : null,
+        )
+      : null;
+  const deposit = input.deposit
+    ? await createDeposit(db, tripId, baseCurrency, userId, {
+        title: input.title,
+        amountMinor: input.deposit.amountMinor,
+        currency: input.currency,
+        ...fxPart,
+        paidByTravelerId: depositPayers[0].travelerId,
+        payers: depositPayers,
+        travelerIds: input.forTravelerIds,
+        method: input.deposit.method,
+        date: input.date,
+        returnDate: input.deposit.returnDate ?? null,
+        bookingId: input.bookingId ?? null,
+        notes: null,
+      })
+    : null;
+  return { expense, deposit };
 }
