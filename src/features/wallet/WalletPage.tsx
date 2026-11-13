@@ -240,7 +240,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                   {t.home.recentExpenses}
                 </SectionTitle>
                 <ExpenseList
-                  expenses={(sel ? expenses.filter((e) => amountOf(e) > 0) : expenses).slice(0, 5)}
+                  expenses={[...(sel ? expenses.filter((e) => amountOf(e) > 0) : expenses)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5)}
                   snap={snap}
                   shareOf={sel ? selection.selected : undefined}
                   onOpen={(e) => canEdit && setSheet({ kind: 'expense', expense: e })}
@@ -399,8 +399,25 @@ function History({ snap, onOpen }: { snap: TripSnapshot; onOpen: (e: ExpenseDto)
   const base = snap.trip.baseCurrency;
   const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
   const inRange = (d: string) => (!from || d >= from) && (!to || d <= to);
-  const expenses = snap.expenses.filter((e) => (!cat || e.category === cat) && inRange(e.date));
-  const settlements = snap.settlements.filter((s) => inRange(s.date));
+  const [sort, setSortState] = useState<'created' | 'date'>(() => {
+    try {
+      return localStorage.getItem('travio.historySort') === 'date' ? 'date' : 'created';
+    } catch {
+      return 'created';
+    }
+  });
+  const setSort = (v: 'created' | 'date') => {
+    setSortState(v);
+    try {
+      localStorage.setItem('travio.historySort', v);
+    } catch {
+      /* ignore */
+    }
+  };
+  const order = <T extends { date: string; createdAt: string }>(list: T[]) =>
+    [...list].sort((a, b) => (sort === 'created' ? b.createdAt.localeCompare(a.createdAt) || b.date.localeCompare(a.date) : b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)));
+  const expenses = order(snap.expenses.filter((e) => (!cat || e.category === cat) && inRange(e.date)));
+  const settlements = order(snap.settlements.filter((s) => inRange(s.date)));
   const sumFiltered = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
 
   return (
@@ -418,6 +435,17 @@ function History({ snap, onOpen }: { snap: TripSnapshot; onOpen: (e: ExpenseDto)
         </Field>
         <TextField label={t.wallet.filterFrom} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         <TextField label={t.wallet.filterTo} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+      </div>
+      <div className="mt-4">
+        <Segmented
+          label={t.wallet.sortLabel}
+          value={sort}
+          onChange={setSort}
+          options={[
+            { value: 'created', label: t.wallet.sortCreated },
+            { value: 'date', label: t.wallet.sortDate },
+          ]}
+        />
       </div>
       <p className="mt-4 text-[14px] text-text-2">
         {expenses.length} · <span className="font-semibold text-text tabular">{money(sumFiltered, base)}</span>
