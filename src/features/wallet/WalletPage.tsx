@@ -140,7 +140,6 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
               <PersonFilter travelers={travelers} selection={selection} bleed="-mx-4 px-4" />
             </div>
             <Card className="relative overflow-hidden p-6">
-              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent-soft blur-2xl" aria-hidden />
               <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-text-3">{sel ? t.home.costsShare : t.wallet.total}</p>
               <p className="mt-1 font-display text-[44px] font-semibold leading-none tabular">{money(sel ? sel.spentMinor : total, base)}</p>
               <p className="mt-2 text-[13px] text-text-3">{sel ? selectionLabel : t.wallet.baseInfo(base)}</p>
