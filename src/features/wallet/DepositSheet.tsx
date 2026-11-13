@@ -12,6 +12,7 @@ import { formatDate, money } from '../../lib/format';
 import { suggestedRate } from '../../lib/rates';
 import { tripStore, useOnline } from '../../lib/store';
 import { splitPresets } from './ExpenseSheet';
+import { PayersInput, resolvePayers, type PayersValue } from './PayersInput';
 
 function localToday(snap: TripSnapshot) {
   return todayIn(snap.destinations[0]?.timezone ?? snap.trip.homeTimezone);
@@ -31,7 +32,10 @@ export function DepositSheet({ snap, deposit, me, onClose }: { snap: TripSnapsho
       amount: deposit ? minorToInput(deposit.amountMinor, deposit.currency) : '',
       currency,
       rate: (deposit && deposit.fxSource !== 'identity' ? deposit.fxRate : (sugg?.rate ?? '')).replace('.', ','),
-      paidBy: deposit?.paidByTravelerId ?? me ?? travelers[0]?.id ?? '',
+      payers: {
+        ids: deposit ? deposit.payers.map((p) => p.travelerId) : [me ?? travelers[0]?.id ?? ''],
+        amounts: deposit && deposit.payers.length > 1 ? Object.fromEntries(deposit.payers.map((p) => [p.travelerId, minorToInput(p.amountMinor, deposit.currency)])) : {},
+      } as PayersValue,
       travelerIds: deposit ? deposit.travelerIds : travelers.map((x) => x.id),
       method: (deposit?.method ?? 'cash') as DepositMethod,
       date,
@@ -60,13 +64,15 @@ export function DepositSheet({ snap, deposit, me, onClose }: { snap: TripSnapsho
     if (!amountMinor || amountMinor <= 0) return setError(t.errors.invalidAmount);
     if (needsRate && !rate) return setError(`${t.wallet.rate}: ${t.errors.validation}`);
     if (!form.travelerIds.length) return setError(`${t.deposits.forWhom}: ${t.errors.required}`);
+    const pay = resolvePayers(form.payers, amountMinor, form.currency);
+    if ('error' in pay) return setError(pay.error);
     const sugg = needsRate ? suggestedRate(exchangeRates, expenses, form.currency, form.date) : null;
     const payload = {
       title: form.title.trim(),
       amountMinor,
       currency: form.currency,
       ...(needsRate ? { fxRate: rate!, fxSource: sugg && sugg.rate === rate ? 'cached' : 'manual', fxDate: sugg && sugg.rate === rate ? sugg.effectiveDate : form.date } : {}),
-      paidByTravelerId: form.paidBy,
+      ...pay,
       travelerIds: form.travelerIds,
       method: form.method,
       date: form.date,
@@ -122,22 +128,7 @@ export function DepositSheet({ snap, deposit, me, onClose }: { snap: TripSnapsho
               <Input id="deposit-rate" inputMode="decimal" value={form.rate} onChange={(e) => set('rate', e.target.value)} />
             </Field>
           )}
-          <Field label={t.deposits.paidBy}>
-            <div className="flex flex-wrap gap-2">
-              {travelers.map((x) => (
-                <button
-                  key={x.id}
-                  type="button"
-                  aria-pressed={form.paidBy === x.id}
-                  onClick={() => set('paidBy', x.id)}
-                  className={cx('inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-[14px] font-semibold', form.paidBy === x.id ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2')}
-                >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color }} />
-                  {x.name}
-                </button>
-              ))}
-            </div>
-          </Field>
+          <PayersInput travelers={travelers} currency={form.currency} amountMinor={amountMinor} value={form.payers} onChange={(v) => set('payers', v)} />
           <Field label={t.deposits.forWhom} hint={t.deposits.forWhomHint}>
             {presets.length > 1 && (
               <div className="no-scrollbar -mx-1 mb-2 flex gap-2 overflow-x-auto px-1 pb-1">

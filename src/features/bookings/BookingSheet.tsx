@@ -16,6 +16,7 @@ import { todayIn } from '../../../shared/trip';
 import { suggestedRate } from '../../lib/rates';
 import { money } from '../../lib/format';
 import { DepositSheet, ResolveDepositSheet } from '../wallet/DepositSheet';
+import { PayersInput, resolvePayers, type PayersValue } from '../wallet/PayersInput';
 import type { BookingDto, DepositDto, DepositMethod, TripSnapshot } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField, TimeZoneSelect } from '../../components/inputs';
@@ -35,7 +36,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
   const [dep, setDep] = useState(() => {
     const currency = trip.localCurrency ?? trip.baseCurrency;
     const sugg = currency !== trip.baseCurrency ? suggestedRate(snap!.exchangeRates, snap!.expenses, currency, todayIn(defaultTzOf(snap!))) : null;
-    return { on: false, amount: '', currency, rate: sugg?.rate.replace('.', ',') ?? '', paidBy: me?.id ?? travelers[0]?.id ?? '', method: 'cash' as DepositMethod };
+    return { on: false, amount: '', currency, rate: sugg?.rate.replace('.', ',') ?? '', payers: { ids: [me?.id ?? travelers[0]?.id ?? ''], amounts: {} } as PayersValue, method: 'cash' as DepositMethod };
   });
   const setD = <K extends keyof typeof dep>(k: K, v: (typeof dep)[K]) => setDep((d) => ({ ...d, [k]: v }));
   const depNeedsRate = dep.currency !== trip.baseCurrency;
@@ -92,6 +93,8 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
     const depRate = depNeedsRate ? normalizeRate(dep.rate) : '1';
     if (dep.on && (!depAmount || depAmount <= 0)) return setError(`${t.deposits.short}: ${t.errors.invalidAmount}`);
     if (dep.on && !depRate) return setError(`${t.deposits.short} – ${t.wallet.rate}: ${t.errors.validation}`);
+    const depPay = dep.on ? resolvePayers(dep.payers, depAmount, dep.currency) : null;
+    if (depPay && 'error' in depPay) return setError(`${t.deposits.short}: ${depPay.error}`);
     const data = {
       title: form.title.trim(),
       type: form.type,
@@ -136,7 +139,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
             amountMinor: depAmount,
             currency: dep.currency,
             ...(depNeedsRate ? { fxRate: depRate, fxSource: sugg?.rate === depRate ? 'cached' : 'manual', fxDate: sugg?.rate === depRate ? sugg.effectiveDate : null } : {}),
-            paidByTravelerId: dep.paidBy,
+            ...(depPay && !('error' in depPay) ? depPay : {}),
             travelerIds: form.travelerIds.length ? form.travelerIds : travelers.map((x) => x.id),
             method: dep.method,
             date: day,
@@ -323,7 +326,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
                 <div>
                   <p className="font-semibold tabular">{money(d.amountMinor, d.currency)}</p>
                   <p className="text-[13px] text-text-3">
-                    {t.deposits.status[d.status]} · {travelers.find((x) => x.id === d.paidByTravelerId)?.name} · {t.deposits.methods[d.method]}
+                    {t.deposits.status[d.status]} · {(d.payers ?? []).map((p) => travelers.find((x) => x.id === p.travelerId)?.name).join(' & ')} · {t.deposits.methods[d.method]}
                   </p>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -355,22 +358,14 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
                     <Input id="booking-deposit-rate" inputMode="decimal" value={dep.rate} onChange={(e) => setD('rate', e.target.value)} />
                   </Field>
                 )}
-                <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
-                  <SelectField label={t.deposits.paidBy} value={dep.paidBy} onChange={(e) => setD('paidBy', e.target.value)}>
-                    {travelers.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                  </SelectField>
-                  <SelectField label={t.deposits.method} value={dep.method} onChange={(e) => setD('method', e.target.value as DepositMethod)}>
-                    {(['cash', 'card', 'transfer'] as const).map((m) => (
-                      <option key={m} value={m}>
-                        {t.deposits.methods[m]}
-                      </option>
-                    ))}
-                  </SelectField>
-                </div>
+                <PayersInput travelers={travelers} currency={dep.currency} amountMinor={dep.amount.trim() ? parseAmount(dep.amount, dep.currency) : null} value={dep.payers} onChange={(v) => setD('payers', v)} />
+                <SelectField label={t.deposits.method} value={dep.method} onChange={(e) => setD('method', e.target.value as DepositMethod)}>
+                  {(['cash', 'card', 'transfer'] as const).map((m) => (
+                    <option key={m} value={m}>
+                      {t.deposits.methods[m]}
+                    </option>
+                  ))}
+                </SelectField>
                 <p className="text-[12px] leading-snug text-text-3">{t.deposits.inBookingDates(L.start, L.end)}</p>
               </>
             )}

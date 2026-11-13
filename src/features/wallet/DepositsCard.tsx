@@ -34,7 +34,7 @@ export function DepositsCard({ snap, canEdit, me }: { snap: TripSnapshot; canEdi
             <button type="button" className="min-w-0 flex-1 text-left" disabled={!canEdit || d.status !== 'open'} onClick={() => setEditing(d)}>
               <p className="truncate font-semibold">{d.title}</p>
               <p className="text-[13px] text-text-3">
-                {name(d.paidByTravelerId)} · {t.deposits.methods[d.method]}
+                {(d.payers ?? []).map((x) => name(x.travelerId)).join(' & ') || name(d.paidByTravelerId)} · {t.deposits.methods[d.method]}
                 {d.returnDate && d.status === 'open' ? ` · ${t.deposits.returnOn(formatDate(d.returnDate))}` : ''}
               </p>
               <div className="mt-1.5">

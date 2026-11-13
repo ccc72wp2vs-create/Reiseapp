@@ -3,7 +3,7 @@
  * partly or fully kept creates one regular expense for the kept part, paid by
  * whoever put down the deposit and shared equally by the travelers it was for.
  */
-import { convertMinor } from '../../shared/money';
+import { allocate, convertMinor, sum } from '../../shared/money';
 import type { FxSource } from '../../shared/constants';
 import type { DepositDto, DepositMethod, DepositStatus } from '../../shared/types';
 import { ApiError } from '../lib/errors';
@@ -17,6 +17,7 @@ export interface DepositInput extends FxInput {
   title: string;
   amountMinor: number;
   paidByTravelerId: string;
+  payers?: { travelerId: string; amountMinor: number }[];
   travelerIds: string[];
   method: DepositMethod;
   date: string;
@@ -25,7 +26,7 @@ export interface DepositInput extends FxInput {
   notes?: string | null;
 }
 
-function toDto(r: Row, travelerIds: string[]): DepositDto {
+function toDto(r: Row, travelerIds: string[], payers: DepositDto['payers']): DepositDto {
   return {
     id: r.id as string,
     tripId: r.trip_id as string,
@@ -40,6 +41,7 @@ function toDto(r: Row, travelerIds: string[]): DepositDto {
     fxDate: (r.fx_date as string) ?? null,
     baseAmountMinor: r.base_amount_minor as number,
     paidByTravelerId: r.paid_by_traveler_id as string,
+    payers: payers.length ? payers : [{ travelerId: r.paid_by_traveler_id as string, amountMinor: r.amount_minor as number }],
     travelerIds,
     method: r.method as DepositMethod,
     date: r.date as string,
@@ -55,7 +57,7 @@ function toDto(r: Row, travelerIds: string[]): DepositDto {
 }
 
 export async function listDeposits(db: D1Database, tripId: string): Promise<DepositDto[]> {
-  const [{ results }, { results: links }] = await Promise.all([
+  const [{ results }, { results: links }, { results: payerRows }] = await Promise.all([
     db.prepare("SELECT * FROM deposits WHERE trip_id = ? ORDER BY status = 'open' DESC, date DESC, created_at DESC").bind(tripId).all<Row>(),
     db
       .prepare(
@@ -65,18 +67,38 @@ export async function listDeposits(db: D1Database, tripId: string): Promise<Depo
       )
       .bind(tripId)
       .all<{ deposit_id: string; traveler_id: string }>(),
+    db
+      .prepare(
+        `SELECT p.deposit_id, p.traveler_id, p.amount_minor FROM deposit_payers p
+         JOIN deposits d ON d.id = p.deposit_id JOIN travelers t ON t.id = p.traveler_id
+         WHERE d.trip_id = ? ORDER BY t.sort_order, t.created_at`,
+      )
+      .bind(tripId)
+      .all<{ deposit_id: string; traveler_id: string; amount_minor: number }>(),
   ]);
   const map = new Map<string, string[]>();
   for (const l of links) map.set(l.deposit_id, [...(map.get(l.deposit_id) ?? []), l.traveler_id]);
-  return results.map((r) => toDto(r, map.get(r.id as string) ?? []));
+  const pay = new Map<string, DepositDto['payers']>();
+  for (const p of payerRows) pay.set(p.deposit_id, [...(pay.get(p.deposit_id) ?? []), { travelerId: p.traveler_id, amountMinor: p.amount_minor }]);
+  return results.map((r) => toDto(r, map.get(r.id as string) ?? [], pay.get(r.id as string) ?? []));
 }
 
 export async function getDeposit(db: D1Database, tripId: string, id: string): Promise<DepositDto | null> {
   return (await listDeposits(db, tripId)).find((d) => d.id === id) ?? null;
 }
 
+/** Payers as given, or the single main payer with the full amount. */
+function payersOf(input: DepositInput) {
+  const list = input.payers?.length ? input.payers : [{ travelerId: input.paidByTravelerId, amountMinor: input.amountMinor }];
+  if (new Set(list.map((p) => p.travelerId)).size !== list.length) throw new ApiError('validation_failed', 'Eine Person ist doppelt eingetragen', [{ path: 'payers' }]);
+  if (sum(list.map((p) => p.amountMinor)) !== input.amountMinor) {
+    throw new ApiError('validation_failed', 'Die Beträge der Personen ergeben nicht die Kaution', [{ path: 'payers' }]);
+  }
+  return list;
+}
+
 async function validate(db: D1Database, tripId: string, input: DepositInput) {
-  const ids = [...new Set([input.paidByTravelerId, ...input.travelerIds])];
+  const ids = [...new Set([input.paidByTravelerId, ...input.travelerIds, ...(input.payers ?? []).map((p) => p.travelerId)])];
   const row = await db
     .prepare(`SELECT COUNT(*) AS n FROM travelers WHERE trip_id = ? AND id IN (${ids.map(() => '?').join(', ')})`)
     .bind(tripId, ...ids)
@@ -91,13 +113,17 @@ async function validate(db: D1Database, tripId: string, input: DepositInput) {
   }
 }
 
-const travelerRows = (db: D1Database, id: string, travelerIds: string[]) => [
+const travelerRows = (db: D1Database, id: string, travelerIds: string[], payers: { travelerId: string; amountMinor: number }[]) => [
   db.prepare('DELETE FROM deposit_travelers WHERE deposit_id = ?').bind(id),
   ...[...new Set(travelerIds)].map((t) => db.prepare('INSERT INTO deposit_travelers (deposit_id, traveler_id) VALUES (?, ?)').bind(id, t)),
+  db.prepare('DELETE FROM deposit_payers WHERE deposit_id = ?').bind(id),
+  ...payers.map((p) => db.prepare('INSERT INTO deposit_payers (deposit_id, traveler_id, amount_minor) VALUES (?, ?, ?)').bind(id, p.travelerId, p.amountMinor)),
 ];
 
 export async function createDeposit(db: D1Database, tripId: string, baseCurrency: string, userId: string, input: DepositInput): Promise<DepositDto> {
   await validate(db, tripId, input);
+  const payers = payersOf(input);
+  const main = payers[0].travelerId;
   const fx = resolveFx(input, baseCurrency, input.date);
   const base = convertMinor(input.amountMinor, input.currency, baseCurrency, fx.rate);
   const id = input.id ?? uuid();
@@ -109,8 +135,8 @@ export async function createDeposit(db: D1Database, tripId: string, baseCurrency
            paid_by_traveler_id, method, date, return_date, booking_id, notes, created_by, version, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       )
-      .bind(id, tripId, input.title, input.amountMinor, input.currency, fx.rate, fx.source, fx.date, base, input.paidByTravelerId, input.method, input.date, input.returnDate ?? null, input.bookingId ?? null, input.notes ?? null, userId, now, now),
-    ...travelerRows(db, id, input.travelerIds),
+      .bind(id, tripId, input.title, input.amountMinor, input.currency, fx.rate, fx.source, fx.date, base, main, input.method, input.date, input.returnDate ?? null, input.bookingId ?? null, input.notes ?? null, userId, now, now),
+    ...travelerRows(db, id, input.travelerIds, payers),
   ]);
   return (await getDeposit(db, tripId, id))!;
 }
@@ -121,6 +147,7 @@ export async function updateDeposit(db: D1Database, tripId: string, baseCurrency
   if (existing.version !== version) throw new ApiError('version_conflict', 'Die Kaution wurde inzwischen geändert.', { current: existing });
   if (existing.status !== 'open') throw new ApiError('conflict', 'Abgeschlossene Kautionen erst wieder öffnen, dann bearbeiten.');
   await validate(db, tripId, input);
+  const payers = payersOf(input);
   const fx = resolveFx(input, baseCurrency, input.date);
   const base = convertMinor(input.amountMinor, input.currency, baseCurrency, fx.rate);
   const res = await db.batch([
@@ -130,8 +157,8 @@ export async function updateDeposit(db: D1Database, tripId: string, baseCurrency
            paid_by_traveler_id = ?, method = ?, date = ?, return_date = ?, booking_id = ?, notes = ?, version = version + 1, updated_at = ?
          WHERE id = ? AND trip_id = ? AND version = ?`,
       )
-      .bind(input.title, input.amountMinor, input.currency, fx.rate, fx.source, fx.date, base, input.paidByTravelerId, input.method, input.date, input.returnDate ?? null, input.bookingId ?? null, input.notes ?? null, nowIso(), id, tripId, version),
-    ...travelerRows(db, id, input.travelerIds),
+      .bind(input.title, input.amountMinor, input.currency, fx.rate, fx.source, fx.date, base, payers[0].travelerId, input.method, input.date, input.returnDate ?? null, input.bookingId ?? null, input.notes ?? null, nowIso(), id, tripId, version),
+    ...travelerRows(db, id, input.travelerIds, payers),
   ]);
   if (res[0].meta.changes === 0) throw new ApiError('version_conflict', 'Die Kaution wurde inzwischen geändert.');
   return (await getDeposit(db, tripId, id))!;
@@ -165,7 +192,14 @@ export async function resolveDeposit(
       currency: d.currency,
       date: r.date,
       category: 'other',
-      paidByTravelerId: d.paidByTravelerId,
+      paidByTravelerId: d.payers[0].travelerId,
+      // The kept part is carried by the payers in proportion to what they put down.
+      ...(d.payers.length > 1
+        ? (() => {
+            const parts = allocate(kept, d.payers.map((p) => p.amountMinor));
+            return { payers: d.payers.map((p, i) => ({ travelerId: p.travelerId, amountMinor: parts[i] })).filter((p) => p.amountMinor > 0) };
+          })()
+        : {}),
       splitMethod: 'equal',
       splits: participants.map((travelerId) => ({ travelerId })),
       ...(d.currency !== baseCurrency ? { fxRate: d.fxRate, fxSource: 'cached' as const, fxDate: d.fxDate } : {}),

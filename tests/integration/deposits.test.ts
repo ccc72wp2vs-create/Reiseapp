@@ -56,4 +56,19 @@ describe('deposits (Kautionen)', () => {
     expect(back.body.deposit).toMatchObject({ status: 'returned', expenseId: null });
     expect((await owner.del(`/trips/${tripId}/deposits/${dep.id}`)).status).toBe(200);
   });
+
+  it('can be put down by several travelers; a kept part is carried in proportion', async () => {
+    const owner = await setupOwner(t);
+    const tripId = (await owner.post('/trips', { name: 'R', startDate: '2026-11-06', endDate: '2026-11-26', baseCurrency: 'EUR' })).body.trip.id;
+    const me = (await owner.get(`/trips/${tripId}/snapshot`)).body.travelers[0];
+    const other = (await owner.post(`/trips/${tripId}/travelers`, { name: 'Lilli' })).body.traveler;
+    const base = { title: 'Jeep', amountMinor: 30000, currency: 'EUR', paidByTravelerId: me.id, travelerIds: [me.id, other.id], method: 'cash', date: '2026-11-18' };
+    expect((await owner.post(`/trips/${tripId}/deposits`, { ...base, payers: [{ travelerId: me.id, amountMinor: 10000 }, { travelerId: other.id, amountMinor: 10000 }] })).status).toBe(422);
+    const dep = (await owner.post(`/trips/${tripId}/deposits`, { ...base, payers: [{ travelerId: me.id, amountMinor: 20000 }, { travelerId: other.id, amountMinor: 10000 }] })).body.deposit;
+    expect(dep.payers).toEqual([{ travelerId: me.id, amountMinor: 20000 }, { travelerId: other.id, amountMinor: 10000 }]);
+    await owner.post(`/trips/${tripId}/deposits/${dep.id}/resolve`, { outcome: 'partial', keptMinor: 3000, date: '2026-11-21', version: dep.version });
+    const exp = (await owner.get(`/trips/${tripId}/snapshot`)).body.expenses[0];
+    const paid = Object.fromEntries(exp.payers.map((p: { travelerId: string; amountMinor: number }) => [p.travelerId, p.amountMinor]));
+    expect(paid).toEqual({ [me.id]: 2000, [other.id]: 1000 });
+  });
 });

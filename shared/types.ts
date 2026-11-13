@@ -242,6 +242,8 @@ export interface DepositDto extends Versioned {
   fxDate: string | null;
   baseAmountMinor: number;
   paidByTravelerId: string;
+  /** Who put down how much (deposit currency); sums to amountMinor. */
+  payers: { travelerId: string; amountMinor: number }[];
   travelerIds: string[];
   method: DepositMethod;
   date: string;

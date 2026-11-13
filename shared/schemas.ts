@@ -376,6 +376,12 @@ const depositFields = {
   fxSource: z.enum(['manual', 'cached', 'provider']).optional(),
   fxDate: optDate,
   paidByTravelerId: id,
+  /** Several payers: amounts in the deposit currency, must sum to amountMinor. */
+  payers: z
+    .array(z.object({ travelerId: id, amountMinor: z.number().int().min(1).max(1e13) }))
+    .min(1)
+    .max(50)
+    .optional(),
   /** Who the deposit is for – they share a kept amount. Empty = everyone. */
   travelerIds: z.array(id).max(50).default([]),
   method: z.enum(['cash', 'card', 'transfer']).default('cash'),

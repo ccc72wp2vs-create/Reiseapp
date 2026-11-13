@@ -445,7 +445,7 @@ export const de = {
     outcomes: { returned: 'Zurück', partial: 'Teilweise', kept: 'Einbehalten' },
     keptAmount: (c: string) => `Einbehaltener Betrag (${c})`,
     keptInvalid: (max: string) => `Bitte einen Betrag zwischen 0 und ${max} angeben.`,
-    keptInfo: (a: string, who: string) => `${a} werden als Ausgabe erfasst und auf ${who} aufgeteilt.`,
+    keptInfo: (a: string, who: string) => `${a} werden als Ausgabe erfasst und auf ${who} aufgeteilt. Getragen wird der Betrag von denen, die die Kaution hinterlegt haben – im Verhältnis ihrer Anteile.`,
     returnedInfo: 'Alles zurückerhalten – es entstehen keine Kosten.',
     resolvedText: (status: string, kept: string, date: string) =>
       status === 'returned' ? `Komplett zurückerhalten${date ? ` am ${date}` : ''}.` : status === 'kept' ? `Vollständig einbehalten (${kept})${date ? ` am ${date}` : ''}.` : `${kept} einbehalten, Rest zurückerhalten${date ? ` (${date})` : ''}.`,
@@ -461,6 +461,8 @@ export const de = {
     hint: 'Tippe auf „Abschließen“, sobald ihr die Kaution zurückbekommen habt.',
     reminder: (n: string, a: string) => `Kaution „${n}“ (${a}) zurückholen`,
     overdue: 'überfällig',
+    payersHint: 'Mehrere Personen antippen, wenn ihr die Kaution gemeinsam hinterlegt.',
+    payersMismatch: 'Die Beträge der Personen müssen zusammen die Kaution ergeben.',
     inBooking: 'Kaution hinterlegen',
     addAnother: 'Weitere Kaution hinterlegen',
     inBookingHint: 'Falls schon bekannt (z. B. beim Mietwagen). Zählt nicht zu den Kosten.',
