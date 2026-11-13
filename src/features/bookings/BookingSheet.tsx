@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarX, DoorOpen, FileText, Flag, KeyRound, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarX, DoorOpen, FileText, Flag, KeyRound, Lock, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import {
   BOOKING_STATUSES,
@@ -11,22 +11,37 @@ import {
   type CostKind,
   type PaymentStatus,
 } from '../../../shared/constants';
-import { minorToInput, parseAmount } from '../../../shared/money';
-import type { BookingDto } from '../../../shared/types';
+import { minorToInput, normalizeRate, parseAmount } from '../../../shared/money';
+import { todayIn } from '../../../shared/trip';
+import { suggestedRate } from '../../lib/rates';
+import { money } from '../../lib/format';
+import { DepositSheet, ResolveDepositSheet } from '../wallet/DepositSheet';
+import type { BookingDto, DepositDto, DepositMethod, TripSnapshot } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField, TimeZoneSelect } from '../../components/inputs';
 import { toast } from '../../components/toast';
-import { Button, ConfirmDialog, Field, SelectField, Sheet, TextAreaField, TextField } from '../../components/ui';
+import { Button, ConfirmDialog, Field, Input, SelectField, Sheet, TextAreaField, TextField, Toggle } from '../../components/ui';
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { tripStore, useOnline } from '../../lib/store';
 
 export default function BookingSheet({ open, onClose, booking }: { open: boolean; onClose: () => void; booking?: BookingDto | null }) {
-  const { snap } = useTrip();
+  const { snap, me } = useTrip();
   const online = useOnline();
   const { trip, destinations, travelers } = snap!;
+  const [editDeposit, setEditDeposit] = useState<DepositDto | null>(null);
+  const [resolveDeposit, setResolveDeposit] = useState<DepositDto | null>(null);
+  // Optional deposit known in advance (e.g. rental car) – created together with the booking.
+  const [dep, setDep] = useState(() => {
+    const currency = trip.localCurrency ?? trip.baseCurrency;
+    const sugg = currency !== trip.baseCurrency ? suggestedRate(snap!.exchangeRates, snap!.expenses, currency, todayIn(defaultTzOf(snap!))) : null;
+    return { on: false, amount: '', currency, rate: sugg?.rate.replace('.', ',') ?? '', paidBy: me?.id ?? travelers[0]?.id ?? '', method: 'cash' as DepositMethod };
+  });
+  const setD = <K extends keyof typeof dep>(k: K, v: (typeof dep)[K]) => setDep((d) => ({ ...d, [k]: v }));
+  const depNeedsRate = dep.currency !== trip.baseCurrency;
   const defaultTz = destinations[0]?.timezone ?? trip.homeTimezone;
   const b = booking;
+  const linkedDeposits = b ? (snap!.deposits ?? []).filter((d) => d.bookingId === b.id) : [];
   const [form, setForm] = useState(() => ({
     title: b?.title ?? '',
     type: (b?.type ?? 'hotel') as BookingType,
@@ -73,6 +88,10 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
     if ((form.price.trim() && (price === null || price < 0)) || (form.unitPrice.trim() && (unit === null || unit < 0))) return setError(t.errors.invalidAmount);
     if (form.startDate && form.endDate && form.endDate < form.startDate) return setError(`${t.bookings.end}: ${t.errors.invalidDate}`);
     const persons = form.personsCount ? Number(form.personsCount) : null;
+    const depAmount = dep.on ? parseAmount(dep.amount, dep.currency) : null;
+    const depRate = depNeedsRate ? normalizeRate(dep.rate) : '1';
+    if (dep.on && (!depAmount || depAmount <= 0)) return setError(`${t.deposits.short}: ${t.errors.invalidAmount}`);
+    if (dep.on && !depRate) return setError(`${t.deposits.short} – ${t.wallet.rate}: ${t.errors.validation}`);
     const data = {
       title: form.title.trim(),
       type: form.type,
@@ -105,9 +124,28 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
     };
     setBusy(true);
     try {
-      await tripStore.mutate(() =>
-        b ? http.patch(`/trips/${trip.id}/bookings/${b.id}`, { ...data, version: b.version }) : http.post(`/trips/${trip.id}/bookings`, data),
-      );
+      await tripStore.mutate(async () => {
+        const res = b
+          ? await http.patch<{ booking: BookingDto }>(`/trips/${trip.id}/bookings/${b.id}`, { ...data, version: b.version })
+          : await http.post<{ booking: BookingDto }>(`/trips/${trip.id}/bookings`, data);
+        if (dep.on && depAmount) {
+          const day = form.startDate || todayIn(defaultTz);
+          const sugg = depNeedsRate ? suggestedRate(snap!.exchangeRates, snap!.expenses, dep.currency, day) : null;
+          await http.post(`/trips/${trip.id}/deposits`, {
+            title: data.title,
+            amountMinor: depAmount,
+            currency: dep.currency,
+            ...(depNeedsRate ? { fxRate: depRate, fxSource: sugg?.rate === depRate ? 'cached' : 'manual', fxDate: sugg?.rate === depRate ? sugg.effectiveDate : null } : {}),
+            paidByTravelerId: dep.paidBy,
+            travelerIds: form.travelerIds.length ? form.travelerIds : travelers.map((x) => x.id),
+            method: dep.method,
+            date: day,
+            returnDate: form.endDate && form.endDate >= day ? form.endDate : null,
+            bookingId: res.booking.id,
+          });
+        }
+        return res;
+      });
       toast(t.success.saved);
       onClose();
     } catch (err) {
@@ -277,6 +315,67 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
             <p className="text-[12px] leading-snug text-text-3">{t.bookings.notSpentHint}</p>
           </fieldset>
 
+          <fieldset className="space-y-3 rounded-[1.25rem] border border-line bg-surface p-4">
+            <PhaseLegend icon={Lock} label={t.deposits.title} />
+            <div className="clear-both" />
+            {linkedDeposits.map((d) => (
+              <div key={d.id} className="rounded-2xl bg-surface-2 p-3">
+                <div>
+                  <p className="font-semibold tabular">{money(d.amountMinor, d.currency)}</p>
+                  <p className="text-[13px] text-text-3">
+                    {t.deposits.status[d.status]} · {travelers.find((x) => x.id === d.paidByTravelerId)?.name} · {t.deposits.methods[d.method]}
+                  </p>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {d.status === 'open' && (
+                    <Button size="sm" variant="secondary" onClick={() => setEditDeposit(d)}>
+                      {t.common.edit}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="soft" onClick={() => setResolveDeposit(d)}>
+                    {d.status === 'open' ? t.deposits.close : t.deposits.details}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <Toggle checked={dep.on} onChange={(v) => setD('on', v)} label={linkedDeposits.length ? t.deposits.addAnother : t.deposits.inBooking} description={t.deposits.inBookingHint} />
+            {dep.on && (
+              <>
+                <MoneyField
+                  label={t.deposits.amount}
+                  amount={dep.amount}
+                  currency={dep.currency}
+                  onAmount={(v) => setD('amount', v)}
+                  onCurrency={(c) =>
+                    setDep((d) => ({ ...d, currency: c, rate: c !== trip.baseCurrency ? (suggestedRate(snap!.exchangeRates, snap!.expenses, c, todayIn(defaultTz))?.rate.replace('.', ',') ?? '') : '' }))
+                  }
+                />
+                {depNeedsRate && (
+                  <Field label={`${t.wallet.rate} · ${t.wallet.rateHelp(dep.currency, trip.baseCurrency)}`} htmlFor="booking-deposit-rate">
+                    <Input id="booking-deposit-rate" inputMode="decimal" value={dep.rate} onChange={(e) => setD('rate', e.target.value)} />
+                  </Field>
+                )}
+                <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
+                  <SelectField label={t.deposits.paidBy} value={dep.paidBy} onChange={(e) => setD('paidBy', e.target.value)}>
+                    {travelers.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <SelectField label={t.deposits.method} value={dep.method} onChange={(e) => setD('method', e.target.value as DepositMethod)}>
+                    {(['cash', 'card', 'transfer'] as const).map((m) => (
+                      <option key={m} value={m}>
+                        {t.deposits.methods[m]}
+                      </option>
+                    ))}
+                  </SelectField>
+                </div>
+                <p className="text-[12px] leading-snug text-text-3">{t.deposits.inBookingDates(L.start, L.end)}</p>
+              </>
+            )}
+          </fieldset>
+
           <TextAreaField label={t.bookings.clarification} optional placeholder={t.bookings.clarificationHint} value={form.clarificationNote} onChange={(e) => set('clarificationNote', e.target.value)} />
           <TextAreaField label={t.bookings.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           <div className="flex items-center gap-3 rounded-[1.25rem] border border-dashed border-line-strong p-4 text-[13px] text-text-3">
@@ -297,6 +396,8 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
           )}
         </form>
       </Sheet>
+      {editDeposit && <DepositSheet snap={snap!} deposit={editDeposit} me={me?.id} onClose={() => setEditDeposit(null)} />}
+      {resolveDeposit && <ResolveDepositSheet snap={snap!} deposit={resolveDeposit} onClose={() => setResolveDeposit(null)} />}
       {b && (
         <ConfirmDialog
           open={confirm}
@@ -350,3 +451,5 @@ function PhaseLegend({ icon: Icon, label }: { icon: LucideIcon; label: string })
     </legend>
   );
 }
+
+const defaultTzOf = (snap: TripSnapshot) => snap.destinations[0]?.timezone ?? snap.trip.homeTimezone;
