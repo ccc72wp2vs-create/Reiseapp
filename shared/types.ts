@@ -304,6 +304,38 @@ export interface InvitationDto {
   usedAt: string | null;
 }
 
+/** Fields recognised on an uploaded receipt / confirmation. */
+export interface ExtractedDocument {
+  kind: BookingType | null;
+  title: string | null;
+  provider: string | null;
+  reference: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  /** Total in minor units of `currency`. */
+  amountMinor: number | null;
+  currency: string | null;
+  paymentStatus: 'paid' | 'unpaid' | 'partial' | 'unknown';
+  /** Name printed as payer / guest, if any. */
+  payerName: string | null;
+  personsCount: number | null;
+}
+
+export interface DocumentDto {
+  id: string;
+  tripId: string;
+  filename: string;
+  mime: string;
+  size: number;
+  bookingId: string | null;
+  expenseId: string | null;
+  extracted: ExtractedDocument | null;
+  status: 'uploaded' | 'analyzed' | 'failed';
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TripSnapshot {
   trip: TripDto;
   members: MemberDto[];
@@ -315,6 +347,8 @@ export interface TripSnapshot {
   expenses: ExpenseDto[];
   settlements: SettlementDto[];
   deposits: DepositDto[];
+  /** Receipts / confirmations (metadata only – the file is loaded on demand). */
+  documents: DocumentDto[];
   exchangeRates: ExchangeRateDto[];
   packingLists: PackingListDto[];
   packingItems: PackingItemDto[];

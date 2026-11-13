@@ -1,4 +1,5 @@
 import { SlidersHorizontal, Trash2 } from 'lucide-react';
+import { DocumentList } from '../documents/DocumentList';
 import { useMemo, useState, type FormEvent } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory, type FxSource, type SplitMethod } from '../../../shared/constants';
 import { convertMinor, minorToInput, normalizeRate, parseAmount, sum } from '../../../shared/money';
@@ -480,6 +481,11 @@ export default function ExpenseSheet({ open, onClose, expense }: { open: boolean
           )}
           <TextAreaField label={t.common.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           </>
+          )}
+          {expense && (
+            <Field label={t.documents.section}>
+              <DocumentList snap={snap!} expenseId={expense.id} bookingId={expense.bookingId ?? undefined} canEdit />
+            </Field>
           )}
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">

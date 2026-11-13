@@ -47,6 +47,7 @@ import * as plan from '../services/plan';
 import { processSyncOps } from '../services/sync';
 import { setVote } from '../services/votes';
 import * as deposits from '../services/deposits';
+import * as docs from '../services/documents';
 import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
@@ -285,6 +286,55 @@ r.post('/:tripId/deposits', async (c) => {
   const deposit = await deposits.createDeposit(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, depositCreateSchema));
   await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'deposit', entityId: deposit.id, action: 'create' });
   return c.json({ deposit }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Documents (receipts / confirmations)
+// ---------------------------------------------------------------------------
+
+r.post('/:tripId/documents', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  const name = decodeURIComponent(c.req.header('x-filename') ?? 'Beleg');
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  const doc = await docs.createDocument(c.env.DB, c.env.AI, t.tripId, currentUser(c).id, { name, mime, bytes }, {
+    bookingId: c.req.query('bookingId') || null,
+    expenseId: c.req.query('expenseId') || null,
+  });
+  await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'document', entityId: doc.id, action: 'create' });
+  return c.json({ document: doc }, 201);
+});
+
+r.get('/:tripId/documents/:id/file', async (c) => {
+  const f = await docs.getDocumentFile(c.env.DB, c.get('trip').tripId, c.req.param('id'));
+  return new Response(f.bytes, {
+    headers: {
+      'Content-Type': f.mime,
+      'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(f.filename)}`,
+      'Cache-Control': 'private, max-age=3600',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+});
+
+r.patch('/:tripId/documents/:id', async (c) => {
+  requireRole(c, 'editor');
+  const links = await parseJson(c, z.object({ bookingId: z.string().uuid().nullable().optional(), expenseId: z.string().uuid().nullable().optional() }));
+  return c.json({ document: await docs.linkDocument(c.env.DB, c.get('trip').tripId, c.req.param('id'), links) });
+});
+
+r.post('/:tripId/documents/:id/analyze', async (c) => {
+  requireRole(c, 'editor');
+  return c.json({ document: await docs.reanalyzeDocument(c.env.DB, c.env.AI, c.get('trip').tripId, c.req.param('id')) });
+});
+
+r.delete('/:tripId/documents/:id', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  await docs.deleteDocument(c.env.DB, t.tripId, c.req.param('id'));
+  await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'document', entityId: c.req.param('id'), action: 'delete' });
+  return c.json({ ok: true });
 });
 
 /** Rent + deposit paid together on the spot (several contributors). */

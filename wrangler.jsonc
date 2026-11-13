@@ -23,7 +23,9 @@
       "database_id": "857a5ba6-2e84-4655-b1f2-b5a9da0347c1",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  // Workers AI reads uploaded receipts (documents stay in this account).
+  "ai": { "binding": "AI" }
   // Future: private bucket for booking documents (create it first with
   // `npx wrangler r2 bucket create travio-documents`, then uncomment):
   // "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "travio-documents" }]

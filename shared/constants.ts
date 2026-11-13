@@ -120,6 +120,8 @@ export const TRAVELER_COLORS = ['#35D6BE', '#F2A65A', '#8EA8FF', '#F27A9B', '#B8
 
 /** Request body limit for the JSON API (bytes). */
 export const MAX_JSON_BODY_BYTES = 256 * 1024;
+/** Upload limit for receipts (stored in D1, which allows ~2 MB per value). */
+export const MAX_UPLOAD_BYTES = 1_900_000;
 
 export const SESSION_TTL_DAYS = 30;
 export const INVITATION_TTL_HOURS_DEFAULT = 72;

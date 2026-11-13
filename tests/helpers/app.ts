@@ -49,6 +49,25 @@ export class Client {
     }
     return { status: res.status, body: json, headers: res.headers };
   }
+  /** Raw file upload (like the app's receipt upload). */
+  async upload(path: string, bytes: Uint8Array, mime: string, filename: string) {
+    const headers: Record<string, string> = { origin: ORIGIN, 'x-travio-csrf': '1', 'content-type': mime, 'x-filename': encodeURIComponent(filename), 'content-length': String(bytes.byteLength) };
+    if (this.cookie) headers.cookie = this.cookie;
+    const res = await this.t.app.fetch(
+      new Request(`${ORIGIN}/api/v1${path}`, { method: 'POST', headers, body: bytes }),
+      this.t.env,
+      { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext,
+    );
+    const text = await res.text();
+    let json: unknown;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = text;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { status: res.status, body: json as any, headers: res.headers, raw: text };
+  }
   get(p: string) {
     return this.req('GET', p);
   }

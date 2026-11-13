@@ -18,6 +18,7 @@ import { money } from '../../lib/format';
 import { DepositSheet, ResolveDepositSheet } from '../wallet/DepositSheet';
 import { PayersInput, resolvePayers, type PayersValue } from '../wallet/PayersInput';
 import { JointPaymentSheet } from '../wallet/JointPaymentSheet';
+import { DocumentList } from '../documents/DocumentList';
 import type { BookingDto, DepositDto, DepositMethod, TripSnapshot } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField, TimeZoneSelect } from '../../components/inputs';
@@ -27,7 +28,33 @@ import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { tripStore, useOnline } from '../../lib/store';
 
-export default function BookingSheet({ open, onClose, booking }: { open: boolean; onClose: () => void; booking?: BookingDto | null }) {
+export interface BookingPrefill {
+  title?: string | null;
+  type?: BookingType | null;
+  provider?: string | null;
+  reference?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  priceMinor?: number | null;
+  currency?: string | null;
+  paymentStatus?: PaymentStatus;
+  personsCount?: number | null;
+}
+
+export default function BookingSheet({
+  open,
+  onClose,
+  booking,
+  prefill,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  booking?: BookingDto | null;
+  /** Values for a new booking, e.g. recognised from a receipt. */
+  prefill?: BookingPrefill;
+  onSaved?: (booking: BookingDto) => void;
+}) {
   const { snap, me } = useTrip();
   const online = useOnline();
   const { trip, destinations, travelers } = snap!;
@@ -45,15 +72,16 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
   const defaultTz = destinations[0]?.timezone ?? trip.homeTimezone;
   const b = booking;
   const linkedDeposits = b ? (snap!.deposits ?? []).filter((d) => d.bookingId === b.id) : [];
+  const pf = b ? undefined : prefill;
   const [form, setForm] = useState(() => ({
-    title: b?.title ?? '',
-    type: (b?.type ?? 'hotel') as BookingType,
-    provider: b?.provider ?? '',
-    reference: b?.reference ?? '',
-    startDate: b?.startDate ?? '',
+    title: b?.title ?? pf?.title ?? '',
+    type: (b?.type ?? pf?.type ?? 'hotel') as BookingType,
+    provider: b?.provider ?? pf?.provider ?? '',
+    reference: b?.reference ?? pf?.reference ?? '',
+    startDate: b?.startDate ?? pf?.startDate ?? '',
     startTime: b?.startTime ?? '',
     startTimezone: b?.startTimezone ?? defaultTz,
-    endDate: b?.endDate ?? '',
+    endDate: b?.endDate ?? pf?.endDate ?? '',
     endTime: b?.endTime ?? '',
     endTimezone: b?.endTimezone ?? defaultTz,
     fromLocation: b?.fromLocation ?? '',
@@ -62,14 +90,14 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
     destinationId: b?.destinationId ?? '',
     fromDestinationId: b?.fromDestinationId ?? '',
     toDestinationId: b?.toDestinationId ?? '',
-    price: b?.priceMinor != null && b.currency ? minorToInput(b.priceMinor, b.currency) : '',
-    currency: b?.currency ?? trip.baseCurrency,
-    personsCount: b?.personsCount ? String(b.personsCount) : '',
+    price: b?.priceMinor != null && b.currency ? minorToInput(b.priceMinor, b.currency) : pf?.priceMinor != null && pf.currency ? minorToInput(pf.priceMinor, pf.currency) : '',
+    currency: b?.currency ?? pf?.currency ?? trip.baseCurrency,
+    personsCount: b?.personsCount ? String(b.personsCount) : pf?.personsCount ? String(pf.personsCount) : '',
     unitPrice: b?.unitPriceMinor != null && b.currency ? minorToInput(b.unitPriceMinor, b.currency) : '',
     unitPriceNote: b?.unitPriceNote ?? '',
     costKind: (b?.costKind ?? 'actual') as CostKind,
-    bookingStatus: (b?.bookingStatus ?? 'planned') as BookingStatus,
-    paymentStatus: (b?.paymentStatus ?? 'unknown') as PaymentStatus,
+    bookingStatus: (b?.bookingStatus ?? (pf ? 'booked' : 'planned')) as BookingStatus,
+    paymentStatus: (b?.paymentStatus ?? pf?.paymentStatus ?? 'unknown') as PaymentStatus,
     paidByTravelerId: b?.paidByTravelerId ?? '',
     clarificationNote: b?.clarificationNote ?? '',
     notes: b?.notes ?? '',
@@ -149,6 +177,7 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
             bookingId: res.booking.id,
           });
         }
+        onSaved?.(res.booking);
         return res;
       });
       toast(t.success.saved);
@@ -383,10 +412,15 @@ export default function BookingSheet({ open, onClose, booking }: { open: boolean
 
           <TextAreaField label={t.bookings.clarification} optional placeholder={t.bookings.clarificationHint} value={form.clarificationNote} onChange={(e) => set('clarificationNote', e.target.value)} />
           <TextAreaField label={t.bookings.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
-          <div className="flex items-center gap-3 rounded-[1.25rem] border border-dashed border-line-strong p-4 text-[13px] text-text-3">
-            <FileText size={18} className="shrink-0" />
-            {t.bookings.documentsPlanned}
-          </div>
+          <Field label={t.documents.section}>
+            {b ? (
+              <DocumentList snap={snap!} bookingId={b.id} expenseId={b.expenseId ?? undefined} canEdit />
+            ) : (
+              <p className="flex items-center gap-2 text-[13px] text-text-3">
+                <FileText size={16} className="shrink-0" /> {t.documents.afterSave}
+              </p>
+            )}
+          </Field>
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
               {error}

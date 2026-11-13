@@ -4,7 +4,7 @@
  */
 import type { MiddlewareHandler } from 'hono';
 import type { z } from 'zod';
-import { MAX_JSON_BODY_BYTES, ROLE_RANK, type Role } from '../../shared/constants';
+import { MAX_JSON_BODY_BYTES, MAX_UPLOAD_BYTES, ROLE_RANK, type Role } from '../../shared/constants';
 import { buildCookie, cookieName, isSecureRequest, loadSession, readCookie } from '../auth/session';
 import { ApiError, fromZod } from '../lib/errors';
 import type { AppContext, AppEnv } from '../types';
@@ -65,7 +65,9 @@ export const csrfProtection: MiddlewareHandler<AppEnv> = async (c, next) => {
 export const bodyLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (UNSAFE_METHODS.has(c.req.method)) {
     const len = Number(c.req.header('content-length') ?? '0');
-    if (len > MAX_JSON_BODY_BYTES) throw new ApiError('payload_too_large', 'Anfrage ist zu groß');
+    // File uploads (receipts) have their own, larger limit.
+    const limit = /\/trips\/[^/]+\/documents$/.test(new URL(c.req.url).pathname) ? MAX_UPLOAD_BYTES : MAX_JSON_BODY_BYTES;
+    if (len > limit) throw new ApiError('payload_too_large', limit === MAX_UPLOAD_BYTES ? 'Die Datei ist zu groß (max. 1,9 MB).' : 'Anfrage ist zu groß');
   }
   await next();
 };

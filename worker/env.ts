@@ -11,6 +11,8 @@ export interface Env {
    * Configure via `wrangler secret put SETUP_TOKEN` (production) or .dev.vars.
    */
   SETUP_TOKEN?: string;
+  /** Workers AI – reads uploaded receipts / confirmations. */
+  AI?: Ai;
   /** Future: private R2 bucket for booking documents. */
   DOCUMENTS?: R2Bucket;
 }

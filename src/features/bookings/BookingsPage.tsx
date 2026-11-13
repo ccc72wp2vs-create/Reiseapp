@@ -1,9 +1,9 @@
-import { ArrowRight, CircleHelp, Clock, Plus, Ticket, Wallet } from 'lucide-react';
+import { ArrowRight, CircleHelp, Clock, Plus, Ticket, Wallet, FileUp } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 import { costInfo, summarizeBookingCosts } from '../../../shared/costs';
 import { normalizeRate } from '../../../shared/money';
 import { bookingSortKey, isTransport, todayIn } from '../../../shared/trip';
-import type { BookingDto, TripSnapshot } from '../../../shared/types';
+import type { DocumentDto, BookingDto, TripSnapshot } from '../../../shared/types';
 import { PageHeader, useTrip } from '../../components/AppShell';
 import { BookingBadges, BookingIcon } from '../../components/status';
 import { toast } from '../../components/toast';
@@ -15,6 +15,7 @@ import { tripStore, useOnline } from '../../lib/store';
 import { suggestedRate } from '../wallet/ExpenseSheet';
 
 const BookingSheet = lazy(() => import('./BookingSheet'));
+const DocumentImportSheet = lazy(() => import('../documents/DocumentImportSheet').then((m) => ({ default: m.DocumentImportSheet })));
 
 export default function BookingsPage() {
   const { snap } = useTrip();
@@ -35,6 +36,8 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
   const online = useOnline();
   const [editing, setEditing] = useState<BookingDto | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState<false | true | DocumentDto>(false);
+  const unassigned = (snap?.documents ?? []).filter((d) => !d.bookingId && !d.expenseId);
   const [toWallet, setToWallet] = useState<BookingDto | null>(null);
   const { trip, bookings, destinations } = snap;
   const today = todayIn(destinations[0]?.timezone ?? trip.homeTimezone);
@@ -51,13 +54,31 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
         eyebrow={trip.name}
         action={
           canEdit && (
-            <IconButton label={t.bookings.add} variant="primary" disabled={!online} onClick={() => setCreating(true)}>
-              <Plus size={22} />
-            </IconButton>
+            <>
+              <IconButton label={t.documents.importTitle} disabled={!online} onClick={() => setImporting(true)}>
+                <FileUp size={20} />
+              </IconButton>
+              <IconButton label={t.bookings.add} variant="primary" disabled={!online} onClick={() => setCreating(true)}>
+                <Plus size={22} />
+              </IconButton>
+            </>
           )
         }
       />
       <div className="px-safe pt-5">
+        {canEdit && unassigned.length > 0 && (
+          <div className="mb-4 rounded-[1.25rem] border border-warn/35 bg-warn-soft p-4">
+            <p className="text-[14px] font-semibold">{t.documents.unassigned(unassigned.length)}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {unassigned.map((d) => (
+                <button key={d.id} type="button" onClick={() => setImporting(d)} className="inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-semibold">
+                  <FileUp size={14} className="shrink-0" />
+                  <span className="truncate">{d.extracted?.title ?? d.filename}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {bookings.length === 0 ? (
           <EmptyState icon={<Ticket size={26} />} title={t.bookings.empty} text={t.bookings.emptyText} action={canEdit && <Button icon={<Plus size={18} />} disabled={!online} onClick={() => setCreating(true)}>{t.bookings.add}</Button>} />
         ) : (
@@ -120,6 +141,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
       </div>
       <Suspense fallback={null}>
         {creating && <BookingSheet open onClose={() => setCreating(false)} />}
+        {importing && <DocumentImportSheet document={importing === true ? null : importing} onClose={() => setImporting(false)} />}
         {editing && <BookingSheet key={editing.id} open booking={editing} onClose={() => setEditing(null)} />}
       </Suspense>
       {toWallet && <ToWalletSheet booking={toWallet} snap={snap} onClose={() => setToWallet(null)} />}

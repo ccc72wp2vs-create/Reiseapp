@@ -51,7 +51,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
     // TRAVIO_PERSIST lets E2E tests use an isolated local D1 state.
-    cloudflare({ persistState: process.env.TRAVIO_PERSIST ? { path: process.env.TRAVIO_PERSIST } : true }),
+    cloudflare({
+      persistState: process.env.TRAVIO_PERSIST ? { path: process.env.TRAVIO_PERSIST } : true,
+      // Workers AI only runs remotely – local E2E runs (and TRAVIO_NO_AI=1) work without it;
+      // receipts are then stored without recognition.
+      ...(process.env.TRAVIO_PERSIST || process.env.TRAVIO_NO_AI ? { config: (c: { ai?: unknown }) => void (c.ai = undefined) } : {}),
+    }),
     serviceWorker(),
   ],
   define: {

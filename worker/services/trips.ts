@@ -14,6 +14,7 @@ import { listVisiblePacking } from './packing';
 import { attachTravelers } from './bookings';
 import { attachVotes } from './votes';
 import { listDeposits } from './deposits';
+import { listDocuments } from './documents';
 
 type Row = Record<string, unknown>;
 
@@ -185,7 +186,7 @@ export async function buildSnapshot(
 ): Promise<TripSnapshot | null> {
   const trip = await getTripDto(db, tripId, role);
   if (!trip) return null;
-  const [members, travelers, destinations, activities, places, bookings, expenses, settlements, exchangeRates, depositList, packing] =
+  const [members, travelers, destinations, activities, places, bookings, expenses, settlements, exchangeRates, depositList, documents, packing] =
     await Promise.all([
       listMembers(db, tripId),
       listEntities<TripSnapshot['travelers'][number]>(db, travelerSpec, tripId),
@@ -197,6 +198,7 @@ export async function buildSnapshot(
       listSettlements(db, tripId),
       listExchangeRates(db, tripId),
       listDeposits(db, tripId),
+      listDocuments(db, tripId),
       listVisiblePacking(db, tripId, userId),
     ]);
   return {
@@ -210,6 +212,7 @@ export async function buildSnapshot(
     expenses,
     settlements,
     deposits: depositList,
+    documents,
     exchangeRates,
     packingLists: packing.lists,
     packingItems: packing.items,
