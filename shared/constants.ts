@@ -116,7 +116,13 @@ export type PackingCategory = (typeof PACKING_CATEGORIES)[number];
 export const PACKING_VISIBILITIES = ['shared', 'private'] as const;
 export type PackingVisibility = (typeof PACKING_VISIBILITIES)[number];
 
-export const TRAVELER_COLORS = ['#35D6BE', '#F2A65A', '#8EA8FF', '#F27A9B', '#B8E06A', '#C59BFF', '#5AC8F2', '#F2D45A'];
+/**
+ * Traveller colours, tuned to the Midnight & Ice Blue palette: soft, clearly
+ * distinguishable, readable with navy initials, and kept apart from the status
+ * colours (green = paid, orange = open, red = error).
+ * Order follows the previous palette so everyone keeps their colour family.
+ */
+export const TRAVELER_COLORS = ['#79AFC7', '#D9B88A', '#9AA8E8', '#D99AB0', '#A3C49A', '#B9A3E3', '#7FB8B0', '#E3CF8F'];
 
 /** Request body limit for the JSON API (bytes). */
 export const MAX_JSON_BODY_BYTES = 256 * 1024;
