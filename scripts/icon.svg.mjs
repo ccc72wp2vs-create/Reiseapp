@@ -1,4 +1,4 @@
-/** TRAVIO app icon as SVG (shared by favicon + PNG generation). */
+/** TRAVIO app icon ("T" as a route) as SVG (shared by favicon + PNG generation). */
 export function iconSvg({ rounded = true, scale = 1 } = {}) {
   const r = rounded ? 116 : 0;
   const s = scale;
@@ -21,10 +21,11 @@ export function iconSvg({ rounded = true, scale = 1 } = {}) {
   <rect width="512" height="512" rx="${r}" fill="url(#bg)"/>
   <rect width="512" height="512" rx="${r}" fill="url(#glow)"/>
   <g transform="translate(${c * (1 - s)} ${c * (1 - s)}) scale(${s})">
-    <circle cx="256" cy="272" r="118" fill="none" stroke="url(#ac)" stroke-width="30"/>
-    <path d="M256 96 L288 240 L256 272 L224 240 Z" fill="#F8F6F1"/>
-    <path d="M256 448 L224 304 L256 272 L288 304 Z" fill="url(#ac)"/>
-    <path d="M86 372 C182 324 330 324 426 372" stroke="#F8F6F1" stroke-opacity="0.5" stroke-width="18" fill="none" stroke-linecap="round"/>
+    <!-- "T" whose crossbar is the travel route: start, stops, destination -->
+    <path d="M130 176 Q 256 120 382 176" fill="none" stroke="#F8F6F1" stroke-width="20" stroke-linecap="round" stroke-dasharray="0.1 36"/>
+    <circle cx="130" cy="176" r="28" fill="#F8F6F1"/>
+    <circle cx="382" cy="176" r="28" fill="url(#ac)"/>
+    <rect x="230" y="176" width="52" height="220" rx="26" fill="url(#ac)"/>
   </g>
 </svg>`;
 }

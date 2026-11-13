@@ -183,18 +183,19 @@ function Coast({ id }: { id: string }) {
 export function Logo({ size = 28, withWordmark = true, className }: { size?: number; withWordmark?: boolean; className?: string }) {
   return (
     <span className={cx('inline-flex items-center gap-2.5', className)}>
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+      <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden>
         <defs>
           <linearGradient id="travio-logo" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#5ee3cf" />
             <stop offset="1" stopColor="#1fae98" />
           </linearGradient>
         </defs>
-        <rect width="64" height="64" rx="18" fill="#0b1524" />
-        <circle cx="32" cy="34" r="15" fill="none" stroke="url(#travio-logo)" strokeWidth="4" />
-        <path d="M32 12 L36 30 L32 34 L28 30 Z" fill="#f8f6f1" />
-        <path d="M32 56 L28 38 L32 34 L36 38 Z" fill="url(#travio-logo)" />
-        <path d="M10 46 C22 40 42 40 54 46" stroke="#f8f6f1" strokeOpacity="0.5" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        <rect width="512" height="512" rx="144" fill="#0b1524" />
+        {/* "T" whose crossbar is the travel route */}
+        <path d="M130 176 Q 256 120 382 176" fill="none" stroke="#f8f6f1" strokeWidth="22" strokeLinecap="round" strokeDasharray="0.1 40" />
+        <circle cx="130" cy="176" r="32" fill="#f8f6f1" />
+        <circle cx="382" cy="176" r="32" fill="url(#travio-logo)" />
+        <rect x="226" y="176" width="60" height="220" rx="30" fill="url(#travio-logo)" />
       </svg>
       {withWordmark && <span className="font-display text-[22px] font-semibold tracking-[0.18em]">TRAVIO</span>}
     </span>
