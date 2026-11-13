@@ -179,24 +179,11 @@ function Coast({ id }: { id: string }) {
   );
 }
 
-/** TRAVIO wordmark + compass-sun symbol. */
+/** TRAVIO app icon (+ optional wordmark). */
 export function Logo({ size = 28, withWordmark = true, className }: { size?: number; withWordmark?: boolean; className?: string }) {
   return (
     <span className={cx('inline-flex items-center gap-2.5', className)}>
-      <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden>
-        <defs>
-          <linearGradient id="travio-logo" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#d8e9f0" />
-            <stop offset="1" stopColor="#79afc7" />
-          </linearGradient>
-        </defs>
-        <rect width="512" height="512" rx="144" fill="#101b33" />
-        {/* "T" whose crossbar is the travel route */}
-        <path d="M130 176 Q 256 120 382 176" fill="none" stroke="#f5f9fc" strokeWidth="22" strokeLinecap="round" strokeDasharray="0.1 40" />
-        <circle cx="130" cy="176" r="32" fill="#f5f9fc" />
-        <circle cx="382" cy="176" r="32" fill="url(#travio-logo)" />
-        <rect x="226" y="176" width="60" height="220" rx="30" fill="url(#travio-logo)" />
-      </svg>
+      <img src="/icons/icon-192.png" width={size} height={size} alt="" aria-hidden className="shrink-0 rounded-[22%]" draggable={false} />
       {withWordmark && <span className="font-display text-[22px] font-semibold tracking-[0.18em]">TRAVIO</span>}
     </span>
   );
