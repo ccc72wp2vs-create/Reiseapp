@@ -38,7 +38,7 @@ import { PersonFilter, usePersonSelection } from '../../components/PersonFilter'
 import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Sheet, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
-import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
+import { formatDate, formatDateShort, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
 import { CurrencyConverter } from '../../components/CurrencyConverter';
 import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
@@ -96,15 +96,10 @@ function HomeSkeleton() {
   );
 }
 
-function greeting() {
-  const h = new Date().getHours();
-  return h < 11 ? t.home.greeting.morning : h < 18 ? t.home.greeting.day : t.home.greeting.evening;
-}
-
 type SheetKind = 'activity' | 'expense' | 'destination' | null;
 
 function Dashboard({ snap }: { snap: TripSnapshot }) {
-  const { canEdit, user } = useTrip();
+  const { canEdit } = useTrip();
   const online = useOnline();
   const navigate = useNavigate();
   const [sheet, setSheet] = useState<SheetKind>(null);
@@ -138,15 +133,15 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   return (
     <div>
       {/* ------------------------------------------------------------------ Hero */}
-      <section className="relative">
+      <section className="relative flex min-h-[max(31dvh,250px)] flex-col justify-end">
         <CoverArt
           name={heroDest?.name ?? trip.name}
           imageUrl={heroDest?.coverImageUrl ?? trip.coverImageUrl}
-          className="h-[56dvh] min-h-[380px] w-full rounded-b-[2.25rem]"
+          className="absolute inset-0 h-full w-full rounded-b-[2.25rem]"
           label={heroDest?.name ?? trip.name}
         />
         <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#101b33]/90 from-0% via-[#101b33]/50 via-40% to-transparent to-80%" aria-hidden />
-        <div className="absolute inset-x-0 top-0 px-safe pt-safe">
+        <div className="absolute inset-x-0 top-0 z-10 px-safe pt-safe">
           <div className="flex items-center justify-end pt-2 text-sand">
             <Link
               to="/reisen"
@@ -158,18 +153,14 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             </Link>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f5f9fc] [text-shadow:0_1px_10px_rgb(16_27_51/0.45)]">
-          <p className="text-[14px] font-medium text-white/85">
-            {greeting()}
-            {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}
-          </p>
-          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#d8e9f0]">
+        <div className="relative px-safe pb-[18px] pt-[calc(max(env(safe-area-inset-top),0.75rem)+3.75rem)] text-[#f5f9fc] [text-shadow:0_1px_10px_rgb(16_27_51/0.45)]">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#d8e9f0]">
             {phase.phase === 'during' ? t.home.currentDestination : phase.phase === 'before' ? t.home.beforeTrip : t.phase.after}
           </p>
-          <h1 className="font-display text-[clamp(44px,13vw,68px)] font-semibold leading-[0.95]">
+          <h1 className="font-display text-[clamp(38px,11.5vw,56px)] font-semibold leading-[0.95]">
             {phase.phase === 'after' ? trip.name : (heroDest?.name ?? trip.name)}
           </h1>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-[14px]">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[14px]">
             {phase.phase === 'during' && (
               <>
                 <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">{t.phase.during(phase.day, phase.totalDays)}</span>
@@ -453,7 +444,7 @@ function TripProgress({ snap, today }: { snap: TripSnapshot; today: string }) {
   const ds = snap.destinations;
   if (!ds.length) return null;
   return (
-    <ol className="mt-5 flex items-center gap-1.5" aria-label={t.trips.route}>
+    <ol className="mt-3.5 flex items-center gap-1.5" aria-label={t.trips.route}>
       {ds.map((d) => {
         const state = d.departureDate <= today ? 'done' : d.arrivalDate <= today ? 'now' : 'next';
         return (
