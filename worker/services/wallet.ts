@@ -501,3 +501,46 @@ export async function deleteExchangeRate(db: D1Database, tripId: string, id: str
   const res = await db.prepare('DELETE FROM exchange_rates WHERE id = ? AND trip_id = ?').bind(id, tripId).run();
   if (res.meta.changes === 0) throw new ApiError('not_found', 'Kurs nicht gefunden');
 }
+
+/**
+ * Links an existing wallet expense to a booking that describes the same cost
+ * (e.g. the ferry was paid on site and entered as an expense while the
+ * booking still held an estimate). The expense stays the single source of
+ * the amount; the booking takes over the real price, becomes "paid" and is
+ * then counted only once (via the wallet) everywhere.
+ */
+export async function linkExpenseToBooking(db: D1Database, tripId: string, expenseId: string, bookingId: string) {
+  const e = await getExpense(db, tripId, expenseId);
+  if (!e) throw new ApiError('not_found', 'Ausgabe nicht gefunden');
+  if (e.bookingId) throw new ApiError('conflict', 'Diese Ausgabe ist schon mit einer Buchung verknüpft');
+  const b = await db
+    .prepare('SELECT id, booking_status, (SELECT id FROM expenses x WHERE x.booking_id = bookings.id) AS expense_id FROM bookings WHERE id = ? AND trip_id = ?')
+    .bind(bookingId, tripId)
+    .first<{ id: string; booking_status: string; expense_id: string | null }>();
+  if (!b) throw new ApiError('not_found', 'Buchung nicht gefunden');
+  if (b.expense_id) throw new ApiError('conflict', 'Diese Buchung ist bereits in der Reisekasse erfasst');
+  if (b.booking_status === 'cancelled') throw new ApiError('validation_failed', 'Stornierte Buchungen können nicht verknüpft werden');
+  const payer = e.payers.length === 1 ? e.payers[0].travelerId : null;
+  const now = nowIso();
+  try {
+    const [ex] = await db.batch([
+      db
+        .prepare('UPDATE expenses SET booking_id = ?, version = version + 1, updated_at = ? WHERE id = ? AND trip_id = ? AND booking_id IS NULL')
+        .bind(bookingId, now, expenseId, tripId),
+      db
+        .prepare(
+          `UPDATE bookings SET price_minor = ?, currency = ?, cost_kind = 'actual', payment_status = 'paid',
+             paid_by_traveler_id = COALESCE(?, paid_by_traveler_id), unit_price_minor = NULL, clarification_note = NULL,
+             version = version + 1, updated_at = ?
+           WHERE id = ? AND trip_id = ? AND EXISTS (SELECT 1 FROM expenses x WHERE x.id = ? AND x.booking_id = bookings.id)`,
+        )
+        .bind(e.amountMinor, e.currency, payer, now, bookingId, tripId, expenseId),
+    ]);
+    if (!ex.meta.changes) throw new ApiError('conflict', 'Die Ausgabe wurde inzwischen geändert – bitte neu laden.');
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (String(err).includes('UNIQUE')) throw new ApiError('conflict', 'Diese Buchung ist bereits in der Reisekasse erfasst');
+    throw err;
+  }
+  return (await getExpense(db, tripId, expenseId))!;
+}

@@ -4,6 +4,8 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory, type FxSource, type SplitMethod } from '../../../shared/constants';
 import { convertMinor, minorToInput, normalizeRate, parseAmount, sum } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
+import { bookingsMatchingExpense } from '../../../shared/match';
+import { Link2 } from 'lucide-react';
 import type { ExpenseDto } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField } from '../../components/inputs';
@@ -104,11 +106,22 @@ export default function ExpenseSheet({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  // Same cost already planned as a booking? Offer to link instead of counting twice.
+  const [linkTo, setLinkTo] = useState<string | null>(null);
+  const [noLink, setNoLink] = useState<string[]>([]);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const presets = useMemo(() => splitPresets(travelers, expenses, snap!.bookings), [travelers, expenses, snap]);
   const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
   const amountMinor = form.amount.trim() ? parseAmount(form.amount, form.currency) : null;
+  const bookingMatch = useMemo(
+    () =>
+      bookingsMatchingExpense(
+        { title: form.title, amountMinor: amountMinor ?? 0, currency: form.currency, date: form.date, category: form.category, bookingId: expense?.bookingId ?? null },
+        snap!.bookings,
+      ).find((m) => !noLink.includes(m.item.id)) ?? null,
+    [form.title, amountMinor, form.currency, form.date, form.category, expense?.bookingId, snap, noLink],
+  );
   const needsRate = form.currency !== base;
   const rateNorm = needsRate ? normalizeRate(form.rate) : '1';
   const stored = needsRate ? suggestedRate(exchangeRates, expenses, form.currency, form.date) : null;
@@ -207,11 +220,15 @@ export default function ExpenseSheet({
         if (offerSave && saveRate) {
           await http.post(`/trips/${trip.id}/exchange-rates`, { currency: form.currency, rate: rateNorm, effectiveDate: form.date });
         }
-        return expense
-          ? http.put(`/trips/${trip.id}/expenses/${expense.id}`, { ...payload, version: expense.version })
-          : http.post(`/trips/${trip.id}/expenses`, payload);
+        const res = await (expense
+          ? http.put<{ expense: ExpenseDto }>(`/trips/${trip.id}/expenses/${expense.id}`, { ...payload, version: expense.version })
+          : http.post<{ expense: ExpenseDto }>(`/trips/${trip.id}/expenses`, payload));
+        if (linkTo && bookingMatch?.item.id === linkTo) {
+          await http.post(`/trips/${trip.id}/expenses/${res.expense.id}/link-booking`, { bookingId: linkTo });
+        }
+        return res;
       });
-      toast(t.success.saved);
+      toast(linkTo ? 'Gespeichert und mit der Buchung verknüpft – zählt nur einmal' : t.success.saved);
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -249,6 +266,35 @@ export default function ExpenseSheet({
         <form id="expense-form" onSubmit={submit} className="space-y-4" noValidate>
           {!online && <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[14px] text-warn">{t.errors.offlineAction}</p>}
           {expense?.bookingId && <Badge tone="info">{t.wallet.fromBooking}</Badge>}
+          {bookingMatch && (
+            <div className={cx('rounded-[1.25rem] border p-4', linkTo ? 'border-accent/40 bg-accent-soft' : 'border-warn/35 bg-warn-soft')}>
+              <p className="flex items-start gap-2 text-[14px] font-semibold leading-snug">
+                <Link2 size={17} className={cx('mt-0.5 shrink-0', linkTo ? 'text-accent' : 'text-warn')} />
+                Gehört das zur Buchung „{bookingMatch.item.title}“?
+              </p>
+              <p className="mt-1 pl-[25px] text-[13px] text-text-2">
+                {[
+                  bookingMatch.item.startDate ? formatDate(bookingMatch.item.startDate) : null,
+                  bookingMatch.item.priceMinor != null && bookingMatch.item.currency
+                    ? `${bookingMatch.item.costKind === 'actual' ? '' : 'geschätzt '}${money(bookingMatch.item.priceMinor, bookingMatch.item.currency)}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                {linkTo ? ' – wird verknüpft: Der Betrag zählt nur einmal, die Buchung gilt als bezahlt.' : ' – sonst zählt der Betrag doppelt.'}
+              </p>
+              <div className="mt-3 flex gap-2 pl-[25px]">
+                <Button size="sm" variant={linkTo ? 'primary' : 'secondary'} onClick={() => setLinkTo(linkTo ? null : bookingMatch.item.id)}>
+                  {linkTo ? 'Wird verknüpft ✓' : 'Ja, verknüpfen'}
+                </Button>
+                {!linkTo && (
+                  <Button size="sm" variant="ghost" onClick={() => setNoLink((l) => [...l, bookingMatch.item.id])}>
+                    Nein, eigene Ausgabe
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
           {!quick && <TextField label={t.wallet.titleField} required autoFocus={!expense} value={form.title} onChange={(e) => set('title', e.target.value)} />}
           <MoneyField
             label={t.wallet.amount}

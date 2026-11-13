@@ -421,6 +421,14 @@ r.post('/:tripId/google/match/:placeId', async (c) => {
   return c.json({ googlePlaceId: ids[0] ?? null });
 });
 
+/** Links an existing expense to the booking it pays for (prevents double counting). */
+r.post('/:tripId/expenses/:id/link-booking', async (c) => {
+  requireRole(c, 'editor');
+  const { bookingId } = await parseJson(c, z.object({ bookingId: z.string().uuid() }));
+  const expense = await wallet.linkExpenseToBooking(c.env.DB, c.get('trip').tripId, c.req.param('id'), bookingId);
+  return c.json({ expense });
+});
+
 /* Documents stored by an earlier app version: view, re-link or delete only. */
 r.get('/:tripId/documents/:id/file', async (c) => {
   const f = await docs.getDocumentFile(c.env.DB, c.get('trip').tripId, c.req.param('id'));

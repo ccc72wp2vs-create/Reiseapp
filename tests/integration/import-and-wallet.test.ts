@@ -345,4 +345,36 @@ describe('wallet API', () => {
     expect(ed.body.expense.payers).toEqual([{ travelerId: ids[3], amountMinor: 100000, baseAmountMinor: 2620 }]);
     expect(ed.body.expense.paidByTravelerId).toBe(ids[3]);
   });
+
+  it('links an existing expense to the booking it pays for – counted once, balances unchanged', async () => {
+    const tripId = (await importThailand()).body.tripId;
+    const s1 = await snapshot(tripId);
+    const ferry = s1.bookings.find((b) => b.type === 'ferry' && !b.expenseId)!;
+    const payer = s1.travelers[0];
+    const exp = (
+      await owner.post(`/trips/${tripId}/expenses`, {
+        title: 'Fähre nach Krabi', amountMinor: 9000, currency: 'EUR', date: '2026-11-13', category: 'transportation',
+        paidByTravelerId: payer.id, splitMethod: 'equal', splits: s1.travelers.map((x) => ({ travelerId: x.id })),
+      })
+    ).body.expense;
+    const before = await snapshot(tripId);
+    const r = await owner.post(`/trips/${tripId}/expenses/${exp.id}/link-booking`, { bookingId: ferry.id });
+    expect(r.status).toBe(200);
+    const after = await snapshot(tripId);
+    const b = after.bookings.find((x) => x.id === ferry.id)!;
+    expect(b).toMatchObject({ expenseId: exp.id, priceMinor: 9000, currency: 'EUR', costKind: 'actual', paymentStatus: 'paid', paidByTravelerId: payer.id, clarificationNote: null });
+    expect(after.expenses).toHaveLength(before.expenses.length);
+    expect(after.expenses.find((e) => e.id === exp.id)!.shares).toEqual(before.expenses.find((e) => e.id === exp.id)!.shares);
+    // A second link is refused in both directions.
+    expect((await owner.post(`/trips/${tripId}/expenses/${exp.id}/link-booking`, { bookingId: ferry.id })).status).toBe(409);
+    const other = (
+      await owner.post(`/trips/${tripId}/expenses`, {
+        title: 'Noch eine Fähre', amountMinor: 100, currency: 'EUR', date: '2026-11-13', category: 'transportation',
+        paidByTravelerId: payer.id, splitMethod: 'equal', splits: [{ travelerId: payer.id }],
+      })
+    ).body.expense;
+    expect((await owner.post(`/trips/${tripId}/expenses/${other.id}/link-booking`, { bookingId: ferry.id })).status).toBe(409);
+    expect((await snapshot(tripId)).bookings.find((x) => x.id === ferry.id)!.priceMinor).toBe(9000);
+  });
 });
+

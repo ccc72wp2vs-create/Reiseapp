@@ -1,6 +1,7 @@
-import { ArrowRight, CircleHelp, Clock, Plus, Ticket, Wallet, FileUp } from 'lucide-react';
-import { lazy, Suspense, useState, useEffect } from 'react';
+import { ArrowRight, CircleHelp, Clock, Plus, Ticket, Wallet, FileUp, Link2 } from 'lucide-react';
+import { lazy, Suspense, useMemo, useState, useEffect } from 'react';
 import { costInfo, summarizeBookingCosts } from '../../../shared/costs';
+import { expensesMatchingBooking } from '../../../shared/match';
 import { normalizeRate } from '../../../shared/money';
 import { bookingSortKey, isTransport, todayIn } from '../../../shared/trip';
 import type { BookingDto, TripSnapshot } from '../../../shared/types';
@@ -216,6 +217,7 @@ function Timeline({
               </button>
               <div className="mt-3">
                 <BookingBadges booking={b} />
+                {canEdit && <ExpenseMatchHint booking={b} snap={snap} />}
                 {b.type === 'flight' && b.checkinDoneAt && (
                   <span className="mt-1.5 inline-block">
                     <Badge tone="success">{t.checkin.doneBadge}</Badge>
@@ -377,5 +379,47 @@ function ToWalletSheet({ booking, snap, onClose }: { booking: BookingDto; snap: 
         )}
       </div>
     </Sheet>
+  );
+}
+
+/** "Schon in der Reisekasse?" – links an existing expense instead of counting the cost twice. */
+function ExpenseMatchHint({ booking, snap }: { booking: BookingDto; snap: TripSnapshot }) {
+  const online = useOnline();
+  const [busy, setBusy] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const match = useMemo(() => expensesMatchingBooking(booking, snap.expenses)[0] ?? null, [booking, snap.expenses]);
+  if (!match || hidden) return null;
+  const e = match.item;
+  const payer = snap.travelers.find((x) => x.id === e.paidByTravelerId)?.name;
+  async function link() {
+    setBusy(true);
+    try {
+      await tripStore.mutate(() => http.post(`/trips/${snap.trip.id}/expenses/${e.id}/link-booking`, { bookingId: booking.id }));
+      toast('Verknüpft – der Betrag zählt jetzt nur einmal');
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mt-3 rounded-2xl border border-warn/35 bg-warn-soft p-3">
+      <p className="flex items-start gap-2 text-[14px] font-semibold leading-snug">
+        <Link2 size={16} className="mt-0.5 shrink-0 text-warn" />
+        Schon in der Reisekasse: „{e.title}“?
+      </p>
+      <p className="mt-0.5 pl-6 text-[13px] text-text-2">
+        {money(e.amountMinor, e.currency)} · {formatDate(e.date)}
+        {payer ? ` · bezahlt von ${payer}` : ''} – verknüpfen, damit nichts doppelt zählt.
+      </p>
+      <div className="mt-2 flex gap-2 pl-6">
+        <Button size="sm" onClick={link} loading={busy} disabled={!online}>
+          Verknüpfen
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setHidden(true)}>
+          Nicht dasselbe
+        </Button>
+      </div>
+    </div>
   );
 }
