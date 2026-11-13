@@ -172,6 +172,10 @@ export interface BookingDto extends Versioned {
   notes: string | null;
   /** Linked wallet expense (prevents double counting). */
   expenseId: string | null;
+  /** Flight number such as "PG 123" (flights only; drives check-in reminders). */
+  flightNumber?: string | null;
+  /** When online check-in was marked as done (ISO timestamp). */
+  checkinDoneAt?: string | null;
   /** Travelers this booking applies to (empty = not assigned). */
   travelerIds: string[];
   createdBy: string | null;

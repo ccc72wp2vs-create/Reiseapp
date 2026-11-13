@@ -14,6 +14,7 @@ import {
 import { minorToInput, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
 import { suggestedRate } from '../../lib/rates';
+import { airlineFor, normalizeFlightNumber } from '../../../shared/checkin';
 import { money } from '../../lib/format';
 import { DepositSheet, ResolveDepositSheet } from '../wallet/DepositSheet';
 import { PayersInput, resolvePayers, type PayersValue } from '../wallet/PayersInput';
@@ -45,6 +46,7 @@ export interface BookingPrefill {
   toLocation?: string | null;
   location?: string | null;
   notes?: string | null;
+  flightNumber?: string | null;
 }
 
 export default function BookingSheet({
@@ -108,6 +110,7 @@ export default function BookingSheet({
     clarificationNote: b?.clarificationNote ?? '',
     notes: b?.notes ?? pf?.notes ?? '',
     travelerIds: b?.travelerIds ?? [],
+    flightNumber: b?.flightNumber ?? pf?.flightNumber ?? '',
   }));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -124,6 +127,8 @@ export default function BookingSheet({
     const unit = form.unitPrice.trim() ? parseAmount(form.unitPrice, form.currency) : null;
     if ((form.price.trim() && (price === null || price < 0)) || (form.unitPrice.trim() && (unit === null || unit < 0))) return setError(t.errors.invalidAmount);
     if (form.startDate && form.endDate && form.endDate < form.startDate) return setError(`${t.bookings.end}: ${t.errors.invalidDate}`);
+    const flightNumber = form.type === 'flight' && form.flightNumber.trim() ? normalizeFlightNumber(form.flightNumber) : null;
+    if (form.type === 'flight' && form.flightNumber.trim() && !flightNumber) return setError(t.checkin.invalidFlightNumber);
     const persons = form.personsCount ? Number(form.personsCount) : null;
     const depAmount = dep.on ? parseAmount(dep.amount, dep.currency) : null;
     const depRate = depNeedsRate ? normalizeRate(dep.rate) : '1';
@@ -160,6 +165,7 @@ export default function BookingSheet({
       clarificationNote: form.clarificationNote.trim() || null,
       notes: form.notes.trim() || null,
       travelerIds: form.travelerIds,
+      flightNumber,
     };
     setBusy(true);
     try {
@@ -247,6 +253,17 @@ export default function BookingSheet({
             <TextField label={t.bookings.provider} optional value={form.provider} onChange={(e) => set('provider', e.target.value)} />
             <TextField label={t.bookings.reference} optional value={form.reference} onChange={(e) => set('reference', e.target.value)} />
           </div>
+          {form.type === 'flight' && (
+            <TextField
+              label={t.checkin.flightNumber}
+              optional
+              placeholder="z. B. PG 271"
+              autoCapitalize="characters"
+              value={form.flightNumber}
+              onChange={(e) => set('flightNumber', e.target.value)}
+              hint={flightHint(form.flightNumber)}
+            />
+          )}
 
           <fieldset className="space-y-3 rounded-[1.25rem] border border-line bg-surface p-4">
             <PhaseLegend icon={L.startIcon} label={L.start} />
@@ -509,3 +526,11 @@ function PhaseLegend({ icon: Icon, label }: { icon: LucideIcon; label: string })
 }
 
 const defaultTzOf = (snap: TripSnapshot) => snap.destinations[0]?.timezone ?? snap.trip.homeTimezone;
+
+function flightHint(raw: string): string {
+  if (!raw.trim()) return t.checkin.flightNumberHint;
+  if (!normalizeFlightNumber(raw)) return t.checkin.invalidFlightNumber;
+  const a = airlineFor(raw);
+  if (!a) return t.checkin.unknownAirline;
+  return a.windowConfirmed ? t.checkin.window(a.name, a.opensHours) : t.checkin.windowUnconfirmed(a.name);
+}

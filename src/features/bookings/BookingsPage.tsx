@@ -205,6 +205,7 @@ function Timeline({
                       {b.fromLocation ?? '?'} → {b.toLocation ?? '?'}
                     </span>
                   )}
+                  {b.type === 'flight' && b.flightNumber && <span className="mt-0.5 block text-[13px] text-text-3">{t.checkin.flightNumber}: {b.flightNumber}</span>}
                   {b.reference && <span className="mt-0.5 block text-[13px] text-text-3">{t.bookings.reference}: {b.reference}</span>}
                   {b.travelerIds.length > 0 && (
                     <span className="mt-0.5 block text-[13px] text-text-3">
@@ -215,6 +216,11 @@ function Timeline({
               </button>
               <div className="mt-3">
                 <BookingBadges booking={b} />
+                {b.type === 'flight' && b.checkinDoneAt && (
+                  <span className="mt-1.5 inline-block">
+                    <Badge tone="success">{t.checkin.doneBadge}</Badge>
+                  </span>
+                )}
                 {(snap.deposits ?? [])
                   .filter((d) => d.bookingId === b.id)
                   .map((d) => (

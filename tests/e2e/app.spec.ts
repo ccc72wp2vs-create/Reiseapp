@@ -140,3 +140,21 @@ test('PWA assets are served', async ({ request }) => {
     expect((await request.get(p)).status(), p).toBe(200);
   }
 });
+
+test('check-in reminder: ask for departure time, open the airline link, mark as done', async ({ page }, info) => {
+  test.skip(info.project.name !== 'iphone', 'changes shared data – run once');
+  // 20.11.2026, 17:00 in Thailand – the flight Krabi → Chiang Mai is tomorrow.
+  await page.clock.setFixedTime(new Date('2026-11-20T10:00:00Z'));
+  await page.goto('/');
+  await page.getByRole('link', { name: /Flug Krabi → Chiang Mai morgen: Abflugzeit fehlt/ }).click();
+  await page.getByLabel('Uhrzeit').first().fill('12:00');
+  await page.getByLabel('Flugnummer').fill('pg271');
+  await expect(page.getByText('Bangkok Airways · Online-Check-in ab 24 Std. vor Abflug.')).toBeVisible();
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await page.goto('/');
+  await expect(page.getByText('Online-Check-in geöffnet: Flug Krabi → Chiang Mai (PG 271)')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Zum Check-in' })).toHaveAttribute('href', 'https://www.bangkokair.com/flight/check-in');
+  await page.getByRole('button', { name: 'Erledigt' }).click();
+  await expect(page.getByText('Check-in als erledigt markiert')).toBeVisible();
+  await expect(page.getByText(/Online-Check-in geöffnet/)).toHaveCount(0);
+});

@@ -13,6 +13,7 @@ import { analyzeDocument } from '../../lib/documents';
 import { formatDate, formatTime, money } from '../../lib/format';
 import { tripStore, useOnline } from '../../lib/store';
 
+import { normalizeFlightNumber } from '../../../shared/checkin';
 const BookingSheet = lazy(() => import('../bookings/BookingSheet'));
 
 /** Fields of the booking that are still empty and can be filled from the document. */
@@ -32,6 +33,7 @@ function completionFor(b: BookingDto, ex: ExtractedDocument) {
   fill('fromLocation', ex.fromLocation, t.bookings.from);
   fill('toLocation', ex.toLocation, t.bookings.to);
   fill('location', ex.location, t.bookings.location);
+  if (b.type === 'flight') fill('flightNumber', normalizeFlightNumber(ex.flightNumber), t.checkin.flightNumber);
   if (b.priceMinor == null && ex.amountMinor != null && ex.currency) {
     patch.priceMinor = ex.amountMinor;
     patch.currency = ex.currency;
@@ -305,6 +307,7 @@ export function DocumentImportSheet({ onClose }: { onClose: () => void }) {
               fromLocation: ex?.fromLocation,
               toLocation: ex?.toLocation,
               location: ex?.location,
+              flightNumber: normalizeFlightNumber(ex?.flightNumber),
               priceMinor: ex?.amountMinor,
               currency: ex?.currency,
               paymentStatus: ex?.paymentStatus,

@@ -289,6 +289,8 @@ const bookingFields = {
   paidByTravelerId: id.nullable().optional(),
   clarificationNote: optText(500),
   notes: optText(4000),
+  flightNumber: z.string().trim().max(12).regex(/^[A-Za-z0-9]{2}\s?\d{1,4}[A-Za-z]?$/, 'Flugnummer z. B. PG 123').nullable().optional(),
+  checkinDoneAt: z.string().datetime().nullable().optional(),
   travelerIds: z.array(id).max(50).optional(),
 };
 
