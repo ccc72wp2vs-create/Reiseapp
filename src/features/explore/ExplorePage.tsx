@@ -12,6 +12,11 @@ import { appleMapsUrl, googleMapsUrl } from '../../lib/maps';
 import { tripStore, useOnline } from '../../lib/store';
 import { http } from '../../lib/api';
 import { toast } from '../../components/toast';
+import { useGoogleConfig } from '../../lib/google';
+import { errorMessage } from '../../lib/api';
+import { formatDistance, formatDuration } from '../../../shared/google';
+import { GooglePlace } from './google/GooglePlace';
+import { NearbyGoogle } from './google/NearbyGoogle';
 
 const PlaceSheet = lazy(() => import('./PlaceSheet'));
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
@@ -51,6 +56,8 @@ export default function ExplorePage() {
 
 function Explore({ snap }: { snap: TripSnapshot }) {
   const { canEdit } = useTrip();
+  const google = useGoogleConfig(snap.trip.id);
+  const [source, setSource] = useState<'mine' | 'nearby'>('mine');
   const [view, setView] = useState<'list' | 'map'>('list');
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<PlaceCategory | 'all' | 'fav'>('all');
@@ -105,7 +112,24 @@ function Explore({ snap }: { snap: TripSnapshot }) {
         }
       />
 
-      {places.length === 0 ? (
+      {google?.enabled && (
+        <div className="px-safe pt-4">
+          <Segmented
+            value={source}
+            onChange={setSource}
+            options={[
+              { value: 'mine', label: <><Star size={15} /> Eure Orte</> },
+              { value: 'nearby', label: <><Compass size={15} /> In der Nähe</> },
+            ]}
+          />
+        </div>
+      )}
+
+      {source === 'nearby' && google?.enabled ? (
+        <div className="px-safe pt-4">
+          <NearbyGoogle snap={snap} />
+        </div>
+      ) : places.length === 0 ? (
         <div className="px-safe pt-6">
           <EmptyState
             icon={<Compass size={26} />}
@@ -119,7 +143,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
               )
             }
           />
-          <p className="mt-6 text-center text-[13px] text-text-3">{t.explore.futureSearch}</p>
+          {!google?.enabled && <p className="mt-6 text-center text-[13px] text-text-3">{t.explore.futureSearch}</p>}
         </div>
       ) : (
         <>
@@ -172,21 +196,21 @@ function Explore({ snap }: { snap: TripSnapshot }) {
             {view === 'map' && (
               <div className="mb-4">
                 <MapView markers={markers} selectedId={selected} onSelect={setSelected} className="h-[52dvh] min-h-[320px]" />
-                {sel && <PlaceCard place={sel} snap={snap} onEdit={() => setEditing(sel)} onPlan={() => setPlanning(sel)} highlight />}
+                {sel && <PlaceCard place={sel} snap={snap} google={!!google?.enabled} onEdit={() => setEditing(sel)} onPlan={() => setPlanning(sel)} highlight />}
                 {filtered.some((p) => p.lat == null) && <p className="mt-3 text-[13px] text-text-3">{t.explore.noCoords}: {filtered.filter((p) => p.lat == null).map((p) => p.name).join(', ')}</p>}
               </div>
             )}
             {view === 'list' && (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
                 {sorted.map((p) => (
-                  <PlaceCard key={p.id} place={p} snap={snap} onEdit={() => setEditing(p)} onPlan={() => setPlanning(p)} />
+                  <PlaceCard key={p.id} place={p} snap={snap} google={!!google?.enabled} onEdit={() => setEditing(p)} onPlan={() => setPlanning(p)} />
                 ))}
                 {filtered.length === 0 && (
                   <p className="py-8 text-center text-text-3 sm:col-span-2">{inStop.length === 0 && stopName ? t.explore.noPlacesAt(stopName) : t.explore.noResults}</p>
                 )}
               </div>
             )}
-            <p className="mt-8 text-center text-[12px] text-text-3">{t.explore.futureSearch}</p>
+            {!google?.enabled && <p className="mt-8 text-center text-[12px] text-text-3">{t.explore.futureSearch}</p>}
           </div>
         </>
       )}
@@ -205,6 +229,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
               locationName: planning.address ?? planning.name,
               lat: planning.lat,
               lng: planning.lng,
+              googlePlaceId: planning.googlePlaceId ?? null,
               date: destinations.find((d) => d.id === planning.destinationId)?.arrivalDate,
             }}
           />
@@ -258,7 +283,21 @@ function VoteButton({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) {
   );
 }
 
-function PlaceCard({ place, snap, onEdit, onPlan, highlight }: { place: PlaceDto; snap: TripSnapshot; onEdit: () => void; onPlan: () => void; highlight?: boolean }) {
+function PlaceCard({
+  place,
+  snap,
+  google,
+  onEdit,
+  onPlan,
+  highlight,
+}: {
+  place: PlaceDto;
+  snap: TripSnapshot;
+  google: boolean;
+  onEdit: () => void;
+  onPlan: () => void;
+  highlight?: boolean;
+}) {
   const { canEdit } = useTrip();
   const planned = snap.activities.filter((a) => a.placeId === place.id);
   const dest = snap.destinations.find((d) => d.id === place.destinationId);
@@ -316,6 +355,7 @@ function PlaceCard({ place, snap, onEdit, onPlan, highlight }: { place: PlaceDto
         >
           <Navigation size={14} /> Google Maps
         </a>
+        {google && <GoogleExtras place={place} snap={snap} />}
         {place.externalUrl && (
           <a
             href={place.externalUrl}
@@ -328,5 +368,102 @@ function PlaceCard({ place, snap, onEdit, onPlan, highlight }: { place: PlaceDto
         )}
       </div>
     </article>
+  );
+}
+
+/**
+ * Live Google information for a saved place: Google's own place card, travel
+ * time from your stay, and – once – linking the place to Google by its ID.
+ * Nothing Google returns is stored except the place ID.
+ */
+function GoogleExtras({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) {
+  const { canEdit } = useTrip();
+  const online = useOnline();
+  const [open, setOpen] = useState(false);
+  const [candidate, setCandidate] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [travel, setTravel] = useState<string | null>(null);
+  const tripId = snap.trip.id;
+
+  async function findMatch() {
+    setBusy(true);
+    try {
+      const r = await http.post<{ googlePlaceId: string | null }>(`/trips/${tripId}/google/match/${place.id}`);
+      setCandidate(r.googlePlaceId);
+      if (!r.googlePlaceId) toast('Bei Google nichts Passendes gefunden.', 'info');
+    } catch (e) {
+      toast(errorMessage(e), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function travelTime() {
+    setBusy(true);
+    try {
+      const r = await http.post<{ origin: { label: string }; noRoute: boolean; durationSec?: number; distanceMeters?: number }>(`/trips/${tripId}/google/distance`, { placeId: place.id });
+      setTravel(
+        r.noRoute
+          ? `Keine Straßenroute ab ${r.origin.label} – evtl. Fähre oder Boot.`
+          : `${formatDuration(r.durationSec!)} mit dem Auto · ${formatDistance(r.distanceMeters!)} ab ${r.origin.label} (Google Maps)`,
+      );
+    } catch (e) {
+      toast(errorMessage(e), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!online) return null;
+  const canRoute = !!place.googlePlaceId || (place.lat != null && place.lng != null);
+  return (
+    <>
+      {place.googlePlaceId ? (
+        <Button size="sm" variant="secondary" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? 'Google-Infos ausblenden' : 'Google-Infos'}
+        </Button>
+      ) : (
+        canEdit &&
+        place.lat != null &&
+        candidate === undefined && (
+          <Button size="sm" variant="secondary" loading={busy} onClick={findMatch}>
+            Mit Google verknüpfen
+          </Button>
+        )
+      )}
+      {canRoute && !travel && (
+        <Button size="sm" variant="secondary" loading={busy} onClick={travelTime}>
+          Fahrzeit
+        </Button>
+      )}
+      {travel && <p className="w-full text-[13px] text-text-2">{travel}</p>}
+      {open && place.googlePlaceId && (
+        <div className="w-full">
+          <GooglePlace tripId={tripId} placeId={place.googlePlaceId} />
+        </div>
+      )}
+      {candidate && (
+        <div className="w-full space-y-2">
+          <p className="text-[13px] font-semibold">Ist das „{place.name}“?</p>
+          <GooglePlace tripId={tripId} placeId={candidate} />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                tripStore.places.update(place.id, { googlePlaceId: candidate });
+                toast('Mit Google verknüpft – nur die Google-ID wird gespeichert.');
+                setCandidate(null);
+                setOpen(true);
+              }}
+            >
+              Ja, verknüpfen
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setCandidate(null)}>
+              Nein
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -199,6 +199,9 @@ export const destinationUpdateSchema = z.object(destinationFields).partial().ext
 
 export const reorderSchema = z.object({ orderedIds: z.array(id).min(1).max(500) });
 
+/** Google Place ID (opaque, URL-safe). The only Google field TRAVIO stores. */
+export const googlePlaceIdSchema = z.string().trim().regex(/^[A-Za-z0-9_-]{10,300}$/, 'Ungültige Google-Place-ID');
+
 // ---------------------------------------------------------------------------
 // Activities
 // ---------------------------------------------------------------------------
@@ -219,6 +222,7 @@ const activityFields = {
   completed: z.boolean(),
   notes: optText(4000),
   placeId: id.nullable().optional(),
+  googlePlaceId: googlePlaceIdSchema.nullable().optional(),
 };
 export const activityCreateSchema = z.object({
   ...activityFields,
@@ -248,6 +252,7 @@ const placeFields = {
   notes: optText(4000),
   favorite: z.boolean(),
   destinationId: id.nullable().optional(),
+  googlePlaceId: googlePlaceIdSchema.nullable().optional(),
 };
 export const placeCreateSchema = z.object({
   ...placeFields,
@@ -509,3 +514,32 @@ export const assistantPreferencesSchema = z.object({
   rhythm: z.enum(['early', 'late']).nullable().optional(),
   cuisine: z.string().trim().max(80).nullable().optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Google Maps Platform (only place IDs / own coordinates are sent)
+// ---------------------------------------------------------------------------
+
+const travelMode = z.enum(['DRIVE', 'WALK', 'BICYCLE']).default('DRIVE');
+const coords = z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) });
+
+export const googleNearbySchema = z
+  .object({
+    category: z.string().max(30).nullable().optional(),
+    query: z.string().trim().min(2).max(80).nullable().optional(),
+    /** Only when the user tapped "Standort verwenden"; never stored. */
+    location: coords.nullable().optional(),
+    mode: travelMode,
+    maxMinutes: z.number().int().min(5).max(180).nullable().optional(),
+    limit: z.number().int().min(1).max(8).default(6),
+  })
+  .refine((v) => !!v.category || !!v.query, { message: 'Kategorie oder Suchbegriff fehlt' });
+
+export const googleDistanceSchema = z.object({
+  /** Destination: a Google place or a saved TRAVIO place (own coordinates). */
+  googlePlaceId: googlePlaceIdSchema.nullable().optional(),
+  placeId: id.nullable().optional(),
+  location: coords.nullable().optional(),
+  mode: travelMode,
+});
+
+export const googleUiLoadsSchema = z.object({ count: z.number().int().min(1).max(10) });

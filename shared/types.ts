@@ -119,6 +119,8 @@ export interface ActivityDto extends Versioned {
   completed: boolean;
   notes: string | null;
   placeId: string | null;
+  /** Google Place ID – Google content is loaded live, never stored. */
+  googlePlaceId?: string | null;
   sortOrder: number;
   createdBy: string | null;
   updatedBy: string | null;
@@ -136,6 +138,8 @@ export interface PlaceDto extends Versioned {
   notes: string | null;
   favorite: boolean;
   destinationId: string | null;
+  /** Google Place ID – Google content is loaded live, never stored. */
+  googlePlaceId?: string | null;
   createdBy: string | null;
   /** Travelers who gave this place a 👍 (may be missing on offline-created places). */
   votes?: string[];

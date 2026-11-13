@@ -180,4 +180,19 @@ describe('Frag TRAVIO', () => {
     await ask('Plane uns morgen einen Tag');
     expect(prompts[0]).toContain('max. 30 Min. Fahrt');
   });
+
+  it('shows Google results as a live card – the model gets no Google content', async () => {
+    t.env.GOOGLE_MAPS_SERVER_KEY = 'k';
+    t.env.GOOGLE_MAPS_BROWSER_KEY = 'b';
+    const prompts = mockAi({ answer: 'Unten findest du Restaurants von Google Maps.' });
+    const r = await ask('Welche Restaurants erreiche ich in maximal 20 Minuten?');
+    expect(r.body.cards[0]).toEqual({ kind: 'google_search', params: { category: 'restaurant', query: null, maxMinutes: 20, mode: 'DRIVE', limit: 6 } });
+    expect(prompts[0]).toContain('Du kennst diese Ergebnisse NICHT');
+    expect(prompts[0]).not.toMatch(/ChIJ|rating|Bewertung: \d/);
+    // Without Google keys there is no Google card.
+    t.env.GOOGLE_MAPS_SERVER_KEY = undefined;
+    const r2 = await ask('Welche Restaurants erreiche ich in maximal 20 Minuten?');
+    expect(r2.body.cards.some((c) => c.kind === 'google_search')).toBe(false);
+  });
 });
+

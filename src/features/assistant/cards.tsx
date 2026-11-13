@@ -1,9 +1,13 @@
 import { AlertTriangle, ArrowRight, BedDouble, Check, ExternalLink, Lightbulb, MapPin, PlaneTakeoff, Wallet } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { AssistantCard, AssistantProposal, PlanItem } from '../../../shared/assistant';
 import { Badge, Button, cx } from '../../components/ui';
 import { formatDateShort, formatLongDate, money } from '../../lib/format';
+import { useTrip } from '../../components/AppShell';
+import { errorMessage, http } from '../../lib/api';
+import { formatDistance, formatDuration } from '../../../shared/google';
+import { NearbyGoogle } from '../explore/google/NearbyGoogle';
 
 const shell = 'rounded-[1.25rem] border border-line bg-surface p-4';
 
@@ -108,6 +112,9 @@ export function AnswerCard({ card, onNavigate }: { card: AssistantCard; onNaviga
       </div>
     );
   }
+
+  if (card.kind === 'google_search') return <GoogleSearchCard params={card.params} onNavigate={onNavigate} />;
+  if (card.kind === 'google_distance') return <GoogleDistanceCard placeId={card.placeId} name={card.name} />;
 
   if (card.kind === 'stay') {
     return (
@@ -291,6 +298,45 @@ export function ProposalCard({
         </p>
       )}
       {footer(summary.label)}
+    </div>
+  );
+}
+
+function GoogleSearchCard({ params, onNavigate }: { params: Extract<AssistantCard, { kind: 'google_search' }>['params']; onNavigate: () => void }) {
+  const { snap } = useTrip();
+  if (!snap) return null;
+  return (
+    <div className={shell}>
+      <NearbyGoogle snap={snap} compact initial={{ ...params, query: params.query }} onNavigate={onNavigate} />
+    </div>
+  );
+}
+
+function GoogleDistanceCard({ placeId, name }: { placeId: string; name: string }) {
+  const { snap } = useTrip();
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    if (!snap) return;
+    let alive = true;
+    http
+      .post<{ origin: { label: string }; noRoute: boolean; durationSec?: number; distanceMeters?: number }>(`/trips/${snap.trip.id}/google/distance`, { placeId })
+      .then((r) => {
+        if (!alive) return;
+        setText(
+          r.noRoute
+            ? `Keine Straßenroute zu „${name}“ ab ${r.origin.label} – vermutlich braucht ihr eine Fähre oder ein Boot.`
+            : `„${name}“: ${formatDuration(r.durationSec!)} mit dem Auto · ${formatDistance(r.distanceMeters!)} ab ${r.origin.label}.`,
+        );
+      })
+      .catch((e) => alive && setText(`Fahrzeit nicht verfügbar: ${errorMessage(e)}`));
+    return () => {
+      alive = false;
+    };
+  }, [snap, placeId, name]);
+  return (
+    <div className={shell}>
+      <p className="text-[15px] font-semibold">{text ?? 'Fahrzeit wird berechnet …'}</p>
+      <p className="mt-1 text-[12px] text-text-3">Routendaten: Google Maps</p>
     </div>
   );
 }

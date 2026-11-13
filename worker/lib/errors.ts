@@ -12,6 +12,7 @@ export type ErrorCode =
   | 'rate_limited'
   | 'csrf_failed'
   | 'setup_unavailable'
+  | 'service_unavailable'
   | 'internal_error';
 
 const STATUS: Record<ErrorCode, number> = {
@@ -26,6 +27,7 @@ const STATUS: Record<ErrorCode, number> = {
   rate_limited: 429,
   csrf_failed: 403,
   setup_unavailable: 403,
+  service_unavailable: 503,
   internal_error: 500,
 };
 

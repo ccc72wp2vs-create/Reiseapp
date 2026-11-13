@@ -59,6 +59,12 @@ export type AssistantCard =
       bookingId: string | null;
     }
   | {
+      /** Live Google search shown by the app – its content never reaches the model. */
+      kind: 'google_search';
+      params: { category: string | null; query: string | null; maxMinutes: number | null; mode: 'DRIVE' | 'WALK' | 'BICYCLE'; limit: number };
+    }
+  | { kind: 'google_distance'; placeId: string; name: string }
+  | {
       kind: 'list';
       title: string;
       items: { id: string; title: string; subtitle: string | null; link: string; badge?: string | null }[];

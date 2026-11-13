@@ -20,6 +20,9 @@ export interface ActivityDefaults {
   locationName?: string | null;
   lat?: number | null;
   lng?: number | null;
+  /** Google place this entry refers to (only the ID is stored). */
+  googlePlaceId?: string | null;
+  startTime?: string | null;
 }
 
 export default function ActivitySheet({
@@ -40,7 +43,7 @@ export default function ActivitySheet({
     title: base?.title ?? defaults?.title ?? '',
     category: (base?.category ?? defaults?.category ?? 'sightseeing') as ActivityCategory,
     date: base?.date ?? defaults?.date ?? trip.startDate,
-    startTime: base?.startTime ?? '',
+    startTime: base?.startTime ?? defaults?.startTime ?? '',
     endTime: base?.endTime ?? '',
     locationName: base?.locationName ?? defaults?.locationName ?? '',
     lat: coordToInput(base?.lat ?? defaults?.lat),
@@ -52,6 +55,7 @@ export default function ActivitySheet({
     notes: base?.notes ?? '',
     description: base?.description ?? '',
     placeId: base?.placeId ?? defaults?.placeId ?? '',
+    googlePlaceId: base?.googlePlaceId ?? defaults?.googlePlaceId ?? null,
   }));
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -110,6 +114,7 @@ export default function ActivitySheet({
       notes: form.notes.trim() || null,
       description: form.description.trim() || null,
       placeId: form.placeId || null,
+      googlePlaceId: form.googlePlaceId,
     };
     if (base) tripStore.activities.update(base.id, data);
     else tripStore.activities.create(data);

@@ -32,6 +32,8 @@ import {
   type PlanItem,
 } from '../../shared/assistant';
 import { checkinInfo } from '../../shared/checkin';
+import { categoryByKey, parseSearchRequest } from '../../shared/google';
+import { googleConfig } from './google';
 import { computeBalances, suggestSettlements } from '../../shared/finance';
 import { tripCostOverview } from '../../shared/costs';
 import { formatMoney, isSupportedCurrency, parseAmount } from '../../shared/money';
@@ -143,6 +145,8 @@ interface Ctx {
   intents: Intent[];
   location: { lat: number; lng: number } | null;
   prefs: AssistantPreferences;
+  /** Google Maps Platform configured (live search/route cards). */
+  google: boolean;
 }
 
 interface Built {
@@ -415,6 +419,28 @@ export function buildFacts(ctx: Ctx): Built {
       }),
       empty: 'Noch keine Packliste.',
     });
+  }
+
+  // --- Google Maps (live in the app – the model never sees Google content) -
+  if (ctx.google) {
+    const search = parseSearchRequest(ctx.question);
+    if (search) {
+      cards.unshift({ kind: 'google_search', params: search });
+      const cat = categoryByKey(search.category);
+      facts.push(
+        `Die App zeigt unter deiner Antwort live Ergebnisse von Google Maps (${cat?.label ?? 'Orte'}${search.maxMinutes ? `, höchstens ${search.maxMinutes} Min.` : ''}) mit echten Fahrzeiten. Du kennst diese Ergebnisse NICHT: nenne keine Namen, Bewertungen, Öffnungszeiten oder Fahrzeiten daraus, sag nur kurz, dass die Vorschläge unten von Google Maps stammen.`,
+      );
+      fallback.unshift(`Hier sind ${cat?.label ?? 'Orte'} von Google Maps${search.maxMinutes ? ` mit höchstens ${search.maxMinutes} Min. Fahrzeit` : ''}.`);
+    }
+    if (/wie weit|entfernt|wie lange (fahren|brauchen|dauert)|fahrzeit|fußweg/.test(ctx.question.toLowerCase())) {
+      const q = ctx.question.toLowerCase();
+      const place = snap.places.find((p) => p.name.length > 2 && q.includes(p.name.toLowerCase()));
+      if (place && (place.googlePlaceId || (place.lat != null && place.lng != null))) {
+        cards.unshift({ kind: 'google_distance', placeId: place.id, name: place.name });
+        facts.push(`Die App berechnet die Fahrzeit zu „${place.name}“ live mit Google Maps und zeigt sie unter deiner Antwort. Nenne selbst keine Zeit oder Entfernung.`);
+        fallback.unshift(`Die Fahrzeit zu „${place.name}“ siehst du unten.`);
+      }
+    }
   }
 
   // --- preferences -------------------------------------------------------
@@ -733,6 +759,7 @@ export async function askAssistant(
     intents,
     location: request.location ?? null,
     prefs,
+    google: !!googleConfig(env).serverKey && !!googleConfig(env).browserKey,
   };
   const built = buildFacts(ctx);
   const cfg = assistantConfig(env);

@@ -216,6 +216,49 @@ Reisekasse: Originalbetrag + Originalwährung werden gespeichert, ebenso der ver
 - **Konflikte:** jede Änderung trägt die Basisversion. Hat jemand anderes den Eintrag inzwischen geändert, wird nichts überschrieben – die App zeigt beide Versionen und du entscheidest.
 - **Nur online:** Ausgaben, Buchungen, Reiseziele, Reisen, Anmeldung, Einladungen, Karten (Kacheln aus dem Internet) und externe Navigation. Die App zeigt das jeweils deutlich an.
 
+## Google Maps Platform (Orte & Fahrzeiten)
+
+**Ohne Schlüssel ist alles aus** – die App verhält sich dann exakt wie vorher.
+
+### Rechtliche Bewertung (EWR-Abrechnungskonto, z. B. Luxemburg; Stand 11/2026)
+
+Für Abrechnungskonten mit Adresse im EWR gelten seit 8. 7. 2025 die *Google Maps Platform EEA Terms* (inkl. EEA Service Specific Terms). Daraus folgt für TRAVIO:
+
+| Thema | Regel | Umsetzung in TRAVIO |
+|---|---|---|
+| Places API (New) | Inhalte nur für die gelisteten „Permitted Uses“ und **nicht „With any Map“** (auch keine Google-Karte); ausgenommen sind nur `place_id`, Breiten- und Längengrad. | Die Places API wird **ausschließlich mit Field Mask `places.id`** genutzt (Text Search „IDs Only“). Keine Namen, Bewertungen, Fotos usw. über die API. |
+| Places UI Kit | Von „Permitted Use“ und „No Use With any Map“ ausgenommen; neben jeder Karte (auch Leaflet/OSM) nutzbar; Attribution liefert die Komponente selbst. | Alle sichtbaren Google-Ortsinfos (Name, Bewertung, Fotos, Öffnungszeiten, Website, Attribution) zeigt Googles Element `gmp-place-details-compact`. TRAVIO liest daraus nichts aus. |
+| Routes API | „Description or steps“ dürfen nicht mit einer Karte genutzt werden; Fuß-/Rad-/Zweirad-Routen sind Beta und brauchen einen Hinweis. | Nur **Dauer und Distanz** (Field Mask ohne Polyline/Steps), Essentials-SKU ohne Verkehrsdaten. Die echte Route öffnet sich per Link in Google Maps. Beta-Hinweis bei Fußwegen. „Keine Straßenroute – evtl. Fähre oder Boot“, wenn Google keine Route findet. |
+| Speicherung | `place_id` darf dauerhaft gespeichert werden; Koordinaten aus Places höchstens 30 Tage; übrige Inhalte nicht. | Gespeichert wird nur `google_place_id` (Orte, Aktivitäten) plus **eure eigenen** Namen/Notizen/Pläne. Keine Google-Koordinaten, kein Cache (Service Worker ignoriert fremde Hosts, keine Logs). Die ~40 bestehenden Orte bleiben unverändert und können optional per „Mit Google verknüpfen“ eine ID erhalten. |
+| KI (Workers AI) | Google erlaubt LLM-Grounding nur über eigene Produkte (Maps Experience Agent Tools/Grounding Lite) unter Bedingungen; Training/Verbesserung von Modellen mit Google-Inhalten ist verboten. | **Keine Google-Inhalte an Workers AI.** Suchparameter werden deterministisch aus der Frage erzeugt (`parseSearchRequest`), die App ruft Google auf und zeigt die Ergebnisse als Karte unter der KI-Antwort; das Modell erfährt nur, *dass* unten Google-Ergebnisse stehen. |
+| Leaflet-Karte | Bleibt für eure eigenen Orte. | Google-Orte werden nicht als Pins auf der OSM-Karte gezeichnet. |
+
+Quellen: Google Maps Platform EEA Terms / EEA Service Specific Terms, „Places API adjustments for EEA customers“, „Routes API adjustments for EEA customers“, Places-UI-Kit-Dokumentation. Hinweis: Das ist eine technische Einordnung, keine Rechtsberatung.
+
+### Kosten & Begrenzung
+
+Seit 1. 3. 2025 gibt es pro SKU ein monatliches Freikontingent (Essentials 10.000, Pro 5.000, Enterprise 1.000). TRAVIO nutzt nur:
+
+| SKU | Freimenge/Monat (laut Google-Preisliste) | Internes Limit (Standard) | Variable |
+|---|---|---|---|
+| Places Text Search Essentials (IDs Only) | als unbegrenzt gelistet | 3.000 Suchen | `GOOGLE_LIMIT_SEARCHES` |
+| Routes Compute Route Matrix Essentials | 10.000 Elemente | 8.000 Elemente | `GOOGLE_LIMIT_ROUTE_ELEMENTS` |
+| Routes Compute Routes Essentials | 10.000 | 4.000 | `GOOGLE_LIMIT_ROUTES` |
+| Places UI Kit (Essentials) | 10.000 Ladevorgänge | 8.000 | `GOOGLE_LIMIT_UI_LOADS` |
+
+Je Suche: 1 ID-Suche, ≤ 10 Matrix-Elemente, ≤ 8 Ortskarten. Suchen nur auf Antippen (kein Laden beim Tippen, keine Hintergrundabfragen), identische Suchen werden 5 Minuten im Arbeitsspeicher wiederverwendet. Zähler liegen in `google_usage` (Monat × SKU); Stand für Reise-Inhaber: `GET /trips/:id/google/usage`. **Restrisiko:** Budgetwarnungen in Google Cloud sind keine Kostenbremse, und die UI-Kit-Zählung erfolgt, bevor der Browser lädt (ein manipulierter Client mit dem Browser-Schlüssel könnte sie umgehen). Deshalb zusätzlich in Google Cloud **API-Kontingente (Quotas) pro Tag** setzen – das ist die einzige harte Grenze auf Google-Seite.
+
+### Einrichtung (durch den Inhaber)
+
+1. In der Google Cloud Console ein Projekt anlegen und ein Abrechnungskonto verknüpfen (Pflicht für die Freikontingente).
+2. APIs aktivieren: **Places API (New)**, **Routes API**, **Maps JavaScript API**, **Places UI Kit**.
+3. **Server-Schlüssel** erstellen → Einschränkung „API-Einschränkungen“: nur Places API (New) + Routes API. In Cloudflare als Secret hinterlegen: `wrangler secret put GOOGLE_MAPS_SERVER_KEY` (oder Dashboard → Worker → Einstellungen → Variablen → *Secret*).
+4. **Browser-Schlüssel** erstellen → Anwendungseinschränkung „Websites“ mit eurer App-Domain (z. B. `https://travio.example.workers.dev/*`), API-Einschränkung: Maps JavaScript API + Places UI Kit. Ebenfalls als Secret: `GOOGLE_MAPS_BROWSER_KEY`.
+5. Kontingente setzen (APIs & Dienste → jeweilige API → Kontingente), z. B. Places API (New) Text Search 150/Tag, Routes Route Matrix 400 Elemente/Tag, Places UI Kit 300/Tag. Budgetwarnung (z. B. 1 €) zusätzlich anlegen.
+6. Keine Schlüssel ins Repository; die App liefert den Browser-Schlüssel nur angemeldeten Reisemitgliedern aus.
+
+Die Content-Security-Policy (`public/_headers`) erlaubt dafür `maps.googleapis.com`/`maps.gstatic.com` (inkl. `'unsafe-eval'`, wie in Googles CSP-Leitfaden für die Maps JavaScript API), und `Referrer-Policy` ist auf `strict-origin-when-cross-origin` gesetzt, damit die Domain-Einschränkung des Browser-Schlüssels greift (an fremde Hosts geht nur die Origin, kein Pfad).
+
 ## Kartenanbieter
 
 Standard sind die OpenStreetMap-Standardkacheln – laut [OSM Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/) nur für **geringe Nutzung** geeignet (für eine private App mit wenigen Personen vertretbar). Für mehr Nutzung einen Anbieter mit passenden Bedingungen konfigurieren, z. B. MapTiler, Stadia Maps oder Thunderforest (Schlüssel dort auf die eigene Domain beschränken – Kachel-Schlüssel sind öffentlich sichtbar):

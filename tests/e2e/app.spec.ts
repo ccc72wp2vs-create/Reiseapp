@@ -204,3 +204,43 @@ test('Frag TRAVIO: answers from trip data and adds a confirmed day plan via the 
   await expect(page.getByText('Sonnenuntergang')).toBeVisible();
   await expect(page.getByText('Doppelt')).toHaveCount(0);
 });
+
+test('Entdecken: Google nearby search with real travel times; saving keeps only the place ID', async ({ page }, info) => {
+  test.skip(info.project.name !== 'iphone', 'changes shared data – run once');
+  const placeId = 'ChIJtestPlace0001';
+  await page.route('**/api/v1/trips/*/google/config', (r) => r.fulfill({ json: { enabled: true, browserKey: 'browser-test', routing: true } }));
+  await page.route('**/api/v1/trips/*/google/ui-loads', (r) => r.fulfill({ json: { ok: true } }));
+  await page.route('https://maps.googleapis.com/**', (r) => r.abort());
+  let nearbyBody: Record<string, unknown> | null = null;
+  await page.route('**/api/v1/trips/*/google/nearby', (r) => {
+    nearbyBody = r.request().postDataJSON();
+    return r.fulfill({
+      json: {
+        origin: { label: 'Ortsmitte Phuket', lat: 7.88, lng: 98.39 },
+        mode: 'DRIVE',
+        routing: 'ok',
+        filteredOut: 3,
+        results: [{ placeId, durationSec: 840, distanceMeters: 6100, noRoute: false }],
+      },
+    });
+  });
+  await page.goto('/entdecken');
+  await page.getByRole('radio', { name: 'In der Nähe' }).click();
+  await page.getByRole('button', { name: 'Restaurants' }).click();
+  await page.getByRole('button', { name: '≤ 20 Min.' }).click();
+  await expect(page.getByText('14 Min. · 6,1 km')).toBeVisible();
+  await expect(page.getByText('3 weitere Orte liegen über 20 Min. entfernt.')).toBeVisible();
+  await expect(page.getByText('Routendaten: Google Maps', { exact: false })).toBeVisible();
+  expect(nearbyBody).toMatchObject({ category: 'restaurant', maxMinutes: 20, mode: 'DRIVE' });
+  await expect(page.getByRole('link', { name: 'Route' })).toHaveAttribute('href', /destination_place_id=ChIJtestPlace0001/);
+  // Google script blocked here → honest message instead of invented content.
+  await expect(page.getByText('Google-Ortsinfos konnten nicht geladen werden. Bitte später erneut versuchen.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Merken' }).click();
+  await page.getByLabel('Name').fill('Unser Thai-Lokal');
+  await page.getByRole('button', { name: 'Merken' }).last().click();
+  await expect(page.getByText('Gemerkt – unter „Eure Orte“')).toBeVisible();
+  await page.getByRole('radio', { name: 'Eure Orte' }).click();
+  await page.getByRole('button', { name: /Ganze Route/ }).click();
+  await expect(page.getByRole('heading', { name: 'Unser Thai-Lokal' })).toBeVisible();
+});

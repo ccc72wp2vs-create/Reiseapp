@@ -19,6 +19,15 @@ export interface Env {
   ASSISTANT_DAILY_LIMIT?: string;
   /** Max generated tokens per answer (default 900). */
   ASSISTANT_MAX_TOKENS?: string;
+  /** Google Maps Platform server key (secret; Places API New + Routes API only). */
+  GOOGLE_MAPS_SERVER_KEY?: string;
+  /** Google Maps browser key (secret; HTTP-referrer restricted; Maps JS + Places UI Kit). */
+  GOOGLE_MAPS_BROWSER_KEY?: string;
+  /** Internal monthly limits (defaults below Google's free caps). */
+  GOOGLE_LIMIT_SEARCHES?: string;
+  GOOGLE_LIMIT_ROUTE_ELEMENTS?: string;
+  GOOGLE_LIMIT_ROUTES?: string;
+  GOOGLE_LIMIT_UI_LOADS?: string;
   /** Future: private R2 bucket for booking documents. */
   DOCUMENTS?: R2Bucket;
 }
