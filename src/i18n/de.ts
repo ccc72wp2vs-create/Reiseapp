@@ -471,7 +471,7 @@ export const de = {
     colKept: 'einbehalten',
     colBack: 'steht zu',
     keptShared: (k: string, per: string) => `Die einbehaltenen ${k} tragen alle gemeinsam: ${per} pro Person.`,
-    fairTitle: 'Sinnvolle Aufteilung (nur zur Info)',
+    fairTitle: 'Sinnvolle Aufteilung',
     fairNone: 'Für diese Kaution ist nichts mehr auszugleichen.',
     fairHint: 'So bekommt jede:r den eigenen Anteil der Kaution zurück. In den Salden der Reisekasse ist das bereits enthalten – zusammen mit allen anderen Ausgaben.',
     fairHintWithCost: (cost: string, per: string) =>
