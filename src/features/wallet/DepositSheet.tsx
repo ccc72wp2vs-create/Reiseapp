@@ -1,5 +1,6 @@
 import { RotateCcw, Trash2 } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useMemo, useState, type FormEvent } from 'react';
+import { suggestSettlements } from '../../../shared/finance';
 import { allocate, convertMinor, minorToInput, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
 import type { DepositDto, DepositMethod, TripSnapshot } from '../../../shared/types';
@@ -275,6 +276,7 @@ export function ResolveDepositSheet({ snap, deposit, onClose }: { snap: TripSnap
       <Sheet open onClose={onClose} title={deposit.title}>
         <p className="text-[15px]">{t.deposits.resolvedText(deposit.status, money(deposit.keptMinor ?? 0, deposit.currency), deposit.resolvedAt ? formatDate(deposit.resolvedAt) : '')}</p>
         {deposit.expenseId && <p className="mt-2 text-[13px] text-text-3">{t.deposits.expenseCreated}</p>}
+        <DepositSummary snap={snap} deposit={deposit} />
         {error && <p className="mt-3 rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">{error}</p>}
         <Button className="mt-5" variant="secondary" icon={<RotateCcw size={16} />} loading={busy} disabled={!online} onClick={() => void reopen()}>
           {t.deposits.reopen}
@@ -364,5 +366,93 @@ export function ResolveDepositSheet({ snap, deposit, onClose }: { snap: TripSnap
         )}
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Info for a closed deposit: who got the money, what everyone put in and gets
+ * back, and – together with the linked booking's cost (e.g. the rent) – which
+ * transfers would settle this rental fairly. Purely informational: the
+ * balances in the wallet already include all of it.
+ */
+function DepositSummary({ snap, deposit }: { snap: TripSnapshot; deposit: DepositDto }) {
+  const cur = deposit.currency;
+  const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
+  const payers = deposit.payers?.length ? deposit.payers : [{ travelerId: deposit.paidByTravelerId, amountMinor: deposit.amountMinor }];
+  const kept = deposit.keptMinor ?? 0;
+  const returned = deposit.amountMinor - kept;
+  const unit = [kept, ...payers.map((p) => p.amountMinor)].every((v) => v % 100 === 0) ? 100 : 1;
+  const keptParts = kept > 0 ? allocate(kept / unit, payers.map((p) => p.amountMinor / unit)).map((x) => x * unit) : payers.map(() => 0);
+  const keptExpense = snap.expenses.find((e) => e.id === deposit.expenseId);
+  const costExpense =
+    snap.expenses.find((e) => e.id === deposit.costExpenseId && e.currency === cur) ??
+    (deposit.bookingId ? snap.expenses.find((e) => e.bookingId === deposit.bookingId && e.currency === cur) : undefined);
+
+  // Net position per person for this rental: put in − own shares − money received.
+  const net = new Map<string, number>();
+  const add = (id: string, v: number) => net.set(id, (net.get(id) ?? 0) + v);
+  payers.forEach((p) => add(p.travelerId, p.amountMinor));
+  for (const e of [costExpense, keptExpense]) {
+    if (!e || e.currency !== cur) continue;
+    e.payers.forEach((p) => e === costExpense && add(p.travelerId, p.amountMinor));
+    e.shares.forEach((s) => add(s.travelerId, -s.shareMinor));
+  }
+  // The kept expense's "payers" are the deposit contributors (already counted above).
+  if (deposit.returnedToTravelerId && returned > 0) add(deposit.returnedToTravelerId, -returned);
+  const transfers = suggestSettlements(
+    [...net].map(([travelerId, balanceMinor]) => ({ travelerId, balanceMinor, paidMinor: 0, owedMinor: 0, settledOutMinor: 0, settledInMinor: 0 })),
+  );
+  const perPerson = costExpense ? costExpense.shares.find((s) => s.travelerId === payers[0].travelerId)?.shareMinor ?? 0 : 0;
+  const keptPerPerson = keptExpense?.shares[0]?.shareMinor ?? 0;
+
+  return (
+    <div className="mt-4 space-y-4">
+      {deposit.returnedToTravelerId && returned > 0 && (
+        <div className="rounded-[1.25rem] bg-surface p-4">
+          <p className="text-[13px] text-text-3">{t.deposits.receivedBy}</p>
+          <p className="font-semibold">
+            {name(deposit.returnedToTravelerId)} · {money(returned, cur)}
+          </p>
+        </div>
+      )}
+      <div className="rounded-[1.25rem] border border-line bg-surface p-4">
+        <p className="text-[13px] font-semibold text-text-2">{t.deposits.perPersonTitle}</p>
+        <div className="mt-2 grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1.5 text-[13px]">
+          <span className="text-text-3" />
+          <span className="text-right text-text-3">{t.deposits.colPut}</span>
+          <span className="text-right text-text-3">{t.deposits.colKept}</span>
+          <span className="text-right text-text-3">{t.deposits.colBack}</span>
+          {payers.map((p, i) => (
+            <Fragment key={p.travelerId}>
+              <span className="truncate">{name(p.travelerId)}</span>
+              <span className="text-right tabular">{money(p.amountMinor, cur)}</span>
+              <span className="text-right tabular text-danger">{keptParts[i] ? `−${money(keptParts[i], cur)}` : '–'}</span>
+              <span className="text-right font-semibold tabular">{money(p.amountMinor - keptParts[i], cur)}</span>
+            </Fragment>
+          ))}
+        </div>
+        {kept > 0 && keptPerPerson > 0 && <p className="mt-2 text-[12px] text-text-3">{t.deposits.keptShared(money(kept, cur), money(keptPerPerson, cur))}</p>}
+      </div>
+      <div className="rounded-[1.25rem] border border-accent/40 bg-accent-soft p-4">
+        <p className="text-[13px] font-semibold text-accent">{t.deposits.fairTitle}</p>
+        {transfers.length === 0 ? (
+          <p className="mt-1 text-[14px]">{t.deposits.fairNone}</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5 text-[14px]">
+            {transfers.map((x, i) => (
+              <li key={i} className="flex items-center justify-between gap-2">
+                <span>
+                  <span className="font-semibold">{name(x.fromTravelerId)}</span> → <span className="font-semibold">{name(x.toTravelerId)}</span>
+                </span>
+                <span className="font-semibold tabular">{money(x.amountMinor, cur)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-[12px] text-text-2">
+          {costExpense ? t.deposits.fairHintWithCost(costExpense.title, money(perPerson + keptPerPerson, cur)) : t.deposits.fairHint}
+        </p>
+      </div>
+    </div>
   );
 }

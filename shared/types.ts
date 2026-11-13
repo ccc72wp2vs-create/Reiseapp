@@ -256,6 +256,8 @@ export interface DepositDto extends Versioned {
   keptMinor: number | null;
   /** Expense created for the kept part. */
   expenseId: string | null;
+  /** Cost paid together with the deposit (joint payment), e.g. the rent. */
+  costExpenseId: string | null;
   /** Who got the money back (cash). */
   returnedToTravelerId: string | null;
   resolvedAt: string | null;

@@ -52,10 +52,17 @@ function toDto(r: Row, travelerIds: string[], payers: DepositDto['payers']): Dep
     keptMinor: (r.kept_minor as number) ?? null,
     expenseId: (r.expense_id as string) ?? null,
     returnedToTravelerId: (r.returned_to_traveler_id as string) ?? null,
+    costExpenseId: (r.cost_expense_id as string) ?? null,
     resolvedAt: (r.resolved_at as string) ?? null,
     notes: (r.notes as string) ?? null,
     createdBy: (r.created_by as string) ?? null,
   };
+}
+
+/** Kept amount split by what everybody put in – in whole units (e.g. baht) when possible. */
+export function splitKept(kept: number, payers: { amountMinor: number }[]): number[] {
+  const unit = [kept, ...payers.map((p) => p.amountMinor)].every((v) => v % 100 === 0) ? 100 : 1;
+  return allocate(kept / unit, payers.map((p) => p.amountMinor / unit)).map((x) => x * unit);
 }
 
 export async function listDeposits(db: D1Database, tripId: string): Promise<DepositDto[]> {
@@ -206,7 +213,7 @@ export async function resolveDeposit(
       // The kept part is carried by the payers in proportion to what they put down.
       ...(d.payers.length > 1
         ? (() => {
-            const parts = allocate(kept, d.payers.map((p) => p.amountMinor));
+            const parts = splitKept(kept, d.payers);
             return { payers: d.payers.map((p, i) => ({ travelerId: p.travelerId, amountMinor: parts[i] })).filter((p) => p.amountMinor > 0) };
           })()
         : {}),
@@ -219,7 +226,7 @@ export async function resolveDeposit(
   }
   // Each contributor's share of the returned money is now held by the receiver:
   // record it as an internal settlement contributor → receiver.
-  const keptParts = kept > 0 && d.payers.length > 1 ? allocate(kept, d.payers.map((p) => p.amountMinor)) : d.payers.map((p) => (kept > 0 ? Math.round((kept * p.amountMinor) / d.amountMinor) : 0));
+  const keptParts = kept > 0 ? splitKept(kept, d.payers) : d.payers.map(() => 0);
   const now = nowIso();
   const transfers = receiver
     ? d.payers
@@ -364,5 +371,9 @@ export async function createJointPayment(db: D1Database, tripId: string, baseCur
         notes: null,
       })
     : null;
+  if (deposit && expense) {
+    await db.prepare('UPDATE deposits SET cost_expense_id = ? WHERE id = ?').bind(expense.id, deposit.id).run();
+    return { expense, deposit: { ...deposit, costExpenseId: expense.id } };
+  }
   return { expense, deposit };
 }
