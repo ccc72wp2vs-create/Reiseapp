@@ -31,7 +31,7 @@ function when(ms: number, now: number, timeZone: string): string {
   return `${date}, ${time} Uhr`;
 }
 
-async function setDone(tripId: string, b: BookingDto, done: boolean): Promise<BookingDto> {
+export async function setDone(tripId: string, b: BookingDto, done: boolean): Promise<BookingDto> {
   const res = await tripStore.mutate(() =>
     http.patch<{ booking: BookingDto }>(`/trips/${tripId}/bookings/${b.id}`, {
       checkinDoneAt: done ? new Date().toISOString() : null,

@@ -48,21 +48,40 @@ export function splitPresets(
   return out;
 }
 
-export default function ExpenseSheet({ open, onClose, expense }: { open: boolean; onClose: () => void; expense?: ExpenseDto | null }) {
+export interface ExpensePrefill {
+  title?: string;
+  amountMinor?: number | null;
+  currency?: string | null;
+  date?: string;
+}
+
+export default function ExpenseSheet({
+  open,
+  onClose,
+  expense,
+  prefill,
+}: {
+  open: boolean;
+  onClose: () => void;
+  expense?: ExpenseDto | null;
+  /** Start values for a new expense (e.g. proposed by "Frag TRAVIO"); nothing is saved without the user. */
+  prefill?: ExpensePrefill | null;
+}) {
   const { snap, me } = useTrip();
   // New expenses start in the quick form (amount, who paid, for whom).
   const [quick, setQuick] = useState(!expense);
   const online = useOnline();
   const { trip, travelers, exchangeRates, expenses } = snap!;
   const base = trip.baseCurrency;
-  const defaultCurrency = expense?.currency ?? trip.localCurrency ?? base;
+  const pf = expense ? null : prefill;
+  const defaultCurrency = expense?.currency ?? pf?.currency ?? trip.localCurrency ?? base;
   const [form, setForm] = useState(() => {
-    const date = expense?.date ?? todayIn(snap!.destinations[0]?.timezone ?? trip.homeTimezone);
+    const date = expense?.date ?? pf?.date ?? todayIn(snap!.destinations[0]?.timezone ?? trip.homeTimezone);
     const sugg = defaultCurrency !== base ? suggestedRate(exchangeRates, expenses, defaultCurrency, date) : null;
     const initialRate = expense ? (expense.fxSource === 'identity' ? '' : expense.fxRate) : (sugg?.rate ?? '');
     return {
-      title: expense?.title ?? '',
-      amount: expense ? minorToInput(expense.amountMinor, expense.currency) : '',
+      title: expense?.title ?? pf?.title ?? '',
+      amount: expense ? minorToInput(expense.amountMinor, expense.currency) : pf?.amountMinor != null ? minorToInput(pf.amountMinor, defaultCurrency) : '',
       currency: defaultCurrency,
       date,
       category: (expense?.category ?? 'food') as ExpenseCategory,

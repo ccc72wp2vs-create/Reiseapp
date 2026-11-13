@@ -240,7 +240,7 @@ input[type='time']::-webkit-date-and-time-value {
   padding-bottom: env(safe-area-inset-bottom);
 }
 .pb-nav {
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(8.5rem + env(safe-area-inset-bottom));
 }
 .px-safe {
   padding-left: max(env(safe-area-inset-left), 1rem);

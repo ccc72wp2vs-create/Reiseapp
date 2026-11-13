@@ -488,3 +488,24 @@ export const syncOperationSchema = z.object({
   clientTime: z.string().max(40).optional(),
 });
 export const syncRequestSchema = z.object({ ops: z.array(syncOperationSchema).min(1).max(100) });
+
+// ---------------------------------------------------------------------------
+// Assistant ("Frag TRAVIO")
+// ---------------------------------------------------------------------------
+
+export const assistantRequestSchema = z.object({
+  messages: z
+    .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().trim().min(1).max(1200) }))
+    .min(1)
+    .max(12),
+  location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).nullable().optional(),
+});
+
+export const assistantPreferencesSchema = z.object({
+  interests: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
+  budget: z.enum(['low', 'mid', 'high']).nullable().optional(),
+  maxTravelMinutes: z.number().int().min(5).max(240).nullable().optional(),
+  vibe: z.enum(['quiet', 'lively']).nullable().optional(),
+  rhythm: z.enum(['early', 'late']).nullable().optional(),
+  cuisine: z.string().trim().max(80).nullable().optional(),
+});

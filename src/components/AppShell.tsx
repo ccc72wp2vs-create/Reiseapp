@@ -1,6 +1,7 @@
 import { CalendarDays, Compass, Home, LayoutGrid, Wallet } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
+import { AssistantButton } from '../features/assistant/AssistantButton';
 import { ROLE_RANK } from '../../shared/constants';
 import { todayIn } from '../../shared/trip';
 import type { TripSnapshot, TripSummaryDto } from '../../shared/types';
@@ -66,6 +67,7 @@ export function AppShell() {
       <main className="pb-nav">
         <Outlet />
       </main>
+      <AssistantButton />
       <BottomNav />
     </div>
   );

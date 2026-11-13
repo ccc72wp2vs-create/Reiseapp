@@ -25,6 +25,8 @@ import {
   placeUpdateSchema,
   settlementCreateSchema,
   syncRequestSchema,
+  assistantPreferencesSchema,
+  assistantRequestSchema,
 } from '../../shared/schemas';
 import { computeBalances, suggestSettlements } from '../../shared/finance';
 import type { ExpenseCategory } from '../../shared/constants';
@@ -51,6 +53,8 @@ import * as docs from '../services/documents';
 import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
+import * as assistant from '../services/assistant';
+import { buildSnapshot } from '../services/trips';
 import type { AppEnv } from '../types';
 import { versionQuery } from './trips';
 
@@ -303,6 +307,30 @@ r.post('/:tripId/documents/analyze', async (c) => {
   const name = decodeURIComponent(c.req.header('x-filename') ?? 'Beleg');
   const extracted = await docs.analyzeOnly(c.env.AI, { name, mime, bytes: new Uint8Array(await c.req.arrayBuffer()) });
   return c.json({ extracted });
+});
+
+// ---------------------------------------------------------------------------
+// "Frag TRAVIO" – answers from the trip's own data; proposals are executed
+// by the client through the regular endpoints above after confirmation.
+// Nothing of the conversation is stored.
+// ---------------------------------------------------------------------------
+
+r.post('/:tripId/assistant', async (c) => {
+  const t = c.get('trip');
+  const user = currentUser(c);
+  const request = await parseJson(c, assistantRequestSchema);
+  const snap = await buildSnapshot(c.env.DB, t.tripId, t.role, user.id);
+  if (!snap) throw new ApiError('not_found', 'Reise nicht gefunden');
+  return c.json(await assistant.askAssistant(c.env, { snap, userId: user.id, role: t.role, request }));
+});
+
+r.get('/:tripId/assistant/preferences', async (c) => {
+  return c.json({ preferences: await assistant.getPreferences(c.env.DB, currentUser(c).id) });
+});
+
+r.put('/:tripId/assistant/preferences', async (c) => {
+  const prefs = await parseJson(c, assistantPreferencesSchema);
+  return c.json({ preferences: await assistant.setPreferences(c.env.DB, currentUser(c).id, prefs) });
 });
 
 /* Documents stored by an earlier app version: view, re-link or delete only. */

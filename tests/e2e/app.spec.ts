@@ -158,3 +158,49 @@ test('check-in reminder: ask for departure time, open the airline link, mark as 
   await expect(page.getByText('Check-in als erledigt markiert')).toBeVisible();
   await expect(page.getByText(/Online-Check-in geöffnet/)).toHaveCount(0);
 });
+
+test('Frag TRAVIO: answers from trip data and adds a confirmed day plan via the existing plan', async ({ page }, info) => {
+  test.skip(info.project.name !== 'iphone', 'changes shared data – run once');
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Frag TRAVIO' }).click();
+  await expect(page.getByText('Wie kann ich dir bei deiner Reise helfen?')).toBeVisible();
+
+  // Without Workers AI (local e2e) the answer comes straight from the app data.
+  await page.getByRole('button', { name: 'Reisekasse prüfen' }).click();
+  await expect(page.getByText(/ausgegeben/).first()).toBeVisible();
+  await expect(page.getByText('Direkt aus euren Reisedaten (ohne KI).')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Zur Reisekasse/ })).toBeVisible();
+
+  // Simulate a model day plan; adding it must use the normal itinerary.
+  await page.route('**/api/v1/trips/*/assistant', (route) =>
+    route.fulfill({
+      json: {
+        answer: 'Hier ist ein Vorschlag für morgen.',
+        ai: true,
+        remaining: 40,
+        cards: [],
+        proposal: {
+          kind: 'add_activities',
+          date: '2026-11-13',
+          alternatives: [{ title: 'Bei Regen: Kochkurs', description: 'Drinnen.' }],
+          items: [
+            { title: 'Frühstück am Meer', startTime: '09:00', endTime: '10:00', category: 'restaurant', locationName: null, description: 'Ruhiger Start.', placeId: null, source: 'idea', conflict: null, duplicate: false },
+            { title: 'Sonnenuntergang', startTime: '18:00', endTime: null, category: 'nature', locationName: 'Promthep Cape', description: null, placeId: null, source: 'idea', conflict: 'Überschneidet sich mit „Abendessen“', duplicate: false },
+            { title: 'Doppelt', startTime: '12:00', endTime: null, category: 'other', locationName: null, description: null, placeId: null, source: 'idea', conflict: null, duplicate: true },
+          ],
+        },
+      },
+    }),
+  );
+  await page.getByLabel('Frage an TRAVIO').fill('Plane uns morgen einen schönen Tag');
+  await page.getByRole('button', { name: 'Senden' }).click();
+  await expect(page.getByText('Freitag, 13. November')).toBeVisible();
+  await expect(page.getByText('Überschneidet sich mit „Abendessen“')).toBeVisible();
+  await page.getByRole('button', { name: '2 zum Reiseplan hinzufügen' }).click();
+  await expect(page.getByText('2 Programmpunkte hinzugefügt')).toBeVisible();
+  await page.getByRole('link', { name: /Im Reiseplan ansehen/ }).click();
+  await expect(page).toHaveURL(/\/plan\?tag=2026-11-13/);
+  await expect(page.getByText('Frühstück am Meer')).toBeVisible();
+  await expect(page.getByText('Sonnenuntergang')).toBeVisible();
+  await expect(page.getByText('Doppelt')).toHaveCount(0);
+});

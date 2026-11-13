@@ -13,6 +13,12 @@ export interface Env {
   SETUP_TOKEN?: string;
   /** Workers AI – reads uploaded receipts / confirmations. */
   AI?: Ai;
+  /** "Frag TRAVIO": Workers AI model id (default: Llama 3.3 70B fp8-fast). */
+  ASSISTANT_MODEL?: string;
+  /** Model calls per user and day (default 80; 0 = answers without AI only). */
+  ASSISTANT_DAILY_LIMIT?: string;
+  /** Max generated tokens per answer (default 900). */
+  ASSISTANT_MAX_TOKENS?: string;
   /** Future: private R2 bucket for booking documents. */
   DOCUMENTS?: R2Bucket;
 }
