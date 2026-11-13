@@ -319,6 +319,21 @@ export interface ExtractedDocument {
   /** Name printed as payer / guest, if any. */
   payerName: string | null;
   personsCount: number | null;
+  /** Optional details – all map onto existing booking fields. */
+  startTime?: string | null;
+  endTime?: string | null;
+  fromLocation?: string | null;
+  toLocation?: string | null;
+  /** Hotel address / meeting point. */
+  location?: string | null;
+  flightNumber?: string | null;
+  /** e.g. "Kostenlose Stornierung bis 10.11.2026, 18:00" or "Check-in ab 14:00". */
+  deadlines?: string | null;
+}
+
+/** Result of analysing a document – nothing of the document itself is stored. */
+export interface DocumentAnalysis {
+  extracted: ExtractedDocument | null;
 }
 
 export interface DocumentDto {

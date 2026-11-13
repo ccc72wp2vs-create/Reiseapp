@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarX, DoorOpen, FileText, Flag, KeyRound, Lock, Users, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarX, DoorOpen, Flag, KeyRound, Lock, Users, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import {
   BOOKING_STATUSES,
@@ -18,7 +18,7 @@ import { money } from '../../lib/format';
 import { DepositSheet, ResolveDepositSheet } from '../wallet/DepositSheet';
 import { PayersInput, resolvePayers, type PayersValue } from '../wallet/PayersInput';
 import { JointPaymentSheet } from '../wallet/JointPaymentSheet';
-import { DocumentList } from '../documents/DocumentList';
+import { LegacyDocuments } from '../documents/DocumentList';
 import type { BookingDto, DepositDto, DepositMethod, TripSnapshot } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { MoneyField, TimeZoneSelect } from '../../components/inputs';
@@ -39,6 +39,12 @@ export interface BookingPrefill {
   currency?: string | null;
   paymentStatus?: PaymentStatus;
   personsCount?: number | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  fromLocation?: string | null;
+  toLocation?: string | null;
+  location?: string | null;
+  notes?: string | null;
 }
 
 export default function BookingSheet({
@@ -79,14 +85,14 @@ export default function BookingSheet({
     provider: b?.provider ?? pf?.provider ?? '',
     reference: b?.reference ?? pf?.reference ?? '',
     startDate: b?.startDate ?? pf?.startDate ?? '',
-    startTime: b?.startTime ?? '',
+    startTime: b?.startTime ?? pf?.startTime ?? '',
     startTimezone: b?.startTimezone ?? defaultTz,
     endDate: b?.endDate ?? pf?.endDate ?? '',
-    endTime: b?.endTime ?? '',
+    endTime: b?.endTime ?? pf?.endTime ?? '',
     endTimezone: b?.endTimezone ?? defaultTz,
-    fromLocation: b?.fromLocation ?? '',
-    toLocation: b?.toLocation ?? '',
-    location: b?.location ?? '',
+    fromLocation: b?.fromLocation ?? pf?.fromLocation ?? '',
+    toLocation: b?.toLocation ?? pf?.toLocation ?? '',
+    location: b?.location ?? pf?.location ?? '',
     destinationId: b?.destinationId ?? '',
     fromDestinationId: b?.fromDestinationId ?? '',
     toDestinationId: b?.toDestinationId ?? '',
@@ -100,7 +106,7 @@ export default function BookingSheet({
     paymentStatus: (b?.paymentStatus ?? pf?.paymentStatus ?? 'unknown') as PaymentStatus,
     paidByTravelerId: b?.paidByTravelerId ?? '',
     clarificationNote: b?.clarificationNote ?? '',
-    notes: b?.notes ?? '',
+    notes: b?.notes ?? pf?.notes ?? '',
     travelerIds: b?.travelerIds ?? [],
   }));
   const [error, setError] = useState<string | null>(null);
@@ -412,15 +418,7 @@ export default function BookingSheet({
 
           <TextAreaField label={t.bookings.clarification} optional placeholder={t.bookings.clarificationHint} value={form.clarificationNote} onChange={(e) => set('clarificationNote', e.target.value)} />
           <TextAreaField label={t.bookings.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
-          <Field label={t.documents.section}>
-            {b ? (
-              <DocumentList snap={snap!} bookingId={b.id} expenseId={b.expenseId ?? undefined} canEdit />
-            ) : (
-              <p className="flex items-center gap-2 text-[13px] text-text-3">
-                <FileText size={16} className="shrink-0" /> {t.documents.afterSave}
-              </p>
-            )}
-          </Field>
+          {b && <LegacyDocuments snap={snap!} bookingId={b.id} expenseId={b.expenseId ?? undefined} canEdit />}
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
               {error}

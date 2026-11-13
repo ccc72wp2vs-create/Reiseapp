@@ -292,20 +292,20 @@ r.post('/:tripId/deposits', async (c) => {
 // Documents (receipts / confirmations)
 // ---------------------------------------------------------------------------
 
-r.post('/:tripId/documents', async (c) => {
+/**
+ * Analyse a receipt / confirmation – in memory only. Returns the recognised
+ * fields; the file is not stored. Saving happens via the normal booking /
+ * expense endpoints after the user confirmed the data.
+ */
+r.post('/:tripId/documents/analyze', async (c) => {
   requireRole(c, 'editor');
-  const t = c.get('trip');
   const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
   const name = decodeURIComponent(c.req.header('x-filename') ?? 'Beleg');
-  const bytes = new Uint8Array(await c.req.arrayBuffer());
-  const doc = await docs.createDocument(c.env.DB, c.env.AI, t.tripId, currentUser(c).id, { name, mime, bytes }, {
-    bookingId: c.req.query('bookingId') || null,
-    expenseId: c.req.query('expenseId') || null,
-  });
-  await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'document', entityId: doc.id, action: 'create' });
-  return c.json({ document: doc }, 201);
+  const extracted = await docs.analyzeOnly(c.env.AI, { name, mime, bytes: new Uint8Array(await c.req.arrayBuffer()) });
+  return c.json({ extracted });
 });
 
+/* Documents stored by an earlier app version: view, re-link or delete only. */
 r.get('/:tripId/documents/:id/file', async (c) => {
   const f = await docs.getDocumentFile(c.env.DB, c.get('trip').tripId, c.req.param('id'));
   return new Response(f.bytes, {
@@ -322,11 +322,6 @@ r.patch('/:tripId/documents/:id', async (c) => {
   requireRole(c, 'editor');
   const links = await parseJson(c, z.object({ bookingId: z.string().uuid().nullable().optional(), expenseId: z.string().uuid().nullable().optional() }));
   return c.json({ document: await docs.linkDocument(c.env.DB, c.get('trip').tripId, c.req.param('id'), links) });
-});
-
-r.post('/:tripId/documents/:id/analyze', async (c) => {
-  requireRole(c, 'editor');
-  return c.json({ document: await docs.reanalyzeDocument(c.env.DB, c.env.AI, c.get('trip').tripId, c.req.param('id')) });
 });
 
 r.delete('/:tripId/documents/:id', async (c) => {

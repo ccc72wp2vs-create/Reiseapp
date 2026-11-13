@@ -1,97 +1,139 @@
-import { CheckCircle2, FileSearch, FileUp, Link2, Wallet } from 'lucide-react';
-import { lazy, Suspense, useMemo, useRef, useState } from 'react';
+import { FileSearch, FileUp, ShieldCheck, Wallet, X } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { matchDocument } from '../../../shared/documents';
-import type { BookingDto, DocumentDto } from '../../../shared/types';
+import type { BookingDto, ExtractedDocument } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { BookingIcon } from '../../components/status';
 import { toast } from '../../components/toast';
-import { Badge, Button, Field, SelectField, Sheet, cx } from '../../components/ui';
+import { Badge, Button, Field, SelectField, Sheet, Toggle, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
-import { documentUrl, uploadDocument } from '../../lib/documents';
-import { formatDate, money } from '../../lib/format';
+import { analyzeDocument } from '../../lib/documents';
+import { formatDate, formatTime, money } from '../../lib/format';
 import { tripStore, useOnline } from '../../lib/store';
 
 const BookingSheet = lazy(() => import('../bookings/BookingSheet'));
 
+/** Fields of the booking that are still empty and can be filled from the document. */
+function completionFor(b: BookingDto, ex: ExtractedDocument) {
+  const patch: Record<string, unknown> = {};
+  const labels: string[] = [];
+  const fill = (key: keyof BookingDto, value: unknown, label: string) => {
+    if ((b[key] == null || b[key] === '') && value != null && value !== '') {
+      patch[key] = value;
+      labels.push(label);
+    }
+  };
+  fill('reference', ex.reference, t.bookings.reference);
+  fill('provider', ex.provider, t.bookings.provider);
+  fill('startTime', ex.startTime, t.documents.fieldStartTime);
+  fill('endTime', ex.endTime, t.documents.fieldEndTime);
+  fill('fromLocation', ex.fromLocation, t.bookings.from);
+  fill('toLocation', ex.toLocation, t.bookings.to);
+  fill('location', ex.location, t.bookings.location);
+  if (b.priceMinor == null && ex.amountMinor != null && ex.currency) {
+    patch.priceMinor = ex.amountMinor;
+    patch.currency = ex.currency;
+    labels.push(t.bookings.price);
+  }
+  if (ex.paymentStatus === 'paid' && b.paymentStatus !== 'paid') {
+    patch.paymentStatus = 'paid';
+    labels.push(t.bookings.paymentStatus);
+  }
+  if (ex.deadlines && !(b.notes ?? '').includes(ex.deadlines)) {
+    patch.notes = [b.notes, ex.deadlines].filter(Boolean).join('\n');
+    labels.push(t.documents.fieldDeadlines);
+  }
+  return { patch, labels };
+}
+
 /**
- * "Beleg importieren": upload → recognise → match against bookings and the
- * wallet → one tap to attach, complete the booking or add the payment to the
- * wallet (through the existing booking → expense step). Nothing is booked
- * automatically and nothing is created twice.
+ * "Dokument importieren": choose → read automatically → check → save.
+ * The document is only used for the analysis and never stored; afterwards
+ * only the confirmed, structured data lives in bookings / the wallet.
  */
-export function DocumentImportSheet({ onClose, document: initial }: { onClose: () => void; document?: DocumentDto | null }) {
+export function DocumentImportSheet({ onClose }: { onClose: () => void }) {
   const { snap, me } = useTrip();
   const online = useOnline();
+  const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
-  const [doc, setDoc] = useState<DocumentDto | null>(initial ?? null);
-  const [busy, setBusy] = useState(false);
+  const abort = useRef<AbortController | null>(null);
+  const [phase, setPhase] = useState<'pick' | 'reading' | 'review'>('pick');
+  const [ex, setEx] = useState<ExtractedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [manual, setManual] = useState('');
-  const s = snap!;
-  const live = doc ? ((s.documents ?? []).find((d) => d.id === doc.id) ?? doc) : null;
-  const ex = live?.extracted ?? null;
-  const match = useMemo(() => (ex ? matchDocument(ex, s.bookings, s.expenses) : null), [ex, s.bookings, s.expenses]);
-  const booking = live?.bookingId ? s.bookings.find((b) => b.id === live.bookingId) : match?.bookingId ? s.bookings.find((b) => b.id === match.bookingId) : undefined;
-  const expenseId = live?.expenseId ?? match?.expenseId ?? booking?.expenseId ?? null;
-  const expense = expenseId ? s.expenses.find((e) => e.id === expenseId) : undefined;
-  const linked = !!live && ((!!booking && live.bookingId === booking.id) || (!!expense && live.expenseId === expense.id));
-  const paid = ex?.paymentStatus === 'paid' || booking?.paymentStatus === 'paid';
-  const canAddToWallet = !!booking && !expense && paid && booking.costKind === 'actual' && booking.bookingStatus !== 'cancelled' && (booking.priceMinor != null || ex?.amountMinor != null);
-  const [payer, setPayer] = useState<string>('');
+  const [chosenId, setChosenId] = useState<string>('');
+  const [toWallet, setToWallet] = useState(true);
+  const [payer, setPayer] = useState('');
   const [forIds, setForIds] = useState<string[] | null>(null);
+  const s = snap!;
+
+  // Drop everything when the sheet closes (no document data kept in memory).
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      setEx(null);
+    },
+    [],
+  );
+
+  const match = useMemo(() => (ex ? matchDocument(ex, s.bookings, s.expenses) : null), [ex, s.bookings, s.expenses]);
+  const booking = s.bookings.find((b) => b.id === (chosenId || match?.bookingId));
+  const expense = s.expenses.find((e) => e.id === (booking?.expenseId ?? (chosenId ? null : match?.expenseId)));
+  const completion = booking && ex ? completionFor(booking, ex) : { patch: {}, labels: [] as string[] };
+  const paid = ex?.paymentStatus === 'paid' || booking?.paymentStatus === 'paid';
+  const walletPossible =
+    !!booking && !booking.expenseId && paid && booking.costKind === 'actual' && booking.bookingStatus !== 'cancelled' && (booking.priceMinor != null || ex?.amountMinor != null);
   const payerId = payer || booking?.paidByTravelerId || me?.id || s.travelers[0]?.id || '';
   const participants = forIds ?? (booking?.travelerIds.length ? booking.travelerIds : s.travelers.map((x) => x.id));
 
   async function onFile(f: File | undefined) {
+    if (input.current) input.current.value = ''; // release the file reference
     if (!f) return;
-    setBusy(true);
     setError(null);
+    setPhase('reading');
+    abort.current = new AbortController();
     try {
-      const d = await tripStore.mutate(() => uploadDocument(s.trip.id, f));
-      setDoc(d);
+      const result = await analyzeDocument(s.trip.id, f, abort.current.signal);
+      setEx(result);
+      setPhase('review');
+      if (!result) setError(t.documents.notRead);
     } catch (e) {
+      if ((e as Error).name === 'AbortError') {
+        setPhase('pick');
+        return;
+      }
       setError(errorMessage(e));
+      setPhase('pick');
     } finally {
-      setBusy(false);
-      if (input.current) input.current.value = '';
+      abort.current = null;
     }
   }
 
-  /** Fills gaps in the booking from the receipt – never overwrites existing values. */
-  function completion(b: BookingDto, markPaid: boolean) {
-    const patch: Record<string, unknown> = {};
-    if (!b.reference && ex?.reference) patch.reference = ex.reference;
-    if (!b.provider && ex?.provider) patch.provider = ex.provider;
-    if (b.priceMinor == null && ex?.amountMinor != null && ex.currency) {
-      patch.priceMinor = ex.amountMinor;
-      patch.currency = ex.currency;
-    }
-    if (markPaid && b.paymentStatus !== 'paid') patch.paymentStatus = 'paid';
-    if (markPaid && !b.paidByTravelerId && payerId) patch.paidByTravelerId = payerId;
-    return patch;
+  function done(bookingId: string, message: string) {
+    toast(message);
+    setEx(null);
+    onClose();
+    navigate(`/buchungen?id=${bookingId}`);
   }
 
-  async function attach(opts: { toWallet: boolean }) {
-    if (!live) return;
+  async function save() {
+    if (!booking || !ex) return;
     setBusy(true);
     setError(null);
+    const addToWallet = walletPossible && toWallet;
     try {
       await tripStore.mutate(async () => {
-        let expId = expense?.id ?? null;
-        if (booking) {
-          const patch = completion(booking, opts.toWallet || ex?.paymentStatus === 'paid');
-          if (Object.keys(patch).length) await http.patch(`/trips/${s.trip.id}/bookings/${booking.id}`, { ...patch, version: booking.version });
-          if (opts.toWallet) {
-            const r = await http.post<{ expense: { id: string } }>(`/trips/${s.trip.id}/bookings/${booking.id}/expense`, { paidByTravelerId: payerId, participantIds: participants });
-            expId = r.expense.id;
-          }
-        }
-        await http.patch(`/trips/${s.trip.id}/documents/${live.id}`, { bookingId: booking?.id ?? null, expenseId: expId });
+        const patch = { ...completion.patch };
+        if (addToWallet && !booking.paidByTravelerId) patch.paidByTravelerId = payerId;
+        if (addToWallet && booking.paymentStatus !== 'paid') patch.paymentStatus = 'paid';
+        if (Object.keys(patch).length) await http.patch(`/trips/${s.trip.id}/bookings/${booking.id}`, { ...patch, version: booking.version });
+        // Existing booking → expense step (refuses duplicates on the server).
+        if (addToWallet) await http.post(`/trips/${s.trip.id}/bookings/${booking.id}/expense`, { paidByTravelerId: payerId, participantIds: participants });
       });
-      toast(opts.toWallet ? t.documents.addedToWallet : t.documents.attached);
-      onClose();
+      done(booking.id, addToWallet ? t.documents.addedToWallet : t.documents.bookingUpdated);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -99,153 +141,146 @@ export function DocumentImportSheet({ onClose, document: initial }: { onClose: (
     }
   }
 
-  async function attachManual() {
-    if (!live || !manual) return;
-    const [kind, id] = manual.split(':');
-    setBusy(true);
-    try {
-      const b = kind === 'b' ? s.bookings.find((x) => x.id === id) : undefined;
-      const e = kind === 'e' ? s.expenses.find((x) => x.id === id) : b?.expenseId ? s.expenses.find((x) => x.id === b.expenseId) : undefined;
-      await tripStore.mutate(() => http.patch(`/trips/${s.trip.id}/documents/${live.id}`, { bookingId: b?.id ?? e?.bookingId ?? null, expenseId: e?.id ?? null }));
-      toast(t.documents.attached);
-      onClose();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const name = (id: string) => s.travelers.find((x) => x.id === id)?.name ?? '?';
   const chip = (on: boolean) =>
     cx('inline-flex h-9 items-center rounded-full border px-3 text-[13px] font-semibold', on ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2');
+  const nothingToDo = !!booking && !completion.labels.length && !walletPossible;
+  const title = ex?.kind === 'flight' && ex.flightNumber ? `${ex.title ?? t.documents.flight} ${ex.title?.includes(ex.flightNumber) ? '' : ex.flightNumber}`.trim() : ex?.title;
 
   return (
     <>
       <Sheet open onClose={onClose} size="lg" title={t.documents.importTitle}>
         <input ref={input} type="file" accept="application/pdf,image/*" className="sr-only" tabIndex={-1} onChange={(e) => void onFile(e.target.files?.[0])} />
-        {!live && (
+        <p className="mb-4 flex items-start gap-2 rounded-2xl bg-info-soft px-4 py-3 text-[13px] text-info">
+          <ShieldCheck size={16} className="mt-0.5 shrink-0" /> {t.documents.notStored}
+        </p>
+
+        {phase !== 'review' && (
           <div className="space-y-4 text-center">
             <p className="text-[15px] text-text-2">{t.documents.importIntro}</p>
-            <Button block icon={<FileUp size={18} />} loading={busy} disabled={!online} onClick={() => input.current?.click()}>
-              {busy ? t.documents.reading : t.documents.choose}
-            </Button>
-            <p className="text-[12px] text-text-3">{t.documents.privacy}</p>
+            {phase === 'pick' ? (
+              <Button block icon={<FileUp size={18} />} disabled={!online} onClick={() => input.current?.click()}>
+                {t.documents.choose}
+              </Button>
+            ) : (
+              <div className="space-y-3">
+                <Button block loading>
+                  {t.documents.reading}
+                </Button>
+                <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={() => abort.current?.abort()}>
+                  {t.common.cancel}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
-        {live && (
+        {phase === 'review' && (
           <div className="space-y-4">
-            {/* What was recognised */}
-            <div className="rounded-[1.25rem] border border-line bg-surface p-4">
-              <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent">
-                  {ex?.kind ? <BookingIcon type={ex.kind} /> : <FileSearch size={18} />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{ex?.title ?? live.filename}</p>
-                  <p className="text-[13px] text-text-3">
-                    {[ex?.startDate && formatDate(ex.startDate), ex?.endDate && ex.endDate !== ex.startDate && formatDate(ex.endDate)].filter(Boolean).join(' – ')}
-                    {ex?.reference ? ` · Nr. ${ex.reference}` : ''}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {ex?.amountMinor != null && ex.currency && <Badge tone="neutral">{money(ex.amountMinor, ex.currency)}</Badge>}
-                    {ex && <Badge tone={ex.paymentStatus === 'paid' ? 'success' : ex.paymentStatus === 'unknown' ? 'neutral' : 'warn'}>{t.paymentStatus[ex.paymentStatus]}</Badge>}
+            {ex && (
+              <div className="rounded-[1.25rem] border border-line bg-surface p-4">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent">
+                    {ex.kind ? <BookingIcon type={ex.kind} /> : <FileSearch size={18} />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{title ?? t.documents.unnamed}</p>
+                    <p className="text-[13px] text-text-3">
+                      {[ex.startDate && `${formatDate(ex.startDate)}${ex.startTime ? `, ${formatTime(ex.startTime)}` : ''}`, ex.endDate && ex.endDate !== ex.startDate && `${formatDate(ex.endDate)}${ex.endTime ? `, ${formatTime(ex.endTime)}` : ''}`]
+                        .filter(Boolean)
+                        .join(' – ')}
+                    </p>
+                    {(ex.fromLocation || ex.toLocation) && <p className="text-[13px] text-text-3">{[ex.fromLocation, ex.toLocation].filter(Boolean).join(' → ')}</p>}
+                    {ex.location && <p className="text-[13px] text-text-3">{ex.location}</p>}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {ex.amountMinor != null && ex.currency && <Badge tone="neutral">{money(ex.amountMinor, ex.currency)}</Badge>}
+                      <Badge tone={ex.paymentStatus === 'paid' ? 'success' : ex.paymentStatus === 'unknown' ? 'neutral' : 'warn'}>{t.paymentStatus[ex.paymentStatus]}</Badge>
+                      {ex.reference && <Badge tone="neutral">Nr. {ex.reference}</Badge>}
+                    </div>
+                    {ex.deadlines && <p className="mt-2 text-[13px] text-text-2">{ex.deadlines}</p>}
                   </div>
                 </div>
-                <a href={documentUrl(s.trip.id, live.id)} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[13px] font-semibold text-accent">
-                  {t.documents.open}
-                </a>
               </div>
-              {!ex && <p className="mt-3 text-[13px] text-text-3">{live.status === 'failed' ? t.documents.notRead : t.documents.notReadLocal}</p>}
-            </div>
-
-            {/* What it belongs to */}
-            {booking || expense ? (
-              <div className="rounded-[1.25rem] border border-accent/40 bg-accent-soft p-4">
-                <p className="text-[13px] font-semibold text-accent">{linked ? t.documents.linkedTo : t.documents.belongsTo}</p>
-                <p className="mt-1 font-semibold">{booking?.title ?? expense?.title}</p>
-                <p className="text-[13px] text-text-2">
-                  {expense ? t.documents.inWallet(money(expense.amountMinor, expense.currency)) : paid ? t.documents.notInWallet : t.documents.notPaid}
-                </p>
-              </div>
-            ) : (
-              ex && <p className="rounded-[1.25rem] bg-surface-2 p-4 text-[14px] text-text-2">{t.documents.noMatch}</p>
             )}
 
-            {/* Only what is still missing: who paid, for whom */}
-            {canAddToWallet && (
-              <div className="space-y-3">
-                <Field label={t.documents.whoPaid}>
-                  <div className="flex flex-wrap gap-2">
-                    {s.travelers.map((x) => (
-                      <button key={x.id} type="button" aria-pressed={payerId === x.id} onClick={() => setPayer(x.id)} className={chip(payerId === x.id)}>
-                        {x.name}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-                <Field label={t.documents.forWhom}>
-                  <div className="flex flex-wrap gap-2">
-                    {s.travelers.map((x) => {
-                      const on = participants.includes(x.id);
-                      return (
-                        <button
-                          key={x.id}
-                          type="button"
-                          aria-pressed={on}
-                          onClick={() => setForIds(on ? participants.filter((p) => p !== x.id) : s.travelers.filter((y) => y.id === x.id || participants.includes(y.id)).map((y) => y.id))}
-                          className={chip(on)}
-                        >
-                          {x.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Field>
-                <Button block icon={<Wallet size={18} />} loading={busy} disabled={!online || !participants.length} onClick={() => void attach({ toWallet: true })}>
-                  {t.documents.addToWallet}
-                </Button>
-                <p className="text-[12px] text-text-3">{t.documents.splitHint(name(payerId), participants.length)}</p>
+            {ex && booking && (
+              <div className="rounded-[1.25rem] border border-accent/40 bg-accent-soft p-4">
+                <p className="text-[13px] font-semibold text-accent">{t.documents.belongsTo}</p>
+                <p className="mt-1 font-semibold">{booking.title}</p>
+                <p className="text-[13px] text-text-2">
+                  {completion.labels.length ? t.documents.willAdd(completion.labels.join(', ')) : t.documents.nothingNew}
+                  {expense ? ` ${t.documents.inWallet(money(expense.amountMinor, expense.currency))}` : ''}
+                </p>
+              </div>
+            )}
+            {ex && !booking && match?.expenseId && expense && (
+              <p className="rounded-[1.25rem] bg-surface-2 p-4 text-[14px] text-text-2">{t.documents.expenseOnly(expense.title, money(expense.amountMinor, expense.currency))}</p>
+            )}
+
+            {walletPossible && (
+              <div className="space-y-3 rounded-[1.25rem] border border-line bg-surface p-4">
+                <Toggle checked={toWallet} onChange={setToWallet} label={t.documents.addToWallet} description={t.documents.walletHint} />
+                {toWallet && (
+                  <>
+                    <Field label={t.documents.whoPaid}>
+                      <div className="flex flex-wrap gap-2">
+                        {s.travelers.map((x) => (
+                          <button key={x.id} type="button" aria-pressed={payerId === x.id} onClick={() => setPayer(x.id)} className={chip(payerId === x.id)}>
+                            {x.name}
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
+                    <Field label={t.documents.forWhom}>
+                      <div className="flex flex-wrap gap-2">
+                        {s.travelers.map((x) => {
+                          const on = participants.includes(x.id);
+                          return (
+                            <button
+                              key={x.id}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() => setForIds(on ? participants.filter((p) => p !== x.id) : s.travelers.filter((y) => y.id === x.id || participants.includes(y.id)).map((y) => y.id))}
+                              className={chip(on)}
+                            >
+                              {x.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Field>
+                  </>
+                )}
               </div>
             )}
 
             <div className="flex flex-wrap gap-2">
-              {(booking || expense) && !linked && (
-                <Button variant={canAddToWallet ? 'secondary' : 'primary'} icon={<Link2 size={16} />} loading={busy && !canAddToWallet} disabled={!online} onClick={() => void attach({ toWallet: false })}>
-                  {t.documents.attachOnly}
+              {booking && !nothingToDo && (
+                <Button icon={walletPossible && toWallet ? <Wallet size={16} /> : undefined} loading={busy} disabled={!online || (walletPossible && toWallet && !participants.length)} onClick={() => void save()}>
+                  {t.documents.save}
                 </Button>
               )}
-              {!booking && !expense && (
-                <Button icon={<CheckCircle2 size={16} />} disabled={!online} onClick={() => setCreating(true)}>
+              {booking && nothingToDo && (
+                <Button onClick={() => done(booking.id, t.documents.alreadyComplete)}>{t.documents.toBooking}</Button>
+              )}
+              {!booking && (
+                <Button disabled={!online} onClick={() => setCreating(true)}>
                   {t.documents.createBooking}
                 </Button>
               )}
-            </div>
-
-            {/* Manual assignment – always possible, also later */}
-            <div className="grid grid-cols-[1fr_auto] items-end gap-2 border-t border-line pt-4">
-              <SelectField label={t.documents.assignOther} value={manual} onChange={(e) => setManual(e.target.value)}>
-                <option value="">–</option>
-                <optgroup label={t.bookings.title}>
-                  {s.bookings.map((b) => (
-                    <option key={b.id} value={`b:${b.id}`}>
-                      {b.title}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label={t.wallet.title}>
-                  {s.expenses.map((e) => (
-                    <option key={e.id} value={`e:${e.id}`}>
-                      {e.title} · {money(e.amountMinor, e.currency)}
-                    </option>
-                  ))}
-                </optgroup>
-              </SelectField>
-              <Button variant="secondary" disabled={!manual || !online} onClick={() => void attachManual()}>
-                {t.documents.assign}
+              <Button variant="ghost" onClick={() => { setEx(null); setPhase('pick'); setChosenId(''); }}>
+                {t.documents.another}
               </Button>
             </div>
+
+            {/* Correct the match if needed */}
+            <SelectField label={t.documents.otherBooking} value={chosenId} onChange={(e) => setChosenId(e.target.value)}>
+              <option value="">{match?.bookingId ? t.documents.suggested : '–'}</option>
+              {s.bookings.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title}
+                </option>
+              ))}
+            </SelectField>
           </div>
         )}
         {error && (
@@ -255,22 +290,28 @@ export function DocumentImportSheet({ onClose, document: initial }: { onClose: (
         )}
       </Sheet>
       <Suspense fallback={null}>
-        {creating && live && (
+        {creating && (
           <BookingSheet
             open
             prefill={{
-              title: ex?.title,
+              title: title ?? null,
               type: ex?.kind,
               provider: ex?.provider,
               reference: ex?.reference,
               startDate: ex?.startDate,
               endDate: ex?.endDate,
+              startTime: ex?.startTime,
+              endTime: ex?.endTime,
+              fromLocation: ex?.fromLocation,
+              toLocation: ex?.toLocation,
+              location: ex?.location,
               priceMinor: ex?.amountMinor,
               currency: ex?.currency,
               paymentStatus: ex?.paymentStatus,
               personsCount: ex?.personsCount,
+              notes: ex?.deadlines,
             }}
-            onSaved={(b) => void http.patch(`/trips/${s.trip.id}/documents/${live.id}`, { bookingId: b.id })}
+            onSaved={(b) => done(b.id, t.documents.bookingCreated)}
             onClose={() => setCreating(false)}
           />
         )}
@@ -278,4 +319,3 @@ export function DocumentImportSheet({ onClose, document: initial }: { onClose: (
     </>
   );
 }
-

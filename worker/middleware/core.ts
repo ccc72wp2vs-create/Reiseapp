@@ -66,7 +66,7 @@ export const bodyLimit: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (UNSAFE_METHODS.has(c.req.method)) {
     const len = Number(c.req.header('content-length') ?? '0');
     // File uploads (receipts) have their own, larger limit.
-    const limit = /\/trips\/[^/]+\/documents$/.test(new URL(c.req.url).pathname) ? MAX_UPLOAD_BYTES : MAX_JSON_BODY_BYTES;
+    const limit = /\/trips\/[^/]+\/documents\/analyze$/.test(new URL(c.req.url).pathname) ? MAX_UPLOAD_BYTES : MAX_JSON_BODY_BYTES;
     if (len > limit) throw new ApiError('payload_too_large', limit === MAX_UPLOAD_BYTES ? 'Die Datei ist zu groß (max. 1,9 MB).' : 'Anfrage ist zu groß');
   }
   await next();

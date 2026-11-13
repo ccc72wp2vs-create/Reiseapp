@@ -1,10 +1,11 @@
 /**
- * Receipts / confirmations stored in D1. Links point only from the document
- * to a booking or expense – removing a document never touches them.
+ * Documents are analysed in memory only (analyzeOnly) and never stored.
+ * The functions below only serve documents that were stored by an earlier
+ * version of the app (kept, never deleted automatically).
  */
 import type { DocumentDto, ExtractedDocument } from '../../shared/types';
 import { ApiError } from '../lib/errors';
-import { nowIso, uuid } from '../lib/util';
+import { nowIso } from '../lib/util';
 import { analyzeDocument } from './docai';
 
 type Row = Record<string, unknown>;
@@ -58,43 +59,17 @@ async function assertLinks(db: D1Database, tripId: string, links: { bookingId?: 
   }
 }
 
-export async function createDocument(
-  db: D1Database,
-  ai: Ai | undefined,
-  tripId: string,
-  userId: string,
-  file: { name: string; mime: string; bytes: Uint8Array },
-  links: { bookingId?: string | null; expenseId?: string | null },
-): Promise<DocumentDto> {
-  if (!DOCUMENT_MIME.includes(file.mime)) throw new ApiError('validation_failed', 'Nur PDF oder Fotos (JPG, PNG, WebP) möglich');
+/**
+ * Analyses a document in memory and returns the recognised fields. The file
+ * is NOT stored anywhere (no D1, no R2, no logs) – once this returns, the
+ * bytes are gone. Only what the user then confirms ends up in bookings /
+ * expenses through the existing endpoints.
+ */
+export async function analyzeOnly(ai: Ai | undefined, file: { name: string; mime: string; bytes: Uint8Array }): Promise<ExtractedDocument | null> {
+  if (!DOCUMENT_MIME.includes(file.mime)) throw new ApiError('validation_failed', 'Nur PDF oder Fotos/Screenshots (JPG, PNG, WebP) möglich');
   if (!file.bytes.byteLength) throw new ApiError('validation_failed', 'Leere Datei');
   if (file.bytes.byteLength > DOCUMENT_MAX_BYTES) throw new ApiError('payload_too_large', 'Die Datei ist zu groß (max. 1,9 MB).');
-  await assertLinks(db, tripId, links);
-  const id = uuid();
-  const now = nowIso();
-  const extracted = await analyzeDocument(ai, file);
-  await db
-    .prepare(
-      `INSERT INTO documents (id, trip_id, filename, mime, size, data, booking_id, expense_id, extracted, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      tripId,
-      file.name.slice(0, 200) || 'Beleg',
-      file.mime,
-      file.bytes.byteLength,
-      file.bytes,
-      links.bookingId ?? null,
-      links.expenseId ?? null,
-      extracted ? JSON.stringify(extracted) : null,
-      extracted ? 'analyzed' : ai ? 'failed' : 'uploaded',
-      userId,
-      now,
-      now,
-    )
-    .run();
-  return (await getDocument(db, tripId, id))!;
+  return analyzeDocument(ai, file);
 }
 
 export async function getDocumentFile(db: D1Database, tripId: string, id: string) {
@@ -112,16 +87,6 @@ export async function linkDocument(db: D1Database, tripId: string, id: string, l
   await db
     .prepare('UPDATE documents SET booking_id = ?, expense_id = ?, updated_at = ? WHERE id = ?')
     .bind(links.bookingId !== undefined ? links.bookingId : doc.bookingId, links.expenseId !== undefined ? links.expenseId : doc.expenseId, nowIso(), id)
-    .run();
-  return (await getDocument(db, tripId, id))!;
-}
-
-export async function reanalyzeDocument(db: D1Database, ai: Ai | undefined, tripId: string, id: string) {
-  const f = await getDocumentFile(db, tripId, id);
-  const extracted = await analyzeDocument(ai, { name: f.filename, mime: f.mime, bytes: f.bytes });
-  await db
-    .prepare('UPDATE documents SET extracted = ?, status = ?, updated_at = ? WHERE id = ? AND trip_id = ?')
-    .bind(extracted ? JSON.stringify(extracted) : null, extracted ? 'analyzed' : 'failed', nowIso(), id, tripId)
     .run();
   return (await getDocument(db, tripId, id))!;
 }

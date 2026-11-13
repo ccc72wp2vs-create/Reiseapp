@@ -2,7 +2,9 @@
  * Reads receipts / booking confirmations with Cloudflare Workers AI (the
  * document stays inside the Cloudflare account). PDFs are converted to text
  * first; photos go to a vision model. A simple text heuristic fills in what
- * the model could not provide. Never throws – returns null on failure.
+ * the model could not provide. Everything happens in memory for this one
+ * request – nothing of the document is stored or logged. Never throws –
+ * returns null on failure.
  */
 import { BOOKING_TYPES } from '../../shared/constants';
 import { currencyExponent, isSupportedCurrency } from '../../shared/money';
@@ -22,12 +24,19 @@ const FIELDS = `{
   "currency": "ISO-Code, z. B. EUR, THB, oder null",
   "paymentStatus": "paid|unpaid|partial|unknown",
   "payerName": "Name der zahlenden Person/des Gastes oder null",
-  "personsCount": "Anzahl Personen als Zahl oder null"
+  "personsCount": "Anzahl Personen als Zahl oder null",
+  "startTime": "HH:MM (Abflug, Check-in, Abholung) oder null",
+  "endTime": "HH:MM (Ankunft, Check-out, Rückgabe) oder null",
+  "fromLocation": "Abflughafen/Abfahrtsort (z. B. 'BKK Bangkok') oder null",
+  "toLocation": "Zielflughafen/Zielort oder null",
+  "location": "Hoteladresse bzw. Treffpunkt oder null",
+  "flightNumber": "Flugnummer wie 'TG 202' oder null",
+  "deadlines": "kurz: Stornierungsfrist, Check-in-Zeiten, Treffpunktzeit – oder null"
 }`;
 
 const SYSTEM = `Du liest Reisebelege (Rechnungen, Buchungsbestätigungen, Quittungen) und gibst NUR ein JSON-Objekt zurück, ohne Erklärung:
 ${FIELDS}
-Regeln: Nichts erfinden – fehlt etwas, null. "paid" nur, wenn der Beleg eine erfolgte Zahlung zeigt (z. B. "bezahlt", "paid", "Zahlung erhalten", Quittung). Bei "zahlbar vor Ort" oder offener Rechnung "unpaid".`;
+Regeln: Nichts erfinden – fehlt etwas, null. Keine Ausweis-, Pass- oder Kartennummern, keine Geburtsdaten übernehmen. "paid" nur, wenn der Beleg eine erfolgte Zahlung zeigt (z. B. "bezahlt", "paid", "Zahlung erhalten", Quittung). Bei "zahlbar vor Ort" oder offener Rechnung "unpaid".`;
 
 type Raw = Record<string, unknown>;
 
@@ -44,6 +53,10 @@ function parseJsonLoose(v: unknown): Raw | null {
 }
 
 const str = (v: unknown) => (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'null' ? v.trim().slice(0, 160) : null);
+const time = (v: unknown) => {
+  const s = str(v);
+  return s && /^\d{1,2}:\d{2}$/.test(s) ? s.padStart(5, '0') : null;
+};
 const date = (v: unknown) => {
   const s = str(v);
   return s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
@@ -71,6 +84,13 @@ export function normalizeExtraction(raw: Raw | null): ExtractedDocument | null {
     paymentStatus: pay === 'paid' || pay === 'unpaid' || pay === 'partial' ? pay : 'unknown',
     payerName: str(raw.payerName),
     personsCount: Number.isInteger(persons) && persons > 0 && persons < 100 ? persons : null,
+    startTime: time(raw.startTime),
+    endTime: time(raw.endTime),
+    fromLocation: str(raw.fromLocation),
+    toLocation: str(raw.toLocation),
+    location: str(raw.location),
+    flightNumber: str(raw.flightNumber)?.toUpperCase().slice(0, 12) ?? null,
+    deadlines: str(raw.deadlines),
   };
 }
 
@@ -147,7 +167,8 @@ export async function analyzeDocument(ai: Ai | undefined, file: { name: string; 
     }
     return null;
   } catch (e) {
-    console.error(JSON.stringify({ level: 'warn', msg: 'document analysis failed', error: String(e).slice(0, 300) }));
+    // Never log document content – only that (and roughly why) it failed.
+    console.error(JSON.stringify({ level: 'warn', msg: 'document analysis failed', error: e instanceof Error ? e.name : 'unknown' }));
     return null;
   }
 }
