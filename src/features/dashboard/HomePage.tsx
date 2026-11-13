@@ -38,7 +38,7 @@ import { PersonFilter, usePersonSelection } from '../../components/PersonFilter'
 import { Badge, Button, Card, EmptyState, ErrorState, SectionTitle, Sheet, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
-import { formatDate, formatDateShort, formatTime, money } from '../../lib/format';
+import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
 import { CurrencyConverter } from '../../components/CurrencyConverter';
 import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
@@ -96,10 +96,15 @@ function HomeSkeleton() {
   );
 }
 
+function greeting() {
+  const h = new Date().getHours();
+  return h < 11 ? t.home.greeting.morning : h < 18 ? t.home.greeting.day : t.home.greeting.evening;
+}
+
 type SheetKind = 'activity' | 'expense' | 'destination' | null;
 
 function Dashboard({ snap }: { snap: TripSnapshot }) {
-  const { canEdit } = useTrip();
+  const { canEdit, user } = useTrip();
   const online = useOnline();
   const navigate = useNavigate();
   const [sheet, setSheet] = useState<SheetKind>(null);
@@ -154,7 +159,11 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           </div>
         </div>
         <div className="relative px-safe pb-[18px] pt-[calc(max(env(safe-area-inset-top),0.75rem)+3.75rem)] text-[#f5f9fc] [text-shadow:0_1px_10px_rgb(16_27_51/0.45)]">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#d8e9f0]">
+          <p className="text-[14px] font-medium text-white/85">
+            {greeting()}
+            {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}
+          </p>
+          <p className="mt-2.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#d8e9f0]">
             {phase.phase === 'during' ? t.home.currentDestination : phase.phase === 'before' ? t.home.beforeTrip : t.phase.after}
           </p>
           <h1 className="font-display text-[clamp(38px,11.5vw,56px)] font-semibold leading-[0.95]">
