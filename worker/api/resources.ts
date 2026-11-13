@@ -10,6 +10,9 @@ import {
   bookingCreateSchema,
   bookingToExpenseSchema,
   bookingUpdateSchema,
+  depositCreateSchema,
+  depositResolveSchema,
+  depositUpdateSchema,
   exchangeRateCreateSchema,
   expenseCreateSchema,
   expenseUpdateSchema,
@@ -42,6 +45,7 @@ import * as packing from '../services/packing';
 import * as plan from '../services/plan';
 import { processSyncOps } from '../services/sync';
 import { setVote } from '../services/votes';
+import * as deposits from '../services/deposits';
 import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
@@ -268,6 +272,49 @@ r.post('/:tripId/settlements', async (c) => {
   const settlement = await wallet.createSettlement(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, settlementCreateSchema));
   await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'settlement', entityId: settlement.id, action: 'create' });
   return c.json({ settlement }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Deposits (Kautionen)
+// ---------------------------------------------------------------------------
+
+r.post('/:tripId/deposits', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const deposit = await deposits.createDeposit(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, depositCreateSchema));
+  await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'deposit', entityId: deposit.id, action: 'create' });
+  return c.json({ deposit }, 201);
+});
+
+r.put('/:tripId/deposits/:id', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const { version, ...input } = await parseJson(c, depositUpdateSchema);
+  const deposit = await deposits.updateDeposit(c.env.DB, t.tripId, t.baseCurrency, c.req.param('id'), version, input);
+  return c.json({ deposit });
+});
+
+r.post('/:tripId/deposits/:id/resolve', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const deposit = await deposits.resolveDeposit(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, c.req.param('id'), await parseJson(c, depositResolveSchema));
+  await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'deposit', entityId: deposit.id, action: 'update', summary: deposit.status });
+  return c.json({ deposit });
+});
+
+r.post('/:tripId/deposits/:id/reopen', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const { version } = await parseJson(c, z.object({ version: z.number().int().min(1) }));
+  return c.json({ deposit: await deposits.reopenDeposit(c.env.DB, t.tripId, c.req.param('id'), version) });
+});
+
+r.delete('/:tripId/deposits/:id', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  await deposits.deleteDeposit(c.env.DB, t.tripId, c.req.param('id'));
+  await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'deposit', entityId: c.req.param('id'), action: 'delete' });
+  return c.json({ ok: true });
 });
 
 r.delete('/:tripId/settlements/:id', async (c) => {

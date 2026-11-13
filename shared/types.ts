@@ -228,6 +228,35 @@ export interface SettlementDto extends Versioned {
   createdBy: string | null;
 }
 
+export type DepositStatus = 'open' | 'returned' | 'partial' | 'kept';
+export type DepositMethod = 'cash' | 'card' | 'transfer';
+
+/** A deposit (Kaution): parked money, not a cost unless (partly) kept. */
+export interface DepositDto extends Versioned {
+  tripId: string;
+  title: string;
+  amountMinor: number;
+  currency: string;
+  fxRate: string;
+  fxSource: FxSource;
+  fxDate: string | null;
+  baseAmountMinor: number;
+  paidByTravelerId: string;
+  travelerIds: string[];
+  method: DepositMethod;
+  date: string;
+  returnDate: string | null;
+  bookingId: string | null;
+  status: DepositStatus;
+  /** Kept part in the deposit currency (partial / kept). */
+  keptMinor: number | null;
+  /** Expense created for the kept part. */
+  expenseId: string | null;
+  resolvedAt: string | null;
+  notes: string | null;
+  createdBy: string | null;
+}
+
 export interface ExchangeRateDto {
   id: string;
   tripId: string;
@@ -277,6 +306,7 @@ export interface TripSnapshot {
   bookings: BookingDto[];
   expenses: ExpenseDto[];
   settlements: SettlementDto[];
+  deposits: DepositDto[];
   exchangeRates: ExchangeRateDto[];
   packingLists: PackingListDto[];
   packingItems: PackingItemDto[];

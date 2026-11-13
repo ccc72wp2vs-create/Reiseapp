@@ -13,6 +13,7 @@ import {
   Route,
   Sparkles,
   Languages,
+  Lock,
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -115,6 +116,8 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const phase = tripPhase(trip, today);
   const where = destinationOn(destinations, today);
   const phraseLang = phraseLangFor(trip.destinationCountry);
+  // Open deposits: shown from 2 days before the return date (or always without one).
+  const openDeposits = (snap.deposits ?? []).filter((d) => d.status === 'open' && (!d.returnDate || diffDays(today, d.returnDate) <= 2));
   const heroDest = phase.phase === 'before' ? destinations[0] : phase.phase === 'after' ? null : (where.current ?? where.leaving);
 
   const todays = activities.filter((a) => a.date === today);
@@ -185,8 +188,34 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
 
       <div className="px-safe">
         {/* ------------------------------------------------------------ Reminders */}
-        {(reminders.length > 0 || clarifications.length > 0) && phase.phase !== 'after' && (
+        {(reminders.length > 0 || clarifications.length > 0 || openDeposits.length > 0) && (phase.phase !== 'after' || openDeposits.length > 0) && (
           <section aria-label={t.home.reminders} className="mt-5 space-y-2.5">
+            {openDeposits.map((d) => {
+              const due = d.returnDate ? diffDays(today, d.returnDate) : null;
+              const urgent = due != null && due <= 0;
+              return (
+                <Link
+                  key={d.id}
+                  to="/kasse"
+                  className={cx(
+                    'flex items-start gap-3 rounded-[1.25rem] border p-4 transition active:scale-[0.99]',
+                    urgent ? 'border-warn/35 bg-warn-soft' : 'border-line bg-surface',
+                  )}
+                >
+                  <Lock className={cx('mt-0.5 shrink-0', urgent ? 'text-warn' : 'text-text-3')} size={20} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-semibold leading-snug">{t.deposits.reminder(d.title, money(d.amountMinor, d.currency))}</p>
+                    {d.returnDate && (
+                      <p className="mt-0.5 text-[13px] text-text-2">
+                        {t.deposits.returnOn(formatDate(d.returnDate))}
+                        {due === 0 ? ` · ${t.common.today}` : due === 1 ? ` · ${t.common.tomorrow}` : due != null && due < 0 ? ` · ${t.deposits.overdue}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <ArrowRight size={18} className={cx('mt-0.5 shrink-0', urgent ? 'text-warn' : 'text-text-3')} />
+                </Link>
+              );
+            })}
             {reminders.slice(0, 3).map((r, i) => {
               const days = r.date ? diffDays(today, r.date) : null;
               return (

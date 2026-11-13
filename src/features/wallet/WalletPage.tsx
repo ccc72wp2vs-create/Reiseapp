@@ -1,6 +1,8 @@
-import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, HandCoins, Plus, Receipt, Send, Trash2 } from 'lucide-react';
+import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, HandCoins, Lock, Plus, Receipt, Send, Trash2 } from 'lucide-react';
 import type { PayRequest } from './PaySheet';
 import { BudgetCard } from './BudgetCard';
+import { DepositsCard } from './DepositsCard';
+import { DepositSheet } from './DepositSheet';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
@@ -83,6 +85,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   const suggestions = settleMode === 'direct' ? direct : minimal;
   const [pair, setPair] = useState<DirectTransfer | null>(null);
   const [paying, setPaying] = useState<PayRequest | null>(null);
+  const [addingDeposit, setAddingDeposit] = useState(false);
   const name = (id: string) => travelers.find((x) => x.id === id)?.name ?? '?';
   const color = (id: string) => travelers.find((x) => x.id === id)?.color ?? '#999';
   const total = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
@@ -175,9 +178,14 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                   <Button size="sm" variant="secondary" icon={<HandCoins size={16} />} disabled={!canWrite || travelers.length < 2} onClick={() => setSheet({ kind: 'settlement' })}>
                     {t.wallet.settlement}
                   </Button>
+                  <Button size="sm" variant="secondary" icon={<Lock size={16} />} disabled={!canWrite} onClick={() => setAddingDeposit(true)}>
+                    {t.deposits.short}
+                  </Button>
                 </div>
               )}
             </Card>
+
+            <DepositsCard snap={snap} canEdit={canEdit} me={me?.id} />
 
             <BudgetCard snap={snap} persons={sel ? selection.selected : travelers.map((x) => x.id)} canEdit={canEdit} />
 
@@ -327,6 +335,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       </div>
 
       {explain && <BalanceSheet snap={snap} travelerId={explain} onClose={() => setExplain(null)} />}
+      {addingDeposit && <DepositSheet snap={snap} me={me?.id} onClose={() => setAddingDeposit(false)} />}
       {pair && <PairSheet snap={snap} transfer={pair} onClose={() => setPair(null)} />}
       <Suspense fallback={null}>
         {sheet?.kind === 'expense' && <ExpenseSheet key={sheet.expense?.id ?? 'new'} open expense={sheet.expense} onClose={() => setSheet(null)} />}

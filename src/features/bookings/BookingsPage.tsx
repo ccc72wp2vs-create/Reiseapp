@@ -195,6 +195,15 @@ function Timeline({
               </button>
               <div className="mt-3">
                 <BookingBadges booking={b} />
+                {(snap.deposits ?? [])
+                  .filter((d) => d.bookingId === b.id)
+                  .map((d) => (
+                    <span key={d.id} className="mt-1.5 inline-block">
+                      <Badge tone={d.status === 'open' ? 'warn' : 'neutral'}>
+                        {d.status === 'open' ? t.deposits.badgeOpen : t.deposits.badgeDone}: {money(d.amountMinor, d.currency)}
+                      </Badge>
+                    </span>
+                  ))}
               </div>
               {b.priceMinor != null && b.currency && (
                 <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 rounded-2xl bg-bg-elevated px-4 py-3">

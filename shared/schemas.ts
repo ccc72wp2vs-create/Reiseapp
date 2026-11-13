@@ -364,6 +364,38 @@ export const settlementCreateSchema = z
     path: ['toTravelerId'],
   });
 
+// ---------------------------------------------------------------------------
+// Deposits (Kautionen)
+// ---------------------------------------------------------------------------
+
+const depositFields = {
+  title: reqText(160),
+  amountMinor: z.number().int().min(1).max(1e13),
+  currency,
+  fxRate: z.string().max(40).optional(),
+  fxSource: z.enum(['manual', 'cached', 'provider']).optional(),
+  fxDate: optDate,
+  paidByTravelerId: id,
+  /** Who the deposit is for – they share a kept amount. Empty = everyone. */
+  travelerIds: z.array(id).max(50).default([]),
+  method: z.enum(['cash', 'card', 'transfer']).default('cash'),
+  date: dateStr,
+  returnDate: optDate,
+  bookingId: id.nullable().optional(),
+  notes: optText(2000),
+};
+export const depositCreateSchema = z.object({ ...depositFields, id: id.optional() });
+export const depositUpdateSchema = z.object(depositFields).extend({ version });
+export const depositResolveSchema = z
+  .object({
+    outcome: z.enum(['returned', 'partial', 'kept']),
+    /** Kept amount in the deposit currency (partial only). */
+    keptMinor: z.number().int().min(1).max(1e13).optional(),
+    date: dateStr,
+    version,
+  })
+  .refine((r) => r.outcome !== 'partial' || r.keptMinor != null, { message: 'Einbehaltenen Betrag angeben', path: ['keptMinor'] });
+
 export const exchangeRateCreateSchema = z.object({
   currency,
   rate: rateStr,
