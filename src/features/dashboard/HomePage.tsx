@@ -40,6 +40,7 @@ import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
 import { CurrencyConverter } from '../../components/CurrencyConverter';
+import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
 import { setStatusBarOverHero } from '../../lib/theme';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
@@ -113,6 +114,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const today = todayIn(tz);
   const phase = tripPhase(trip, today);
   const where = destinationOn(destinations, today);
+  const phraseLang = phraseLangFor(trip.destinationCountry);
   const heroDest = phase.phase === 'before' ? destinations[0] : phase.phase === 'after' ? null : (where.current ?? where.leaving);
 
   const todays = activities.filter((a) => a.date === today);
@@ -226,7 +228,10 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           {[
             { label: t.home.addActivity, icon: <Plus size={20} />, onClick: () => setSheet('activity'), disabled: !canEdit },
             { label: t.home.addExpense, icon: <Receipt size={20} />, onClick: () => setSheet('expense'), disabled: !canEdit || !online },
-            { label: t.thai.quick, icon: <Languages size={20} />, onClick: () => navigate('/thai'), disabled: false },
+            // Phrasebook for the trip's country – otherwise the classic "add destination" action.
+            phraseLang
+              ? { label: LANG_NAMES[phraseLang], icon: <Languages size={20} />, onClick: () => navigate('/sprache'), disabled: false }
+              : { label: t.home.addDestination, icon: <MapPin size={20} />, onClick: () => setSheet('destination'), disabled: !canEdit || !online },
             { label: t.home.viewPlan, icon: <CalendarDays size={20} />, onClick: () => navigate('/plan') },
           ].map((a) => (
             <button

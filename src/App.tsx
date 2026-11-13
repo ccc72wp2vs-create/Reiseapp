@@ -25,7 +25,7 @@ const RoutePage = lazy(() => import('./features/trips/RoutePage'));
 const NotFoundPage = lazy(() => import('./features/more/NotFoundPage'));
 const EmergencyPage = lazy(() => import('./features/more/EmergencyPage'));
 const RecapPage = lazy(() => import('./features/trips/RecapPage'));
-const ThaiPage = lazy(() => import('./features/thai/ThaiPage'));
+const PhrasebookPage = lazy(() => import('./features/phrasebook/PhrasebookPage'));
 
 function PageFallback() {
   return (
@@ -121,7 +121,8 @@ const router = createBrowserRouter([
           { path: 'installieren', element: <InstallPage /> },
           { path: 'notfall', element: <EmergencyPage /> },
           { path: 'rueckblick', element: <RecapPage /> },
-          { path: 'thai', element: <ThaiPage /> },
+          { path: 'sprache', element: <PhrasebookPage /> },
+          { path: 'thai', element: <Navigate to="/sprache" replace /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

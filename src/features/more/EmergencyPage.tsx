@@ -1,5 +1,6 @@
 import { Ambulance, BedDouble, Building2, CreditCard, Flame, Hospital, Pencil, Phone, ShieldAlert, Siren } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { countryInfo, type EmergencyProfile } from '../../../shared/countries';
 import { destinationOn, todayIn } from '../../../shared/trip';
 import { PageHeader, useTrip } from '../../components/AppShell';
 import { toast } from '../../components/toast';
@@ -8,13 +9,19 @@ import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { tripStore, useOnline } from '../../lib/store';
 
-/** Thailand-specific numbers (the app's trips are in Thailand). */
-const NUMBERS: { label: string; hint: string; tel: string; icon: ReactNode }[] = [
+/** Numbers per emergency profile of the trip's country. */
+const THAI_NUMBERS: { label: string; hint: string; tel: string; icon: ReactNode }[] = [
   { label: 'Touristenpolizei', hint: 'Englischsprachig, rund um die Uhr', tel: '1155', icon: <ShieldAlert size={20} /> },
   { label: 'Rettungsdienst / Notarzt', hint: 'Medizinischer Notfall', tel: '1669', icon: <Ambulance size={20} /> },
   { label: 'Polizei', hint: 'Allgemeiner Notruf', tel: '191', icon: <Siren size={20} /> },
   { label: 'Feuerwehr', hint: 'Brand', tel: '199', icon: <Flame size={20} /> },
 ];
+
+const PROFILE_NUMBERS: Record<EmergencyProfile, { label: string; hint: string; tel: string; icon: ReactNode }[]> = {
+  th: THAI_NUMBERS,
+  eu: [{ label: 'Notruf 112', hint: 'Polizei, Feuerwehr und Rettungsdienst – europaweit, kostenlos', tel: '112', icon: <Siren size={20} /> }],
+  tr: [{ label: 'Notruf 112', hint: 'Polizei, Feuerwehr und Rettungsdienst – kostenlos', tel: '112', icon: <Siren size={20} /> }],
+};
 
 function CallRow({ label, hint, tel, display, icon }: { label: string; hint: string; tel: string; display?: string; icon: ReactNode }) {
   const button = (
@@ -53,20 +60,27 @@ export default function EmergencyPage() {
   const today = todayIn(probe?.timezone ?? trip.homeTimezone);
   const where = destinationOn(destinations, today);
   const here = where.current ?? where.leaving ?? where.next ?? destinations[0] ?? null;
+  const profile = countryInfo(trip.destinationCountry).emergency;
+  const numbers = profile ? PROFILE_NUMBERS[profile] : [];
   const near = here?.lat != null && here?.lng != null ? { lat: here.lat, lng: here.lng } : null;
 
   return (
     <div>
       <PageHeader title={t.emergency.title} eyebrow={t.emergency.eyebrow} />
       <div className="px-safe pt-4">
-        <p className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">{t.emergency.intro}</p>
-
-        <SectionTitle>{t.emergency.numbers}</SectionTitle>
-        <Card className="divide-y divide-line">
-          {NUMBERS.map((n) => (
-            <CallRow key={n.tel} {...n} />
-          ))}
-        </Card>
+        {numbers.length > 0 ? (
+          <>
+            <p className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">{t.emergency.intro}</p>
+            <SectionTitle>{t.emergency.numbers(trip.destinationCountry)}</SectionTitle>
+            <Card className="divide-y divide-line">
+              {numbers.map((n) => (
+                <CallRow key={n.tel} {...n} />
+              ))}
+            </Card>
+          </>
+        ) : (
+          <p className="rounded-2xl bg-info-soft px-4 py-3 text-[14px] text-info">{t.emergency.noNumbers(trip.destinationCountry)}</p>
+        )}
 
         <SectionTitle>{t.emergency.hospital}</SectionTitle>
         <Card className="p-4">
@@ -89,7 +103,7 @@ export default function EmergencyPage() {
               <Hospital size={16} /> Google Maps
             </a>
           </div>
-          <p className="mt-2 text-[12px] text-text-3">{t.emergency.hospitalHint}</p>
+          <p className="mt-2 text-[12px] text-text-3">{profile === 'th' ? t.emergency.hospitalHintTh : t.emergency.hospitalHint}</p>
         </Card>
 
         {here?.accommodationName && (
@@ -108,9 +122,11 @@ export default function EmergencyPage() {
           </>
         )}
 
-        <SectionTitle>{t.emergency.embassy}</SectionTitle>
+        <SectionTitle>{profile === 'th' ? t.emergency.embassy : t.emergency.cards}</SectionTitle>
         <Card className="divide-y divide-line">
-          <CallRow label="Deutsche Botschaft Bangkok" hint="9 South Sathorn Road, Bangkok 10120 · auch außerhalb der Öffnungszeiten" tel="+6622879000" display="+66 2 287 9000" icon={<Building2 size={20} />} />
+          {profile === 'th' && (
+            <CallRow label="Deutsche Botschaft Bangkok" hint="9 South Sathorn Road, Bangkok 10120 · auch außerhalb der Öffnungszeiten" tel="+6622879000" display="+66 2 287 9000" icon={<Building2 size={20} />} />
+          )}
           <CallRow label="Karten sperren (DE)" hint="Sperr-Notruf für Bank- und Kreditkarten" tel="+49116116" display="+49 116 116" icon={<CreditCard size={20} />} />
         </Card>
 

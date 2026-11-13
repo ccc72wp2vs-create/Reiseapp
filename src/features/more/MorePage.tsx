@@ -8,6 +8,7 @@ import { Badge, Button, ConfirmDialog, SectionTitle, Sheet } from '../../compone
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
+import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
 
 function Row({ to, icon, label, hint, onClick }: { to?: string; icon: ReactNode; label: string; hint?: ReactNode; onClick?: () => void }) {
   const inner = (
@@ -31,6 +32,7 @@ export default function MorePage() {
   const [offlineOpen, setOfflineOpen] = useState(false);
   const [confirmDemo, setConfirmDemo] = useState(false);
   const [busy, setBusy] = useState(false);
+  const phraseLang = phraseLangFor(snap?.trip.destinationCountry);
   const hasDemo = (trips ?? []).some((x) => x.isDemo);
   const items = snap ? snap.packingItems.filter((i) => snap.packingLists.some((l) => l.id === i.listId && !l.isTemplate)) : [];
 
@@ -59,7 +61,7 @@ export default function MorePage() {
           <Row to="/route" icon={<Map size={19} />} label={t.trips.route} />
           <Row to="/buchungen" icon={<Ticket size={19} />} label={t.bookings.title} hint={snap ? `${snap.bookings.length}` : undefined} />
           <Row to="/rueckblick" icon={<Sparkles size={19} />} label={t.recap.title} hint={t.recap.share} />
-          <Row to="/thai" icon={<Languages size={19} />} label={t.thai.title} hint={t.thai.eyebrow} />
+          {phraseLang && <Row to="/sprache" icon={<Languages size={19} />} label={`${t.phrasebook.titleGeneric}: ${LANG_NAMES[phraseLang]}`} hint={t.phrasebook.eyebrow} />}
           <Row to="/notfall" icon={<Siren size={19} />} label={t.emergency.title} hint={t.emergency.eyebrow} />
           <Row to="/packliste" icon={<Luggage size={19} />} label={t.packing.title} hint={items.length ? t.packing.progress(items.filter((i) => i.packed).length, items.length) : undefined} />
         </ul>

@@ -363,18 +363,21 @@ export const de = {
     locationHint: 'Dein Standort wird nur einmalig auf deinen Wunsch abgefragt und nicht gespeichert, außer du speicherst den Ort.',
     locationDenied: 'Standort nicht verfügbar oder nicht erlaubt.',
   },
-  thai: {
-    title: 'Thai',
+  phrasebook: {
+    titleGeneric: 'Sprachführer',
     eyebrow: 'Praktische Sätze',
-    quick: 'Thai',
     speaker: 'Ich spreche als',
-    male: 'Mann (khrap)',
-    female: 'Frau (kha)',
-    particleHint: 'Höfliche Sätze enden je nach Sprecher:in mit „khrap“ oder „kha“ – das wird automatisch angehängt.',
-    search: 'Satz suchen (z. B. scharf, Taxi) …',
+    male: 'Mann',
+    female: 'Frau',
+    search: 'Satz suchen (z. B. Rechnung, Toilette) …',
+    pronunciation: 'Aussprache',
     listen: 'Anhören',
     showHint: 'Tipp: Einfach den Bildschirm zeigen.',
-    footer: 'Aussprache vereinfacht – Thai ist eine Tonsprache, Zeigen klappt immer. Funktioniert offline.',
+    noneTitle: 'Kein Sprachführer für dieses Reiseland',
+    noneText: (c: string | null) =>
+      c
+        ? `Für „${c}“ gibt es noch keinen Sprachführer. Verfügbar: Thai, Spanisch, Italienisch, Französisch, Portugiesisch, Griechisch, Türkisch, Kroatisch.`
+        : 'Trage bei der Reise ein Reiseland ein (Reise bearbeiten → Land), dann erscheint hier der passende Sprachführer.',
   },
   recap: {
     title: 'Rückblick',
@@ -399,12 +402,18 @@ export const de = {
   emergency: {
     title: 'Notfall',
     eyebrow: 'Wichtige Nummern & Infos',
-    intro: 'Im Notfall direkt anrufen – die Nummern funktionieren in Thailand kostenlos vom Handy.',
-    numbers: 'Notrufnummern Thailand',
+    intro: 'Im Notfall direkt anrufen – die Nummern sind kostenlos vom Handy erreichbar.',
+    numbers: (c: string | null) => (c ? `Notrufnummern ${c}` : 'Notrufnummern'),
+    noNumbers: (c: string | null) =>
+      c
+        ? `Für „${c}“ sind keine Notrufnummern hinterlegt. Tragt die wichtigsten Nummern unten in euren Notfall-Infos ein.`
+        : 'Für diese Reise ist kein Reiseland eingetragen. Tragt die Notrufnummern unten in euren Notfall-Infos ein.',
+    cards: 'Karten sperren',
     hospital: 'Krankenhaus in der Nähe',
     hospitalNear: (n: string) => `Krankenhäuser rund um ${n} in der Karten-App anzeigen.`,
     hospitalGeneric: 'Krankenhäuser in der Nähe in der Karten-App anzeigen.',
-    hospitalHint: 'Benötigt Internet. Private Krankenhäuser (z. B. Bangkok Hospital) sprechen meist Englisch – Versicherungskarte mitnehmen.',
+    hospitalHint: 'Benötigt Internet. Versicherungskarte bzw. Nachweis der Auslandskrankenversicherung mitnehmen.',
+    hospitalHintTh: 'Benötigt Internet. Private Krankenhäuser (z. B. Bangkok Hospital) sprechen meist Englisch – Versicherungskarte mitnehmen.',
     stay: 'Aktuelle Unterkunft',
     embassy: 'Botschaft & Karten',
     ownInfo: 'Eure Notfall-Infos',
