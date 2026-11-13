@@ -145,10 +145,9 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           className="h-[56dvh] min-h-[380px] w-full rounded-b-[2.25rem]"
           label={heroDest?.name ?? trip.name}
         />
-        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#101b33] via-[#101b33]/35 to-transparent" aria-hidden />
+        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#101b33]/90 from-0% via-[#101b33]/50 via-40% to-transparent to-80%" aria-hidden />
         <div className="absolute inset-x-0 top-0 px-safe pt-safe">
-          <div className="flex items-center justify-between pt-2 text-sand">
-            <Logo size={30} withWordmark={false} />
+          <div className="flex items-center justify-end pt-2 text-sand">
             <Link
               to="/reisen"
               className="glass inline-flex h-10 max-w-[70%] items-center gap-1.5 rounded-full border border-white/15 px-4 text-[14px] font-semibold text-text"
@@ -159,12 +158,12 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             </Link>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f5f9fc]">
-          <p className="text-[14px] font-medium text-white/75">
+        <div className="absolute inset-x-0 bottom-0 px-safe pb-7 text-[#f5f9fc] [text-shadow:0_1px_10px_rgb(16_27_51/0.45)]">
+          <p className="text-[14px] font-medium text-white/85">
             {greeting()}
             {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}
           </p>
-          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#79afc7]">
+          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#d8e9f0]">
             {phase.phase === 'during' ? t.home.currentDestination : phase.phase === 'before' ? t.home.beforeTrip : t.phase.after}
           </p>
           <h1 className="font-display text-[clamp(44px,13vw,68px)] font-semibold leading-[0.95]">
@@ -173,15 +172,15 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[14px]">
             {phase.phase === 'during' && (
               <>
-                <span className="rounded-full bg-black/30 px-3 py-1.5 font-semibold text-white backdrop-blur">{t.phase.during(phase.day, phase.totalDays)}</span>
-                <span className="rounded-full bg-black/20 px-3 py-1.5 text-white backdrop-blur">{t.phase.remaining(phase.daysRemaining)}</span>
+                <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">{t.phase.during(phase.day, phase.totalDays)}</span>
+                <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.phase.remaining(phase.daysRemaining)}</span>
               </>
             )}
             {phase.phase === 'before' && (
-              <span className="rounded-full bg-black/30 px-3 py-1.5 font-semibold text-white backdrop-blur">{t.phase.before(phase.daysUntilStart)}</span>
+              <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">{t.phase.before(phase.daysUntilStart)}</span>
             )}
             {where.current && phase.phase === 'during' && (
-              <span className="rounded-full bg-black/20 px-3 py-1.5 text-white backdrop-blur">{t.home.stayUntil(formatDateShort(where.current.departureDate))}</span>
+              <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.home.stayUntil(formatDateShort(where.current.departureDate))}</span>
             )}
           </div>
           {phase.phase !== 'after' && <TripProgress snap={snap} today={today} />}
@@ -462,10 +461,10 @@ function TripProgress({ snap, today }: { snap: TripSnapshot; today: string }) {
             <span
               className={cx(
                 'h-1.5 rounded-full',
-                state === 'done' ? 'bg-white/70' : state === 'now' ? 'bg-[#79afc7] shadow-[0_0_12px_#79afc7]' : 'bg-white/20',
+                state === 'done' ? 'bg-white/70' : state === 'now' ? 'bg-[#79afc7]' : 'bg-white/25',
               )}
             />
-            <span className={cx('truncate text-[11px]', state === 'now' ? 'font-semibold text-white' : 'text-white/55')}>{d.name}</span>
+            <span className={cx('truncate text-[11px]', state === 'now' ? 'font-semibold text-white' : 'text-white/65')}>{d.name}</span>
           </li>
         );
       })}
