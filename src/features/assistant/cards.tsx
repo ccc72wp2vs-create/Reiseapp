@@ -7,7 +7,7 @@ import { formatDateShort, formatLongDate, money } from '../../lib/format';
 import { useTrip } from '../../components/AppShell';
 import { errorMessage, http } from '../../lib/api';
 import { formatDistance, formatDuration } from '../../../shared/google';
-import { NearbyGoogle } from '../explore/google/NearbyGoogle';
+import { Nearby } from '../explore/google/Nearby';
 
 const shell = 'rounded-[1.25rem] border border-line bg-surface p-4';
 
@@ -114,6 +114,7 @@ export function AnswerCard({ card, onNavigate }: { card: AssistantCard; onNaviga
   }
 
   if (card.kind === 'google_search') return <GoogleSearchCard params={card.params} onNavigate={onNavigate} />;
+  if (card.kind === 'osm_search') return <GoogleSearchCard params={card.params} response={card.response} onNavigate={onNavigate} />;
   if (card.kind === 'google_distance') return <GoogleDistanceCard placeId={card.placeId} name={card.name} />;
 
   if (card.kind === 'stay') {
@@ -174,7 +175,14 @@ function PlanRow({ item, checked, onToggle, disabled }: { item: PlanItem; checke
             </span>
           )}
           <span className="mt-1.5 flex flex-wrap gap-1.5">
-            {item.source === 'saved' ? <Badge tone="accent">Gespeicherter Ort</Badge> : <Badge tone="neutral">Idee · nicht geprüft</Badge>}
+            {item.source === 'saved' ? (
+              <Badge tone="accent">Gespeicherter Ort</Badge>
+            ) : item.source === 'osm' ? (
+              <Badge tone="info">Ort aus OpenStreetMap</Badge>
+            ) : (
+              <Badge tone="neutral">Idee · nicht geprüft</Badge>
+            )}
+            {item.travel && <Badge tone="neutral">{item.travel}</Badge>}
             {item.endTime && <Badge tone="neutral">bis {item.endTime}</Badge>}
             {item.duplicate && <Badge tone="info">Schon geplant</Badge>}
           </span>
@@ -258,7 +266,10 @@ export function ProposalCard({
             ))}
           </div>
         )}
-        <p className="mt-3 text-[12px] leading-snug text-text-3">Zeiten sind Vorschläge. Öffnungszeiten, Preise und Fahrtzeiten bitte vor Ort prüfen.</p>
+        <p className="mt-3 text-[12px] leading-snug text-text-3">
+          Zeiten sind Vorschläge. Öffnungszeiten und Preise bitte vor Ort prüfen.
+          {proposal.items.some((i) => i.source === 'osm') ? ' Orte & Fahrzeiten: © OpenStreetMap-Mitwirkende · Powered by Geoapify.' : ' Fahrtzeiten ohne Kennzeichnung sind nicht berechnet.'}
+        </p>
         {footer(selected.length === 1 ? 'Zum Reiseplan hinzufügen' : `${selected.length} zum Reiseplan hinzufügen`, selected.length === 0)}
         {done && (
           <Link to={`/plan?tag=${proposal.date}`} onClick={onNavigate} className="mt-2 inline-flex items-center gap-1 text-[14px] font-semibold text-accent">
@@ -302,12 +313,20 @@ export function ProposalCard({
   );
 }
 
-function GoogleSearchCard({ params, onNavigate }: { params: Extract<AssistantCard, { kind: 'google_search' }>['params']; onNavigate: () => void }) {
+function GoogleSearchCard({
+  params,
+  response,
+  onNavigate,
+}: {
+  params: Extract<AssistantCard, { kind: 'google_search' }>['params'];
+  response?: import('../../../shared/google').NearbyResponse;
+  onNavigate: () => void;
+}) {
   const { snap } = useTrip();
   if (!snap) return null;
   return (
     <div className={shell}>
-      <NearbyGoogle snap={snap} compact initial={{ ...params, query: params.query }} onNavigate={onNavigate} />
+      <Nearby snap={snap} compact initial={{ ...params, query: params.query }} initialResponse={response ?? null} onNavigate={onNavigate} />
     </div>
   );
 }
@@ -315,13 +334,15 @@ function GoogleSearchCard({ params, onNavigate }: { params: Extract<AssistantCar
 function GoogleDistanceCard({ placeId, name }: { placeId: string; name: string }) {
   const { snap } = useTrip();
   const [text, setText] = useState<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
   useEffect(() => {
     if (!snap) return;
     let alive = true;
     http
-      .post<{ origin: { label: string }; noRoute: boolean; durationSec?: number; distanceMeters?: number }>(`/trips/${snap.trip.id}/google/distance`, { placeId })
+      .post<{ origin: { label: string }; provider: string | null; noRoute: boolean; durationSec?: number; distanceMeters?: number }>(`/trips/${snap.trip.id}/maps/distance`, { placeId })
       .then((r) => {
         if (!alive) return;
+        setSource(r.provider === 'google' ? 'Routendaten: Google Maps' : 'Routendaten: © OpenStreetMap-Mitwirkende · Geoapify');
         setText(
           r.noRoute
             ? `Keine Straßenroute zu „${name}“ ab ${r.origin.label} – vermutlich braucht ihr eine Fähre oder ein Boot.`
@@ -336,7 +357,7 @@ function GoogleDistanceCard({ placeId, name }: { placeId: string; name: string }
   return (
     <div className={shell}>
       <p className="text-[15px] font-semibold">{text ?? 'Fahrzeit wird berechnet …'}</p>
-      <p className="mt-1 text-[12px] text-text-3">Routendaten: Google Maps</p>
+      {source && <p className="mt-1 text-[12px] text-text-3">{source}</p>}
     </div>
   );
 }

@@ -217,6 +217,7 @@ export async function nearby(
     }
   }
   return {
+    provider: 'google',
     origin: { label: args.origin.label, lat: args.origin.lat, lng: args.origin.lng },
     mode: args.mode,
     results: results.slice(0, args.limit),

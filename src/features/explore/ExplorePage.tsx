@@ -8,15 +8,15 @@ import { MapView, type MapMarker } from '../../components/MapView';
 import { CategoryIcon } from '../../components/status';
 import { Badge, Button, Chip, EmptyState, IconButton, Input, Segmented, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
-import { appleMapsUrl, googleMapsUrl } from '../../lib/maps';
+import { appleMapsUrl } from '../../lib/maps';
 import { tripStore, useOnline } from '../../lib/store';
 import { http } from '../../lib/api';
 import { toast } from '../../components/toast';
 import { useGoogleConfig } from '../../lib/google';
 import { errorMessage } from '../../lib/api';
-import { formatDistance, formatDuration } from '../../../shared/google';
+import { formatDistance, formatDuration, googleMapsSearchUrl, GOOGLE_CATEGORIES } from '../../../shared/google';
 import { GooglePlace } from './google/GooglePlace';
-import { NearbyGoogle } from './google/NearbyGoogle';
+import { Nearby } from './google/Nearby';
 
 const PlaceSheet = lazy(() => import('./PlaceSheet'));
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
@@ -127,7 +127,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
 
       {source === 'nearby' && google?.enabled ? (
         <div className="px-safe pt-4">
-          <NearbyGoogle snap={snap} />
+          <Nearby snap={snap} />
         </div>
       ) : places.length === 0 ? (
         <div className="px-safe pt-6">
@@ -143,7 +143,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
               )
             }
           />
-          {!google?.enabled && <p className="mt-6 text-center text-[13px] text-text-3">{t.explore.futureSearch}</p>}
+          {google && !google.enabled && <GoogleMapsLinks snap={snap} stopId={stop} />}
         </div>
       ) : (
         <>
@@ -196,21 +196,21 @@ function Explore({ snap }: { snap: TripSnapshot }) {
             {view === 'map' && (
               <div className="mb-4">
                 <MapView markers={markers} selectedId={selected} onSelect={setSelected} className="h-[52dvh] min-h-[320px]" />
-                {sel && <PlaceCard place={sel} snap={snap} google={!!google?.enabled} onEdit={() => setEditing(sel)} onPlan={() => setPlanning(sel)} highlight />}
+                {sel && <PlaceCard place={sel} snap={snap} maps={google?.provider ?? null} onEdit={() => setEditing(sel)} onPlan={() => setPlanning(sel)} highlight />}
                 {filtered.some((p) => p.lat == null) && <p className="mt-3 text-[13px] text-text-3">{t.explore.noCoords}: {filtered.filter((p) => p.lat == null).map((p) => p.name).join(', ')}</p>}
               </div>
             )}
             {view === 'list' && (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
                 {sorted.map((p) => (
-                  <PlaceCard key={p.id} place={p} snap={snap} google={!!google?.enabled} onEdit={() => setEditing(p)} onPlan={() => setPlanning(p)} />
+                  <PlaceCard key={p.id} place={p} snap={snap} maps={google?.provider ?? null} onEdit={() => setEditing(p)} onPlan={() => setPlanning(p)} />
                 ))}
                 {filtered.length === 0 && (
                   <p className="py-8 text-center text-text-3 sm:col-span-2">{inStop.length === 0 && stopName ? t.explore.noPlacesAt(stopName) : t.explore.noResults}</p>
                 )}
               </div>
             )}
-            {!google?.enabled && <p className="mt-8 text-center text-[12px] text-text-3">{t.explore.futureSearch}</p>}
+            {google && !google.enabled && <GoogleMapsLinks snap={snap} stopId={stop} />}
           </div>
         </>
       )}
@@ -286,14 +286,14 @@ function VoteButton({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) {
 function PlaceCard({
   place,
   snap,
-  google,
+  maps,
   onEdit,
   onPlan,
   highlight,
 }: {
   place: PlaceDto;
   snap: TripSnapshot;
-  google: boolean;
+  maps: 'google' | 'geoapify' | null;
   onEdit: () => void;
   onPlan: () => void;
   highlight?: boolean;
@@ -348,14 +348,14 @@ function PlaceCard({
           <Navigation size={14} /> Apple Karten
         </a>
         <a
-          href={googleMapsUrl(target)}
+          href={googleMapsSearchUrl(place.name, place.address ?? dest?.name ?? null)}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface-2 px-3.5 text-[13px] font-semibold"
         >
-          <Navigation size={14} /> Google Maps
+          <Star size={14} /> Bewertungen bei Google
         </a>
-        {google && <GoogleExtras place={place} snap={snap} />}
+        {maps && <GoogleExtras place={place} snap={snap} provider={maps} />}
         {place.externalUrl && (
           <a
             href={place.externalUrl}
@@ -376,7 +376,7 @@ function PlaceCard({
  * time from your stay, and – once – linking the place to Google by its ID.
  * Nothing Google returns is stored except the place ID.
  */
-function GoogleExtras({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) {
+function GoogleExtras({ place, snap, provider }: { place: PlaceDto; snap: TripSnapshot; provider: 'google' | 'geoapify' }) {
   const { canEdit } = useTrip();
   const online = useOnline();
   const [open, setOpen] = useState(false);
@@ -401,11 +401,11 @@ function GoogleExtras({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) 
   async function travelTime() {
     setBusy(true);
     try {
-      const r = await http.post<{ origin: { label: string }; noRoute: boolean; durationSec?: number; distanceMeters?: number }>(`/trips/${tripId}/google/distance`, { placeId: place.id });
+      const r = await http.post<{ origin: { label: string }; noRoute: boolean; durationSec?: number; distanceMeters?: number }>(`/trips/${tripId}/maps/distance`, { placeId: place.id });
       setTravel(
         r.noRoute
           ? `Keine Straßenroute ab ${r.origin.label} – evtl. Fähre oder Boot.`
-          : `${formatDuration(r.durationSec!)} mit dem Auto · ${formatDistance(r.distanceMeters!)} ab ${r.origin.label} (Google Maps)`,
+          : `${formatDuration(r.durationSec!)} mit dem Auto · ${formatDistance(r.distanceMeters!)} ab ${r.origin.label}${provider === 'google' ? ' (Google Maps)' : ' (OpenStreetMap)'}`,
       );
     } catch (e) {
       toast(errorMessage(e), 'error');
@@ -415,10 +415,10 @@ function GoogleExtras({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) 
   }
 
   if (!online) return null;
-  const canRoute = !!place.googlePlaceId || (place.lat != null && place.lng != null);
+  const canRoute = (provider === 'google' && !!place.googlePlaceId) || (place.lat != null && place.lng != null);
   return (
     <>
-      {place.googlePlaceId ? (
+      {provider !== 'google' ? null : place.googlePlaceId ? (
         <Button size="sm" variant="secondary" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           {open ? 'Google-Infos ausblenden' : 'Google-Infos'}
         </Button>
@@ -465,5 +465,34 @@ function GoogleExtras({ place, snap }: { place: PlaceDto; snap: TripSnapshot }) 
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Without a search provider: one tap opens the category near the current stop
+ * in the Google Maps app (plain links – no API, no key, no cost).
+ */
+function GoogleMapsLinks({ snap, stopId }: { snap: TripSnapshot; stopId: string }) {
+  const route = sortDestinations(snap.destinations);
+  const dest = route.find((d) => d.id === stopId) ?? route.find((d) => d.id === currentStopId(snap)) ?? route[0];
+  if (!dest) return null;
+  return (
+    <div className="mt-8">
+      <p className="text-[13px] font-semibold text-text-2">In Google Maps entdecken · {dest.name}</p>
+      <div className="no-scrollbar -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1">
+        {GOOGLE_CATEGORIES.map((c) => (
+          <a
+            key={c.key}
+            href={googleMapsSearchUrl(c.label, dest.name)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold text-text-2"
+          >
+            {c.label} <ExternalLink size={13} />
+          </a>
+        ))}
+      </div>
+      <p className="mt-2 text-[12px] text-text-3">Öffnet die Google-Maps-App mit Bewertungen, Fotos und Öffnungszeiten.</p>
+    </div>
   );
 }

@@ -13,9 +13,9 @@ const configs = new Map<string, Promise<GoogleConfig>>();
 export function getGoogleConfig(tripId: string): Promise<GoogleConfig> {
   let p = configs.get(tripId);
   if (!p) {
-    p = http.get<GoogleConfig>(`/trips/${tripId}/google/config`).catch(() => {
+    p = http.get<GoogleConfig>(`/trips/${tripId}/maps/config`).catch(() => {
       configs.delete(tripId);
-      return { enabled: false, browserKey: null, routing: false };
+      return { enabled: false, provider: null, browserKey: null, routing: false };
     });
     configs.set(tripId, p);
   }

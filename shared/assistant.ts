@@ -65,6 +65,12 @@ export type AssistantCard =
     }
   | { kind: 'google_distance'; placeId: string; name: string }
   | {
+      /** OpenStreetMap results (Geoapify) – fetched once by the server, also known to the model. */
+      kind: 'osm_search';
+      params: { category: string | null; query: string | null; maxMinutes: number | null; mode: 'DRIVE' | 'WALK' | 'BICYCLE'; limit: number };
+      response: import('./google').NearbyResponse;
+    }
+  | {
       kind: 'list';
       title: string;
       items: { id: string; title: string; subtitle: string | null; link: string; badge?: string | null }[];
@@ -80,8 +86,13 @@ export interface PlanItem {
   description: string | null;
   /** Saved place this item refers to (verified to exist in the trip). */
   placeId: string | null;
-  /** "saved": from your saved places · "idea": general suggestion, not verified. */
-  source: 'saved' | 'idea';
+  /** "saved": your saved places · "osm": real place from OpenStreetMap · "idea": general suggestion, not verified. */
+  source: 'saved' | 'osm' | 'idea';
+  /** Coordinates of OpenStreetMap places (openly licensed). */
+  lat?: number | null;
+  lng?: number | null;
+  /** Travel time from your stay/location, from real routing. */
+  travel?: string | null;
   /** Human readable conflict with existing plan entries (null = none). */
   conflict: string | null;
   /** Same title/place already planned that day → not added by default. */

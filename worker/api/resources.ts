@@ -59,8 +59,8 @@ import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
 import * as assistant from '../services/assistant';
 import * as google from '../services/google';
-import { categoryByKey } from '../../shared/google';
-import { destinationOn } from '../../shared/trip';
+import * as geoapify from '../services/geoapify';
+import * as maps from '../services/maps';
 import { buildSnapshot } from '../services/trips';
 import type { AppContext, AppEnv } from '../types';
 import { versionQuery } from './trips';
@@ -345,65 +345,60 @@ r.put('/:tripId/assistant/preferences', async (c) => {
 // the user explicitly saves via the normal place/activity endpoints).
 // ---------------------------------------------------------------------------
 
-/** Where travel times start: shared location > accommodation place > stop centre. */
-async function travelOrigin(c: AppContext, location: { lat: number; lng: number } | null | undefined) {
+async function originFor(c: AppContext, location: { lat: number; lng: number } | null | undefined) {
   if (location) return { ...location, label: 'deinem Standort' };
   const t = c.get('trip');
   const snap = await buildSnapshot(c.env.DB, t.tripId, t.role, currentUser(c).id);
   if (!snap) throw new ApiError('not_found', 'Reise nicht gefunden');
-  const { today } = assistant.tripToday(snap, new Date());
-  const w = destinationOn(snap.destinations, today);
-  const dest = w.current ?? w.leaving ?? w.next ?? snap.destinations[0];
-  if (!dest) throw new ApiError('validation_failed', 'Kein Reiseort mit Koordinaten vorhanden – teile deinen Standort.');
-  const stay = snap.places.find((p) => p.destinationId === dest.id && p.category === 'accommodation' && p.lat != null && p.lng != null);
-  if (stay) return { lat: stay.lat!, lng: stay.lng!, label: `eurer Unterkunft (${stay.name})` };
-  if (dest.lat == null || dest.lng == null) throw new ApiError('validation_failed', `Für ${dest.name} sind keine Koordinaten hinterlegt – teile deinen Standort.`);
-  return { lat: dest.lat, lng: dest.lng, label: `Ortsmitte ${dest.name}` };
+  return maps.travelOrigin(snap, null);
 }
 
-r.get('/:tripId/google/config', async (c) => {
-  const cfg = google.googleConfig(c.env);
+r.get('/:tripId/maps/config', async (c) => {
+  const g = google.googleConfig(c.env);
+  const provider = maps.provider(c.env);
   c.header('Cache-Control', 'no-store');
-  return c.json({ enabled: !!cfg.serverKey && !!cfg.browserKey, browserKey: cfg.serverKey ? cfg.browserKey : null, routing: !!cfg.serverKey });
+  return c.json({
+    enabled: !!provider,
+    provider,
+    // Browser key only needed (and only sent) for Google's Places UI Kit.
+    browserKey: provider === 'google' ? g.browserKey : null,
+    routing: !!provider,
+  });
 });
 
-r.get('/:tripId/google/usage', async (c) => {
+r.get('/:tripId/maps/usage', async (c) => {
   requireRole(c, 'owner');
-  return c.json({ month: google.month(), usage: await google.usage(c.env.DB, c.env) });
+  return c.json({
+    provider: maps.provider(c.env),
+    geoapify: { day: geoapify.day(), used: await geoapify.creditsUsedToday(c.env.DB), limit: geoapify.geoapifyConfig(c.env).dailyCredits },
+    google: { month: google.month(), usage: await google.usage(c.env.DB, c.env) },
+  });
 });
 
-r.post('/:tripId/google/nearby', async (c) => {
+r.post('/:tripId/maps/nearby', async (c) => {
   const input = await parseJson(c, googleNearbySchema);
-  const cat = categoryByKey(input.category);
-  const origin = await travelOrigin(c, input.location);
+  const origin = await originFor(c, input.location);
   c.header('Cache-Control', 'no-store');
   return c.json(
-    await google.nearby(c.env, {
-      query: input.query ?? cat?.query ?? 'Sehenswürdigkeit',
-      type: input.query ? null : (cat?.type ?? null),
-      origin,
-      mode: input.mode,
-      maxMinutes: input.maxMinutes ?? null,
-      limit: input.limit,
-    }),
+    await maps.nearby(c.env, { category: input.category ?? null, query: input.query ?? null, origin, mode: input.mode, maxMinutes: input.maxMinutes ?? null, limit: input.limit }),
   );
 });
 
-r.post('/:tripId/google/distance', async (c) => {
+r.post('/:tripId/maps/distance', async (c) => {
   const input = await parseJson(c, googleDistanceSchema);
-  const origin = await travelOrigin(c, input.location);
+  const origin = await originFor(c, input.location);
   let to: { lat: number; lng: number } | { placeId: string };
   if (input.googlePlaceId) to = { placeId: input.googlePlaceId };
   else {
     const place = input.placeId ? await getEntity<{ lat: number | null; lng: number | null; googlePlaceId?: string | null }>(c.env.DB, placeSpec, c.get('trip').tripId, input.placeId) : null;
     if (!place) throw new ApiError('not_found', 'Ort nicht gefunden');
-    if (place.googlePlaceId) to = { placeId: place.googlePlaceId };
-    else if (place.lat != null && place.lng != null) to = { lat: place.lat, lng: place.lng };
+    if (place.lat != null && place.lng != null) to = { lat: place.lat, lng: place.lng };
+    else if (place.googlePlaceId) to = { placeId: place.googlePlaceId };
     else throw new ApiError('validation_failed', 'Für diesen Ort sind keine Koordinaten hinterlegt.');
   }
-  const res = await google.computeRoute(c.env, origin, to, input.mode);
+  const res = await maps.distance(c.env, origin, to, input.mode);
   c.header('Cache-Control', 'no-store');
-  return c.json({ origin, mode: input.mode, ...(res === 'no_route' ? { noRoute: true } : { noRoute: false, ...res }) });
+  return c.json({ origin, mode: input.mode, provider: maps.provider(c.env), ...(res === 'no_route' ? { noRoute: true } : { noRoute: false, ...res }) });
 });
 
 /** The browser asks before rendering Places UI Kit elements (internal monthly limit). */

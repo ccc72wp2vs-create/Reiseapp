@@ -23,6 +23,8 @@ export interface GoogleCategory {
   query: string;
   /** Optional Places type for stricter results. */
   type: string | null;
+  /** Geoapify (OpenStreetMap) categories. */
+  geo: string;
   /** Matching TRAVIO category when a place is saved. */
   category: ActivityCategory;
   /** Words that select this category in a free-text request. */
@@ -30,16 +32,16 @@ export interface GoogleCategory {
 }
 
 export const GOOGLE_CATEGORIES: GoogleCategory[] = [
-  { key: 'restaurant', label: 'Restaurants', query: 'Restaurant', type: 'restaurant', category: 'restaurant', match: /restaurant|essen|abendessen|mittagessen|seafood|thai food|street ?food|lokal/ },
-  { key: 'cafe', label: 'Cafés', query: 'Café', type: 'cafe', category: 'restaurant', match: /café|cafe|kaffee|frühstück|brunch/ },
-  { key: 'beach', label: 'Strände', query: 'Strand', type: 'beach', category: 'beach', match: /strand|strände|beach|baden/ },
-  { key: 'sights', label: 'Sehenswürdigkeiten', query: 'Sehenswürdigkeit', type: 'tourist_attraction', category: 'sightseeing', match: /sehenswürdig|attraktion|anschauen|besichtig/ },
-  { key: 'nature', label: 'Natur', query: 'Naturattraktion Nationalpark Wasserfall', type: null, category: 'nature', match: /natur|wasserfall|nationalpark|wandern|dschungel|park\b/ },
-  { key: 'temple', label: 'Tempel', query: 'Tempel', type: 'hindu_temple', category: 'sightseeing', match: /tempel|temple|wat\b|pagode/ },
-  { key: 'viewpoint', label: 'Aussichtspunkte', query: 'Aussichtspunkt', type: null, category: 'nature', match: /aussicht|viewpoint|sonnenuntergang|panorama/ },
-  { key: 'shopping', label: 'Shopping', query: 'Markt Shopping', type: null, category: 'shopping', match: /shopping|einkauf|markt|mall|night ?market/ },
-  { key: 'nightlife', label: 'Nachtleben', query: 'Bar', type: 'bar', category: 'nightlife', match: /nachtleben|bar\b|bars|club|cocktail|party/ },
-  { key: 'activities', label: 'Aktivitäten', query: 'Aktivitäten Touren', type: null, category: 'adventure', match: /aktivität|tour|ausflug|tauchen|schnorchel|kajak|kochkurs|massage/ },
+  { key: 'restaurant', geo: 'catering.restaurant', label: 'Restaurants', query: 'Restaurant', type: 'restaurant', category: 'restaurant', match: /restaurant|essen|abendessen|mittagessen|seafood|thai food|street ?food|lokal/ },
+  { key: 'cafe', geo: 'catering.cafe', label: 'Cafés', query: 'Café', type: 'cafe', category: 'restaurant', match: /café|cafe|kaffee|frühstück|brunch/ },
+  { key: 'beach', geo: 'beach', label: 'Strände', query: 'Strand', type: 'beach', category: 'beach', match: /strand|strände|beach|baden/ },
+  { key: 'sights', geo: 'tourism.sights,tourism.attraction', label: 'Sehenswürdigkeiten', query: 'Sehenswürdigkeit', type: 'tourist_attraction', category: 'sightseeing', match: /sehenswürdig|attraktion|anschauen|besichtig/ },
+  { key: 'nature', geo: 'natural,national_park,leisure.park', label: 'Natur', query: 'Naturattraktion Nationalpark Wasserfall', type: null, category: 'nature', match: /natur|wasserfall|nationalpark|wandern|dschungel|park\b/ },
+  { key: 'temple', geo: 'religion.place_of_worship', label: 'Tempel', query: 'Tempel', type: 'hindu_temple', category: 'sightseeing', match: /tempel|temple|wat\b|pagode/ },
+  { key: 'viewpoint', geo: 'tourism.attraction.viewpoint', label: 'Aussichtspunkte', query: 'Aussichtspunkt', type: null, category: 'nature', match: /aussicht|viewpoint|sonnenuntergang|panorama/ },
+  { key: 'shopping', geo: 'commercial.marketplace,commercial.shopping_mall', label: 'Shopping', query: 'Markt Shopping', type: null, category: 'shopping', match: /shopping|einkauf|markt|mall|night ?market/ },
+  { key: 'nightlife', geo: 'catering.bar,catering.pub,adult.nightclub', label: 'Nachtleben', query: 'Bar', type: 'bar', category: 'nightlife', match: /nachtleben|bar\b|bars|club|cocktail|party/ },
+  { key: 'activities', geo: 'activity,entertainment,leisure', label: 'Aktivitäten', query: 'Aktivitäten Touren', type: null, category: 'adventure', match: /aktivität|tour|ausflug|tauchen|schnorchel|kajak|kochkurs|massage/ },
 ];
 
 export const categoryByKey = (k: string | null | undefined) => GOOGLE_CATEGORIES.find((c) => c.key === k) ?? null;
@@ -74,8 +76,30 @@ export function parseSearchRequest(text: string): GoogleSearchParams | null {
   return { category: cat.key, query: null, maxMinutes, mode, limit: Math.max(1, Math.min(n, 8)) };
 }
 
+/**
+ * A place from OpenStreetMap (via Geoapify). Unlike Google content this data
+ * is openly licensed (ODbL): it may be shown on any map, stored with
+ * attribution and passed to the assistant.
+ */
+export interface OsmPlace {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  categoryLabel: string | null;
+  openingHours: string | null;
+  website: string | null;
+  cuisine: string | null;
+}
+
+export type MapsProvider = 'geoapify' | 'google';
+
 export interface NearbyResult {
+  /** Google place ID, or "osm:<id>" for OpenStreetMap places. */
   placeId: string;
+  /** Filled for OpenStreetMap places (Google content is shown by the UI Kit instead). */
+  place?: OsmPlace | null;
   durationSec: number | null;
   distanceMeters: number | null;
   /** true: Google found no road/foot route (islands, ferries, speedboats …). */
@@ -83,6 +107,7 @@ export interface NearbyResult {
 }
 
 export interface NearbyResponse {
+  provider: MapsProvider;
   origin: { label: string; lat: number; lng: number };
   mode: TravelMode;
   results: NearbyResult[];
@@ -94,9 +119,23 @@ export interface NearbyResponse {
 
 export interface GoogleConfig {
   enabled: boolean;
+  /** Which service answers "In der Nähe" (null = none configured). */
+  provider: MapsProvider | null;
   /** Browser key (HTTP-referrer restricted) for the Places UI Kit. */
   browserKey: string | null;
   routing: boolean;
+}
+
+/** Opens a place by name in the Google Maps app (reviews, photos) – a plain link, no API, no key. */
+export function googleMapsSearchUrl(name: string, near: string | null): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(near ? `${name}, ${near}` : name)}`;
+}
+
+/** Google Maps directions link to coordinates (OpenStreetMap places). */
+export function directionsToCoordsUrl(origin: { lat: number; lng: number } | null, dest: { lat: number; lng: number }, mode: TravelMode): string {
+  const m = mode === 'WALK' ? 'walking' : mode === 'BICYCLE' ? 'bicycling' : 'driving';
+  const o = origin ? `&origin=${origin.lat},${origin.lng}` : '';
+  return `https://www.google.com/maps/dir/?api=1${o}&destination=${dest.lat},${dest.lng}&travelmode=${m}`;
 }
 
 /** Google Maps URL that opens the real route in the Google Maps app. */

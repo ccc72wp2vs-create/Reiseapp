@@ -32,8 +32,10 @@ import {
   type PlanItem,
 } from '../../shared/assistant';
 import { checkinInfo } from '../../shared/checkin';
-import { categoryByKey, parseSearchRequest } from '../../shared/google';
+import { categoryByKey, formatDistance, formatDuration, GOOGLE_CATEGORIES, parseSearchRequest, type NearbyResponse, type OsmPlace } from '../../shared/google';
 import { googleConfig } from './google';
+import * as geo from './geoapify';
+import { travelOrigin } from './maps';
 import { computeBalances, suggestSettlements } from '../../shared/finance';
 import { tripCostOverview } from '../../shared/costs';
 import { formatMoney, isSupportedCurrency, parseAmount } from '../../shared/money';
@@ -147,6 +149,8 @@ interface Ctx {
   prefs: AssistantPreferences;
   /** Google Maps Platform configured (live search/route cards). */
   google: boolean;
+  /** OpenStreetMap places fetched for this question (Geoapify) – may be shown to the model. */
+  osm: { search: { params: NonNullable<ReturnType<typeof parseSearchRequest>>; response: NearbyResponse } | null; places: { place: OsmPlace; travel: string | null }[]; origin: string | null; failed: boolean } | null;
 }
 
 interface Built {
@@ -157,6 +161,7 @@ interface Built {
     places: Map<string, PlaceDto>;
     flights: Map<string, BookingDto>;
     lists: Map<string, { id: string; name: string }>;
+    osm: Map<string, { place: OsmPlace; travel: string | null }>;
   };
   fallback: string[];
 }
@@ -201,7 +206,7 @@ export function buildFacts(ctx: Ctx): Built {
   const facts: string[] = [];
   const cards: AssistantCard[] = [];
   const fallback: string[] = [];
-  const refs: Built['refs'] = { activities: new Map(), places: new Map(), flights: new Map(), lists: new Map() };
+  const refs: Built['refs'] = { activities: new Map(), places: new Map(), flights: new Map(), lists: new Map(), osm: new Map() };
   const has = (i: Intent) => intents.includes(i);
   const travelerName = new Map(snap.travelers.map((t) => [t.id, firstName(t.name)]));
   const me = snap.travelers.find((t) => t.userId === ctx.userId);
@@ -421,8 +426,31 @@ export function buildFacts(ctx: Ctx): Built {
     });
   }
 
+  // --- OpenStreetMap places (Geoapify, openly licensed → the model may use them)
+  if (ctx.osm) {
+    if (ctx.osm.search) {
+      cards.unshift({ kind: 'osm_search', params: ctx.osm.search.params, response: ctx.osm.search.response });
+      const cat = categoryByKey(ctx.osm.search.params.category);
+      fallback.unshift(
+        ctx.osm.search.response.results.length
+          ? `Hier sind ${cat?.label ?? 'Orte'} in der Nähe${ctx.osm.search.params.maxMinutes ? ` mit höchstens ${ctx.osm.search.params.maxMinutes} Min. Fahrzeit` : ''}.`
+          : `Ich habe keine passenden ${cat?.label ?? 'Orte'}${ctx.osm.search.params.maxMinutes ? ` innerhalb von ${ctx.osm.search.params.maxMinutes} Min.` : ''} gefunden.`,
+      );
+    }
+    ctx.osm.places.forEach((o, i) => {
+      const ref = `O${i + 1}`;
+      refs.osm.set(ref, o);
+      const p = o.place;
+      facts.push(
+        `${ref}: Ort aus OpenStreetMap „${p.name}“ (${[p.categoryLabel, p.cuisine].filter(Boolean).join(', ') || 'Ort'})${o.travel ? `, ${o.travel}` : ', Fahrzeit unbekannt'}${p.openingHours ? `, Öffnungszeiten laut OSM: ${p.openingHours}` : ''}.`,
+      );
+    });
+    if (ctx.osm.places.length) facts.push(`Fahrzeiten der O-Orte: echtes Routing ab ${ctx.osm.origin}. Bewertungen und Preise sind NICHT bekannt.`);
+    if (ctx.osm.failed) facts.push('Die Ortssuche war gerade nicht verfügbar – nutze nur gespeicherte Orte oder allgemeine Ideen.');
+  }
+
   // --- Google Maps (live in the app – the model never sees Google content) -
-  if (ctx.google) {
+  if (ctx.google && !ctx.osm) {
     const search = parseSearchRequest(ctx.question);
     if (search) {
       cards.unshift({ kind: 'google_search', params: search });
@@ -479,8 +507,8 @@ Aktionen (nur wenn der Nutzer etwas ändern/anlegen möchte, sonst null), Felder
 - {"type":"add_expense","title":"…","amount":Zahl|null,"currency":"THB"|"EUR"|null,"date":"YYYY-MM-DD"|null}
 Für "add_activity" und "update_activity": fehlt die Uhrzeit, frage im answer danach und setze action null.
 Tagesplan (nur wenn ausdrücklich ein Tag geplant werden soll), Felder in "plan":
-{"date":"YYYY-MM-DD","items":[{"startTime":"HH:MM","endTime":"HH:MM","title":"…","category":"restaurant|beach|sightseeing|adventure|nature|shopping|nightlife|other","ref":"P#"|null,"location":"…"|null,"description":"ein Satz"}],"alternatives":[{"title":"…","description":"…"}]}
-Plane 3–6 Programmpunkte in sinnvoller Reihenfolge, lass Zeit für Wege, überschneide keine bestehenden Einträge, bevorzuge gespeicherte Orte (mit ref) und die Vorlieben. Keine Preise angeben.`;
+{"date":"YYYY-MM-DD","items":[{"startTime":"HH:MM","endTime":"HH:MM","title":"…","category":"restaurant|beach|sightseeing|adventure|nature|shopping|nightlife|other","ref":"P#"|"O#"|null,"location":"…"|null,"description":"ein Satz"}],"alternatives":[{"title":"…","description":"…"}]}
+Plane 3–6 Programmpunkte in sinnvoller Reihenfolge, lass Zeit für Wege, überschneide keine bestehenden Einträge, bevorzuge gespeicherte Orte (P#) und echte Orte aus OpenStreetMap (O#, mit echter Fahrzeit – beachte gewünschte Maximalzeiten) und die Vorlieben. Keine Preise angeben.`;
 
 const RESPONSE_SCHEMA = {
   type: 'object',
@@ -570,8 +598,26 @@ export function interpret(raw: Raw | null, ctx: Ctx, built: Built): { answer: st
       const startTime = cleanTime(o.startTime);
       const title = cleanText(o.title, 120);
       if (!startTime || !title) continue;
-      const place = typeof o.ref === 'string' ? built.refs.places.get(o.ref.trim().toUpperCase()) : undefined;
+      const refKey = typeof o.ref === 'string' ? o.ref.trim().toUpperCase() : '';
+      const osmRef = built.refs.osm.get(refKey);
       const endTime = cleanTime(o.endTime);
+      if (osmRef) {
+        items.push({
+          title,
+          startTime,
+          endTime: endTime && endTime > startTime ? endTime : null,
+          category: cleanCategory(o.category),
+          locationName: osmRef.place.address ? `${osmRef.place.name}, ${osmRef.place.address}` : osmRef.place.name,
+          description: cleanText(o.description, 300),
+          placeId: null,
+          source: 'osm',
+          lat: osmRef.place.lat,
+          lng: osmRef.place.lng,
+          travel: osmRef.travel,
+        });
+        continue;
+      }
+      const place = built.refs.places.get(refKey);
       items.push({
         title,
         startTime,
@@ -724,6 +770,65 @@ function guessPackingCategory(name: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// OpenStreetMap places for a question (Geoapify) – a few credits per question
+// ---------------------------------------------------------------------------
+
+const INTEREST_CATS: Record<string, string[]> = {
+  Natur: ['nature', 'viewpoint'],
+  Strand: ['beach'],
+  Kultur: ['temple', 'sights'],
+  Essen: ['restaurant'],
+  Märkte: ['shopping'],
+  Abenteuer: ['activities'],
+  Wellness: ['activities'],
+  Nachtleben: ['nightlife'],
+};
+
+async function loadOsm(env: Env, ctx: Ctx): Promise<NonNullable<Ctx['osm']>> {
+  const out: NonNullable<Ctx['osm']> = { search: null, places: [], origin: null, failed: false };
+  let origin: ReturnType<typeof travelOrigin>;
+  try {
+    origin = travelOrigin(ctx.snap, ctx.location, new Date(ctx.now));
+  } catch {
+    out.failed = true;
+    return out;
+  }
+  out.origin = origin.label;
+  const q = ctx.question.toLowerCase();
+  const minutes = Number(q.match(/(\d{1,3})\s*(min|minuten)/)?.[1]) || ctx.prefs.maxTravelMinutes || null;
+  const travelText = (mode: string, sec: number | null, m: number | null) =>
+    sec != null ? `${formatDuration(sec)} ${mode === 'WALK' ? 'zu Fuß' : mode === 'BICYCLE' ? 'mit dem Rad' : 'mit dem Auto'}${m != null ? ` (${formatDistance(m)})` : ''}` : null;
+  const add = (res: NearbyResponse) => {
+    for (const r of res.results) {
+      if (r.place && !out.places.some((x) => x.place.id === r.place!.id) && out.places.length < 12) {
+        out.places.push({ place: r.place, travel: travelText(res.mode, r.durationSec, r.distanceMeters) });
+      }
+    }
+  };
+  try {
+    const search = parseSearchRequest(ctx.question);
+    if (search) {
+      const response = await geo.nearby(env, { category: search.category, query: search.query, origin, mode: search.mode, maxMinutes: search.maxMinutes, limit: search.limit });
+      out.search = { params: search, response };
+      add(response);
+    }
+    if (ctx.intents.includes('plan')) {
+      let cats = GOOGLE_CATEGORIES.filter((c) => c.match.test(q)).map((c) => c.key);
+      if (!cats.length) cats = [...new Set((ctx.prefs.interests ?? []).flatMap((i) => INTEREST_CATS[i] ?? []))];
+      if (!cats.includes('restaurant')) cats.unshift('restaurant');
+      if (cats.length < 2) cats.push('sights');
+      for (const key of cats.filter((k) => k !== search?.category).slice(0, 3)) {
+        add(await geo.nearby(env, { category: key, query: null, origin, mode: 'DRIVE', maxMinutes: minutes, limit: 4 }));
+      }
+    }
+  } catch {
+    // Limit reached or service down: plan with saved places / ideas instead.
+    out.failed = true;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -760,7 +865,11 @@ export async function askAssistant(
     location: request.location ?? null,
     prefs,
     google: !!googleConfig(env).serverKey && !!googleConfig(env).browserKey,
+    osm: null,
   };
+  if (geo.geoapifyConfig(env).key && (intents.includes('plan') || intents.includes('places'))) {
+    ctx.osm = await loadOsm(env, ctx);
+  }
   const built = buildFacts(ctx);
   const cfg = assistantConfig(env);
   const needsModel = intents.includes('plan') || intents.includes('action');

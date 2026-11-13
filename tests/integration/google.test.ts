@@ -38,13 +38,13 @@ afterEach(() => {
 
 describe('Google Maps Platform', () => {
   it('is off without keys and never exposes the server key', async () => {
-    const on = (await owner.get(`/trips/${tripId}/google/config`)).body;
-    expect(on).toEqual({ enabled: true, browserKey: 'browser-key-test', routing: true });
+    const on = (await owner.get(`/trips/${tripId}/maps/config`)).body;
+    expect(on).toEqual({ enabled: true, provider: 'google', browserKey: 'browser-key-test', routing: true });
     expect(JSON.stringify(on)).not.toContain('server-key');
     t.env.GOOGLE_MAPS_SERVER_KEY = undefined;
-    expect((await owner.get(`/trips/${tripId}/google/config`)).body).toMatchObject({ enabled: false, browserKey: null });
+    expect((await owner.get(`/trips/${tripId}/maps/config`)).body).toMatchObject({ enabled: false, browserKey: null });
     mockGoogle();
-    expect((await owner.post(`/trips/${tripId}/google/nearby`, { category: 'restaurant' })).status).toBe(503);
+    expect((await owner.post(`/trips/${tripId}/maps/nearby`, { category: 'restaurant' })).status).toBe(503);
   });
 
   it('requests only place IDs and filters by real travel times', async () => {
@@ -56,7 +56,7 @@ describe('Google Maps Platform', () => {
         { destinationIndex: 2, condition: 'ROUTE_NOT_FOUND' },
       ],
     });
-    const r = await owner.post(`/trips/${tripId}/google/nearby`, { category: 'restaurant', maxMinutes: 20 });
+    const r = await owner.post(`/trips/${tripId}/maps/nearby`, { category: 'restaurant', maxMinutes: 20 });
     expect(r.status).toBe(200);
     expect(r.body.results).toEqual([{ placeId: ID(2), durationSec: 600, distanceMeters: 4000, noRoute: false }]);
     expect(r.body.filteredOut).toBe(2);
@@ -77,7 +77,7 @@ describe('Google Maps Platform', () => {
     vi.stubGlobal('fetch', async (url: string) =>
       url.includes('searchText') ? Response.json({ places: [{ id: ID(1) }] }) : new Response('{}', { status: 500 }),
     );
-    const r = await owner.post(`/trips/${tripId}/google/nearby`, { category: 'beach', maxMinutes: 30, mode: 'WALK' });
+    const r = await owner.post(`/trips/${tripId}/maps/nearby`, { category: 'beach', maxMinutes: 30, mode: 'WALK' });
     expect(r.body.routing).toBe('unavailable');
     expect(r.body.results).toEqual([{ placeId: ID(1), durationSec: null, distanceMeters: null, noRoute: false }]);
   });
@@ -86,14 +86,14 @@ describe('Google Maps Platform', () => {
     t.env.GOOGLE_LIMIT_SEARCHES = '1';
     t.env.GOOGLE_LIMIT_UI_LOADS = '5';
     const calls = mockGoogle({ ids: [ID(1)], matrix: [{ destinationIndex: 0, duration: '60s', distanceMeters: 500, condition: 'ROUTE_EXISTS' }] });
-    expect((await owner.post(`/trips/${tripId}/google/nearby`, { category: 'cafe' })).status).toBe(200);
-    const second = await owner.post(`/trips/${tripId}/google/nearby`, { category: 'cafe' });
+    expect((await owner.post(`/trips/${tripId}/maps/nearby`, { category: 'cafe' })).status).toBe(200);
+    const second = await owner.post(`/trips/${tripId}/maps/nearby`, { category: 'cafe' });
     expect(second.status).toBe(429);
     expect(second.body.error.message).toMatch(/Monatslimit/);
     expect(calls.filter((c) => c.url.includes('searchText'))).toHaveLength(1);
     expect((await owner.post(`/trips/${tripId}/google/ui-loads`, { count: 4 })).status).toBe(200);
     expect((await owner.post(`/trips/${tripId}/google/ui-loads`, { count: 2 })).status).toBe(429);
-    const usage = (await owner.get(`/trips/${tripId}/google/usage`)).body.usage;
+    const usage = (await owner.get(`/trips/${tripId}/maps/usage`)).body.google.usage;
     expect(usage.find((u: { sku: string }) => u.sku === 'places.uikit.query')).toMatchObject({ used: 4, limit: 5 });
   });
 
@@ -112,7 +112,7 @@ describe('Google Maps Platform', () => {
   it('computes the distance to a saved place with own coordinates (no route steps)', async () => {
     const calls = mockGoogle();
     const place = (await owner.post(`/trips/${tripId}/places`, { name: 'Tiger Cave', category: 'sightseeing', lat: 8.1236, lng: 98.9265 })).body.place;
-    const r = await owner.post(`/trips/${tripId}/google/distance`, { placeId: place.id });
+    const r = await owner.post(`/trips/${tripId}/maps/distance`, { placeId: place.id });
     expect(r.body).toMatchObject({ durationSec: 754, distanceMeters: 6100, noRoute: false });
     const c = calls.find((x) => x.url.includes('computeRoutes'))!;
     expect(c.headers['X-Goog-FieldMask']).toBe('routes.duration,routes.distanceMeters');
@@ -121,12 +121,12 @@ describe('Google Maps Platform', () => {
   it('lets viewers search but only editors link places; strangers get nothing', async () => {
     mockGoogle({ ids: [ID(1)], matrix: [] });
     const viewer = await inviteUser(t, owner, tripId, 'viewer', 'v@example.com', 'Vera');
-    expect((await viewer.post(`/trips/${tripId}/google/nearby`, { category: 'temple' })).status).toBe(200);
+    expect((await viewer.post(`/trips/${tripId}/maps/nearby`, { category: 'temple' })).status).toBe(200);
     const place = (await owner.post(`/trips/${tripId}/places`, { name: 'Wat', category: 'sightseeing', lat: 8, lng: 98.9 })).body.place;
     expect((await viewer.post(`/trips/${tripId}/google/match/${place.id}`)).status).toBe(403);
     expect((await owner.post(`/trips/${tripId}/google/match/${place.id}`)).body).toEqual({ googlePlaceId: ID(1) });
     const other = (await owner.post('/trips', { name: 'X', startDate: '2026-12-01', endDate: '2026-12-02', baseCurrency: 'EUR' })).body.trip.id;
     const stranger = await inviteUser(t, owner, other, 'editor', 's@example.com', 'Sam');
-    expect((await stranger.post(`/trips/${tripId}/google/nearby`, { category: 'temple' })).status).toBe(404);
+    expect((await stranger.post(`/trips/${tripId}/maps/nearby`, { category: 'temple' })).status).toBe(404);
   });
 });

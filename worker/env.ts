@@ -19,6 +19,10 @@ export interface Env {
   ASSISTANT_DAILY_LIMIT?: string;
   /** Max generated tokens per answer (default 900). */
   ASSISTANT_MAX_TOKENS?: string;
+  /** Geoapify API key (secret) – OpenStreetMap places & routing, free plan without credit card. */
+  GEOAPIFY_KEY?: string;
+  /** Internal daily credit limit for Geoapify (default 2,500; free plan 3,000). */
+  GEOAPIFY_DAILY_CREDITS?: string;
   /** Google Maps Platform server key (secret; Places API New + Routes API only). */
   GOOGLE_MAPS_SERVER_KEY?: string;
   /** Google Maps browser key (secret; HTTP-referrer restricted; Maps JS + Places UI Kit). */

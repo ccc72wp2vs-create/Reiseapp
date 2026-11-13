@@ -208,14 +208,15 @@ test('Frag TRAVIO: answers from trip data and adds a confirmed day plan via the 
 test('Entdecken: Google nearby search with real travel times; saving keeps only the place ID', async ({ page }, info) => {
   test.skip(info.project.name !== 'iphone', 'changes shared data – run once');
   const placeId = 'ChIJtestPlace0001';
-  await page.route('**/api/v1/trips/*/google/config', (r) => r.fulfill({ json: { enabled: true, browserKey: 'browser-test', routing: true } }));
+  await page.route('**/api/v1/trips/*/maps/config', (r) => r.fulfill({ json: { enabled: true, provider: 'google', browserKey: 'browser-test', routing: true } }));
   await page.route('**/api/v1/trips/*/google/ui-loads', (r) => r.fulfill({ json: { ok: true } }));
   await page.route('https://maps.googleapis.com/**', (r) => r.abort());
   let nearbyBody: Record<string, unknown> | null = null;
-  await page.route('**/api/v1/trips/*/google/nearby', (r) => {
+  await page.route('**/api/v1/trips/*/maps/nearby', (r) => {
     nearbyBody = r.request().postDataJSON();
     return r.fulfill({
       json: {
+        provider: 'google',
         origin: { label: 'Ortsmitte Phuket', lat: 7.88, lng: 98.39 },
         mode: 'DRIVE',
         routing: 'ok',
@@ -243,4 +244,47 @@ test('Entdecken: Google nearby search with real travel times; saving keeps only 
   await page.getByRole('radio', { name: 'Eure Orte' }).click();
   await page.getByRole('button', { name: /Ganze Route/ }).click();
   await expect(page.getByRole('heading', { name: 'Unser Thai-Lokal' })).toBeVisible();
+});
+
+test('Entdecken: OpenStreetMap places via Geoapify – one tap to save, reviews via Google Maps link', async ({ page }, info) => {
+  test.skip(info.project.name !== 'iphone', 'changes shared data – run once');
+  await page.route('**/api/v1/trips/*/maps/config', (r) => r.fulfill({ json: { enabled: true, provider: 'geoapify', browserKey: null, routing: true } }));
+  await page.route('**/api/v1/trips/*/maps/nearby', (r) =>
+    r.fulfill({
+      json: {
+        provider: 'geoapify',
+        origin: { label: 'Ortsmitte Phuket', lat: 7.88, lng: 98.39 },
+        mode: 'DRIVE',
+        routing: 'ok',
+        filteredOut: 0,
+        results: [
+          {
+            placeId: 'osm:abc',
+            durationSec: 600,
+            distanceMeters: 4200,
+            noRoute: false,
+            place: { id: 'abc', name: 'Krua Phuket', address: 'Rawai, Phuket', lat: 7.78, lng: 98.32, categoryLabel: 'Restaurant', openingHours: 'Mo-Su 11:00-22:00', website: 'https://example.com', cuisine: 'thai' },
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto('/entdecken');
+  await page.getByRole('radio', { name: 'In der Nähe' }).click();
+  await page.getByRole('button', { name: 'Restaurants' }).click();
+  await expect(page.getByRole('heading', { name: 'Krua Phuket' })).toBeVisible();
+  await expect(page.getByText('10 Min. · 4,2 km')).toBeVisible();
+  await expect(page.getByText('Mo-Su 11:00-22:00')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'OpenStreetMap-Mitwirkende' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Bewertungen bei Google/ })).toHaveAttribute('href', /query=Krua%20Phuket%2C%20Rawai%2C%20Phuket/);
+  await page.getByRole('button', { name: 'Merken' }).click();
+  await expect(page.getByText('Gemerkt – unter „Eure Orte“')).toBeVisible();
+  await page.getByRole('radio', { name: 'Eure Orte' }).click();
+  await expect(page.getByRole('heading', { name: 'Krua Phuket' })).toBeVisible();
+});
+
+test('Entdecken without a search provider offers Google Maps links (no key, no cost)', async ({ page }) => {
+  await page.goto('/entdecken');
+  await expect(page.getByText(/In Google Maps entdecken · /)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Restaurants' })).toHaveAttribute('href', /google\.com\/maps\/search\/\?api=1&query=Restaurants/);
 });

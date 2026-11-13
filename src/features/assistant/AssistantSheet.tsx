@@ -110,8 +110,10 @@ export default function AssistantSheet({ open, onClose }: { open: boolean; onClo
               locationName: it.locationName,
               description: it.description,
               placeId: it.placeId,
+              lat: it.lat ?? null,
+              lng: it.lng ?? null,
               bookingStatus: 'planned',
-              notes: it.source === 'idea' ? 'Vorschlag von „Frag TRAVIO“ – Öffnungszeiten, Preise und Wege bitte prüfen.' : null,
+              notes: it.source === 'idea' ? 'Vorschlag von „Frag TRAVIO“ – Öffnungszeiten, Preise und Wege bitte prüfen.' : it.source === 'osm' ? `Ort aus OpenStreetMap (© OpenStreetMap-Mitwirkende, Geoapify)${it.travel ? ` · ${it.travel}` : ''}` : null,
             });
             existing.add(it.title.trim().toLowerCase());
             added++;

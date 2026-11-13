@@ -216,6 +216,16 @@ Reisekasse: Originalbetrag + Originalwährung werden gespeichert, ebenso der ver
 - **Konflikte:** jede Änderung trägt die Basisversion. Hat jemand anderes den Eintrag inzwischen geändert, wird nichts überschrieben – die App zeigt beide Versionen und du entscheidest.
 - **Nur online:** Ausgaben, Buchungen, Reiseziele, Reisen, Anmeldung, Einladungen, Karten (Kacheln aus dem Internet) und externe Navigation. Die App zeigt das jeweils deutlich an.
 
+## Ortssuche & Fahrzeiten ohne Kreditkarte: Geoapify (OpenStreetMap)
+
+Bevorzugter Anbieter für „Entdecken → In der Nähe“, Fahrzeiten und Frag TRAVIO. Ist `GEOAPIFY_KEY` gesetzt, wird Geoapify genutzt (auch wenn Google-Schlüssel vorhanden sind); sonst Google (falls eingerichtet); sonst zeigt Entdecken einfache **Google-Maps-Links** je Kategorie (kein Schlüssel, keine Kosten).
+
+- **Kosten:** Free-Plan ohne Kreditkarte, 3.000 Credits/Tag. Orte-Suche ≈ 1 Credit, Fahrzeit-Matrix 1 Credit je Ziel (1 Start × n Ziele), Route 1 Credit. Internes Tageslimit `GEOAPIFY_DAILY_CREDITS` (Standard 2.500) mit Zähler in `google_usage` (Tag × `geoapify.credits`); danach freundliche Meldung, gespeicherte Orte funktionieren weiter. Pro Suche ≤ 10 Orte, nur auf Antippen, 5 Min. Wiederverwendung im Arbeitsspeicher.
+- **Daten & Lizenz:** OpenStreetMap (ODbL) über Geoapify. Speichern und Weitergeben ist mit Quellenangabe erlaubt; im Free-Plan zusätzlich „Powered by Geoapify“. Beides steht unter jeder Ergebnisliste und in übernommenen Plänen. Deshalb: 1-Tipp-„Merken“ (Name, Adresse, Koordinaten, Website, Öffnungszeiten laut OSM als Notiz), Pins auf der bestehenden Leaflet-Karte, und **Frag TRAVIO darf diese Orte samt echter Fahrzeit für Tagespläne nutzen** (Referenzen `O#`, im Plan als „Ort aus OpenStreetMap“).
+- **Bewertungen:** Bei jedem Ort „Bewertungen bei Google“ – ein normaler Google-Maps-Link (Maps URLs, kein API-Aufruf, kein Schlüssel).
+- **Grenzen:** Keine Bewertungen/Fotos in der App; OSM-Daten in Thailand teils lückenhaft; Öffnungszeiten sind OSM-Rohangaben. Findet das Routing keinen Weg (Inseln, Fähren, Speedboote), steht „Keine Straßen- oder Fußroute – evtl. Fähre oder Boot“.
+- **Einrichtung:** Auf geoapify.com kostenlos registrieren → Projekt anlegen → API-Schlüssel kopieren → in Cloudflare (Worker → Einstellungen → Variablen und Geheimnisse → *Secret* hinzufügen) als `GEOAPIFY_KEY` speichern. Optional im Geoapify-Projekt den Schlüssel auf die benötigten APIs beschränken. Der Schlüssel bleibt auf dem Server.
+
 ## Google Maps Platform (Orte & Fahrzeiten)
 
 **Ohne Schlüssel ist alles aus** – die App verhält sich dann exakt wie vorher.
