@@ -8,7 +8,9 @@ import type { BookingDto, TripSnapshot } from '../../../shared/types';
 import { PageHeader, useTrip } from '../../components/AppShell';
 import { BookingBadges, BookingIcon } from '../../components/status';
 import { toast } from '../../components/toast';
-import { Badge, Button, Card, EmptyState, Field, IconButton, Input, SectionTitle, Select, Sheet, Skeleton, cx } from '../../components/ui';
+import { Badge, Button, Card, Chip, EmptyState, Field, IconButton, Input, SectionTitle, Segmented, Select, Sheet, Skeleton, cx } from '../../components/ui';
+import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
+import { addDaysToDate } from '../../../shared/trip';
 import { t } from '../../i18n';
 import { useSearchParams } from 'react-router';
 import { http } from '../../lib/api';
@@ -53,11 +55,25 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
   const [toWallet, setToWallet] = useState<BookingDto | null>(null);
   const { trip, bookings, destinations } = snap;
   const today = todayIn(destinations[0]?.timezone ?? trip.homeTimezone);
-  const sorted = [...bookings].sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)));
-  const upcoming = sorted.filter((b) => b.startDate && (b.endDate ?? b.startDate) >= today);
-  const past = sorted.filter((b) => b.startDate && (b.endDate ?? b.startDate) < today);
-  const undated = sorted.filter((b) => !b.startDate);
   const totals = summarizeBookingCosts(bookings);
+  const [f, setFState] = useState<Filters>(loadFilters);
+  const setF = (v: Filters) => {
+    setFState(v);
+    try {
+      localStorage.setItem(FILTER_KEY, JSON.stringify(v));
+    } catch {
+      /* private mode */
+    }
+  };
+  const persons = usePersonSelection(snap.travelers);
+  const isPast = (b: BookingDto) => !!b.startDate && (b.endDate ?? b.startDate) < today;
+  const forPerson = (b: BookingDto) => !persons.filtered || b.travelerIds.length === 0 || b.travelerIds.some((id) => persons.selected.includes(id));
+  const inTime = (time: Filters['time']) => bookings.filter((b) => forPerson(b) && (time === 'all' || (time === 'past') === isPast(b)));
+  const timeItems = inTime(f.time);
+  const openCount = timeItems.filter(needsAttention).length;
+  const kind = f.kind === 'open' && openCount === 0 ? 'all' : f.kind;
+  const visible = timeItems.filter((b) => (kind === 'all' ? true : kind === 'open' ? needsAttention(b) : kindOf(b) === kind));
+  const groups = groupByDay(visible, today);
 
   return (
     <div>
@@ -82,59 +98,64 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
           <EmptyState icon={<Ticket size={26} />} title={t.bookings.empty} text={t.bookings.emptyText} action={canEdit && <Button icon={<Plus size={18} />} disabled={!online} onClick={() => setCreating(true)}>{t.bookings.add}</Button>} />
         ) : (
           <>
-            {totals.length > 0 && (
-              <Card className="p-5">
-                <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-text-3">{t.bookings.summary}</h2>
-                {totals.map((c) => (
-                  <dl key={c.currency} className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[14px]">
-                    <div>
-                      <dt className="text-text-3">{t.bookings.committed}</dt>
-                      <dd className="font-display text-[22px] font-semibold tabular">{money(c.committedMinor, c.currency)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-text-3">{t.bookings.paid}</dt>
-                      <dd className="font-display text-[22px] font-semibold tabular text-success">{money(c.paidMinor, c.currency)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-text-3">{t.bookings.open}</dt>
-                      <dd className="font-semibold tabular text-warn">{money(c.openMinor, c.currency)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-text-3">{t.bookings.estimated}</dt>
-                      <dd className="font-semibold tabular text-info">{money(c.estimatedMinor, c.currency)}</dd>
-                    </div>
-                    {c.budgetCapMinor > 0 && (
-                      <div>
-                        <dt className="text-text-3">{t.bookings.budgetCap}</dt>
-                        <dd className="font-semibold tabular text-info">≤ {money(c.budgetCapMinor, c.currency)}</dd>
-                      </div>
-                    )}
-                  </dl>
+            {totals.length > 0 && <CostSummary totals={totals} />}
+
+            {/* -------------------------------------------------------- Filters */}
+            <div className="mt-5 space-y-2.5">
+              <Segmented
+                value={f.time}
+                onChange={(v) => setF({ ...f, time: v })}
+                options={[
+                  { value: 'upcoming', label: 'Bevorstehend' },
+                  { value: 'past', label: 'Vergangen' },
+                  { value: 'all', label: 'Ganze Reise' },
+                ]}
+              />
+              <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" role="group" aria-label="Art filtern">
+                <Chip active={f.kind === 'all'} onClick={() => setF({ ...f, kind: 'all' })}>
+                  Alle ({timeItems.length})
+                </Chip>
+                {openCount > 0 && (
+                  <Chip active={f.kind === 'open'} onClick={() => setF({ ...f, kind: 'open' })} icon={<CircleHelp size={14} className="text-warn" />}>
+                    Offen ({openCount})
+                  </Chip>
+                )}
+                {KINDS.filter((k) => timeItems.some((b) => kindOf(b) === k)).map((k) => (
+                  <Chip key={k} active={f.kind === k} onClick={() => setF({ ...f, kind: k })} icon={<BookingIcon type={KIND_ICON[k]} size={14} />}>
+                    {KIND_LABEL[k]} ({timeItems.filter((b) => kindOf(b) === k).length})
+                  </Chip>
                 ))}
-                <p className="mt-4 text-[12px] leading-snug text-text-3">{t.bookings.notSpentHint}</p>
-              </Card>
+              </div>
+              <PersonFilter travelers={snap.travelers} selection={persons} bleed="-mx-4 px-4" />
+            </div>
+
+            {/* -------------------------------------------------------- List */}
+            {groups.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-[15px] text-text-2">Keine Buchungen für diese Auswahl.</p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="mt-3"
+                  onClick={() => {
+                    setF({ time: 'all', kind: 'all' });
+                    persons.clear();
+                  }}
+                >
+                  Filter zurücksetzen
+                </Button>
+              </div>
+            ) : (
+              groups.map((g) => (
+                <section key={g.key}>
+                  <SectionTitle>{g.label}</SectionTitle>
+                  <Timeline items={g.items} snap={snap} onEdit={setEditing} onWallet={setToWallet} muted={g.past} />
+                </section>
+              ))
             )}
-            <p className="mt-4 flex items-start gap-2 text-[12px] text-text-3">
+            <p className="mt-6 flex items-start gap-2 text-[12px] text-text-3">
               <Clock size={14} className="mt-0.5 shrink-0" /> {t.bookings.noRealtime}
             </p>
-            {upcoming.length > 0 && (
-              <>
-                <SectionTitle>{t.bookings.upcoming}</SectionTitle>
-                <Timeline items={upcoming} snap={snap} onEdit={setEditing} onWallet={setToWallet} />
-              </>
-            )}
-            {undated.length > 0 && (
-              <>
-                <SectionTitle>{t.bookings.undated}</SectionTitle>
-                <Timeline items={undated} snap={snap} onEdit={setEditing} onWallet={setToWallet} />
-              </>
-            )}
-            {past.length > 0 && (
-              <>
-                <SectionTitle>{t.bookings.past}</SectionTitle>
-                <Timeline items={past} snap={snap} onEdit={setEditing} onWallet={setToWallet} muted />
-              </>
-            )}
           </>
         )}
       </div>
@@ -421,5 +442,151 @@ function ExpenseMatchHint({ booking, snap }: { booking: BookingDto; snap: TripSn
         </Button>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Filters, grouping and the compact cost summary
+// ---------------------------------------------------------------------------
+
+type Kind = 'flight' | 'transport' | 'hotel' | 'activity' | 'other';
+interface Filters {
+  time: 'upcoming' | 'past' | 'all';
+  kind: 'all' | 'open' | Kind;
+}
+const FILTER_KEY = 'travio.bookingFilters';
+const KINDS: Kind[] = ['flight', 'transport', 'hotel', 'activity', 'other'];
+const KIND_LABEL: Record<Kind, string> = { flight: 'Flüge', transport: 'Fähren & Transfers', hotel: 'Unterkünfte', activity: 'Aktivitäten', other: 'Sonstiges' };
+const KIND_ICON: Record<Kind, BookingDto['type']> = { flight: 'flight', transport: 'ferry', hotel: 'hotel', activity: 'activity', other: 'other' };
+
+function loadFilters(): Filters {
+  try {
+    const v = JSON.parse(localStorage.getItem(FILTER_KEY) ?? 'null') as Filters | null;
+    if (v && ['upcoming', 'past', 'all'].includes(v.time)) return v;
+  } catch {
+    /* ignore */
+  }
+  return { time: 'upcoming', kind: 'all' };
+}
+
+function kindOf(b: BookingDto): Kind {
+  if (b.type === 'flight') return 'flight';
+  if (b.type === 'ferry' || b.type === 'bus' || b.type === 'train' || b.type === 'car') return 'transport';
+  if (b.type === 'hotel') return 'hotel';
+  if (b.type === 'activity') return 'activity';
+  return 'other';
+}
+
+/** Something still to do: not booked, not paid, estimate only or marked for clarification. */
+function needsAttention(b: BookingDto): boolean {
+  if (b.bookingStatus === 'cancelled') return false;
+  return costInfo(b).needsClarification || b.bookingStatus !== 'booked' || b.paymentStatus === 'unpaid' || b.paymentStatus === 'partial' || b.costKind === 'estimate';
+}
+
+const WD = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
+function dayLabel(d: string, today: string): string {
+  if (d === today) return 'Heute';
+  if (d === addDaysToDate(today, 1)) return 'Morgen';
+  if (d === addDaysToDate(today, -1)) return 'Gestern';
+  return `${WD[new Date(`${d}T00:00:00Z`).getUTCDay()]} ${formatDate(d)}`;
+}
+
+/** Upcoming oldest first, past newest first; running stays on top as "Läuft gerade". */
+function groupByDay(items: BookingDto[], today: string) {
+  const sorted = [...items].sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)));
+  const map = new Map<string, { key: string; label: string; items: BookingDto[]; past: boolean; order: string }>();
+  for (const b of sorted) {
+    const end = b.endDate ?? b.startDate;
+    let key: string;
+    let label: string;
+    let order: string;
+    let past = false;
+    if (!b.startDate) {
+      key = 'undated';
+      label = t.bookings.undated;
+      order = '3';
+    } else if (end! < today) {
+      key = `p${b.startDate}`;
+      label = dayLabel(b.startDate, today);
+      past = true;
+      // newest first
+      order = `2${String(99999999 - Number(b.startDate.replaceAll('-', ''))).padStart(8, '0')}`;
+    } else if (b.startDate < today) {
+      key = 'running';
+      label = 'Läuft gerade';
+      order = '0';
+    } else {
+      key = `u${b.startDate}`;
+      label = dayLabel(b.startDate, today);
+      order = `1${b.startDate}`;
+    }
+    const g = map.get(key) ?? { key, label, items: [], past, order };
+    g.items.push(b);
+    map.set(key, g);
+  }
+  return [...map.values()].sort((a, b) => a.order.localeCompare(b.order));
+}
+
+/** One line per currency; the full breakdown on tap. */
+function CostSummary({ totals }: { totals: ReturnType<typeof summarizeBookingCosts> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card className="p-4">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center justify-between gap-3 text-left">
+        <span className="text-[13px] font-semibold uppercase tracking-[0.14em] text-text-3">{t.bookings.summary}</span>
+        <span className="text-[13px] font-semibold text-accent">{open ? 'Weniger' : 'Details'}</span>
+      </button>
+      <div className="mt-2 space-y-1.5">
+        {totals.map((c) => {
+          const allPaid = c.openMinor === 0 && c.estimatedMinor === 0;
+          return (
+            <div key={c.currency} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <span className="font-display text-[22px] font-semibold tabular">{money(c.committedMinor, c.currency)}</span>
+              <span className="flex flex-wrap gap-1.5">
+                {allPaid ? (
+                  <Badge tone="success">alles bezahlt</Badge>
+                ) : (
+                  <>
+                    {c.openMinor > 0 && <Badge tone="warn">offen {money(c.openMinor, c.currency)}</Badge>}
+                    {c.estimatedMinor > 0 && <Badge tone="info">geschätzt {money(c.estimatedMinor, c.currency)}</Badge>}
+                  </>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {open && (
+        <div className="mt-3 border-t border-line pt-3">
+          {totals.map((c) => (
+            <dl key={c.currency} className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[14px]">
+              <div>
+                <dt className="text-text-3">{t.bookings.committed}</dt>
+                <dd className="font-semibold tabular">{money(c.committedMinor, c.currency)}</dd>
+              </div>
+              <div>
+                <dt className="text-text-3">{t.bookings.paid}</dt>
+                <dd className="font-semibold tabular text-success">{money(c.paidMinor, c.currency)}</dd>
+              </div>
+              <div>
+                <dt className="text-text-3">{t.bookings.open}</dt>
+                <dd className="font-semibold tabular text-warn">{money(c.openMinor, c.currency)}</dd>
+              </div>
+              <div>
+                <dt className="text-text-3">{t.bookings.estimated}</dt>
+                <dd className="font-semibold tabular text-info">{money(c.estimatedMinor, c.currency)}</dd>
+              </div>
+              {c.budgetCapMinor > 0 && (
+                <div>
+                  <dt className="text-text-3">{t.bookings.budgetCap}</dt>
+                  <dd className="font-semibold tabular text-info">≤ {money(c.budgetCapMinor, c.currency)}</dd>
+                </div>
+              )}
+            </dl>
+          ))}
+          <p className="mt-3 text-[12px] leading-snug text-text-3">{t.bookings.notSpentHint}</p>
+        </div>
+      )}
+    </Card>
   );
 }

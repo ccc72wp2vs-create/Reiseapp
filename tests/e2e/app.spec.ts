@@ -57,6 +57,7 @@ test('bookings keep booked, paid, planned and unclear amounts apart', async ({ p
   await expect(page.getByRole('heading', { level: 1, name: 'Mehr' })).toBeVisible();
   await page.getByRole('link', { name: /^Buchungen/ }).click();
   await expect(page.getByRole('heading', { name: 'Buchungen' })).toBeVisible();
+  await page.getByRole('radio', { name: 'Ganze Reise' }).click();
   await expect(page.getByText('Fähre oder Speedboat – Transportmittel und Buchung noch offen.')).toBeVisible();
   await expect(page.getByText('≈ 80,00 €')).toBeVisible();
   await expect(page.getByText('≤ 60,00 €').first()).toBeVisible();
@@ -287,4 +288,19 @@ test('Entdecken without a search provider offers Google Maps links (no key, no c
   await page.goto('/entdecken');
   await expect(page.getByText(/In Google Maps entdecken · /)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Restaurants' })).toHaveAttribute('href', /google\.com\/maps\/search\/\?api=1&query=Restaurants/);
+});
+
+test('bookings: filter by time, kind and open items; grouped by day', async ({ page }) => {
+  await page.goto('/buchungen');
+  await expect(page.getByRole('radio', { name: /Bevorstehend/ })).toBeChecked();
+  await page.getByRole('button', { name: /^Unterkünfte/ }).click();
+  await expect(page.getByText('Unterkunft Krabi', { exact: true })).toBeVisible();
+  await expect(page.getByText('Flug Krabi → Chiang Mai', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Läuft gerade')).toBeVisible();
+  await page.getByRole('radio', { name: /Vergangen/ }).click();
+  await page.getByRole('button', { name: /^Alle \(/ }).click();
+  await expect(page.getByText('Hinflug Düsseldorf → Bangkok', { exact: true })).toBeVisible();
+  await expect(page.getByText('Unterkunft Krabi', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: /^Offen/ }).click();
+  await expect(page.getByRole('button', { name: /^Offen/ })).toHaveAttribute('aria-pressed', 'true');
 });
