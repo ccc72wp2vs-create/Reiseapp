@@ -429,6 +429,14 @@ r.post('/:tripId/expenses/:id/link-booking', async (c) => {
   return c.json({ expense });
 });
 
+/** Pasted e-mail / confirmation text – analysed in memory, never stored. */
+r.post('/:tripId/documents/analyze-text', async (c) => {
+  requireRole(c, 'editor');
+  const { text } = await parseJson(c, z.object({ text: z.string().max(docs.TEXT_MAX_CHARS, 'Der Text ist zu lang.') }));
+  c.header('Cache-Control', 'no-store');
+  return c.json({ extracted: await docs.analyzeTextOnly(c.env.AI, text) });
+});
+
 /* Documents stored by an earlier app version: view, re-link or delete only. */
 r.get('/:tripId/documents/:id/file', async (c) => {
   const f = await docs.getDocumentFile(c.env.DB, c.get('trip').tripId, c.req.param('id'));

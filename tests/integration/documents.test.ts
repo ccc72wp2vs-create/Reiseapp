@@ -134,4 +134,47 @@ describe('document import – analysis only, nothing stored', () => {
     expect((await owner.del(`/trips/${tripId}/documents/11111111-1111-4111-8111-111111111111`)).status).toBe(200);
     expect((await owner.get(`/trips/${tripId}/snapshot`)).body.expenses).toHaveLength(1);
   });
+
+  describe('pasted e-mail text', () => {
+    const mail = `Ihre Buchungsbestätigung
+Buchungsnummer: R8E7NL
+Flug FD3073 Krabi (KBV) - Chiang Mai (CNX)
+Abflug: 21.11.2026 15:00
+Gesamtbetrag: 154,74 EUR – bezahlt`;
+
+    it('recognises booking details without AI and stores nothing', async () => {
+      const { owner, tripId } = await setupTrip();
+      const before = counts();
+      const r = await owner.post(`/trips/${tripId}/documents/analyze-text`, { text: mail });
+      expect(r.status).toBe(200);
+      expect(r.body.extracted).toMatchObject({ reference: 'R8E7NL', amountMinor: 15474, currency: 'EUR', paymentStatus: 'paid', startDate: '2026-11-21', flightNumber: 'FD 3073', kind: 'flight' });
+      expect(counts()).toEqual(before);
+      expect(stored()).toBe(0);
+    });
+
+    it('uses Workers AI when available and keeps the text out of the database', async () => {
+      const { owner, tripId } = await setupTrip();
+      const { ai, calls } = mockAi({ kind: 'flight', title: 'Flug Krabi → Chiang Mai', provider: 'Thai AirAsia', reference: 'R8E7NL', startDate: '2026-11-21', startTime: '15:00', total: 154.74, currency: 'EUR', paymentStatus: 'paid', flightNumber: 'FD 3073' });
+      t.env.AI = ai;
+      const r = await owner.post(`/trips/${tripId}/documents/analyze-text`, { text: mail });
+      expect(calls).toEqual(['@cf/meta/llama-3.3-70b-instruct-fp8-fast:text']);
+      expect(r.body.extracted).toMatchObject({ provider: 'Thai AirAsia', startTime: '15:00', flightNumber: 'FD 3073', amountMinor: 15474 });
+      const dump = JSON.stringify(t.db.sqlite.prepare("SELECT group_concat(name) n FROM sqlite_master WHERE type='table'").get());
+      for (const table of JSON.parse(dump).n.split(',')) {
+        const rows = JSON.stringify(t.db.sqlite.prepare(`SELECT * FROM "${table}"`).all());
+        expect(rows).not.toContain('Ihre Buchungsbestätigung');
+      }
+    });
+
+    it('rejects empty or too long text and readers', async () => {
+      const { owner, tripId } = await setupTrip();
+      expect((await owner.post(`/trips/${tripId}/documents/analyze-text`, { text: '   ' })).status).toBe(422);
+      expect((await owner.post(`/trips/${tripId}/documents/analyze-text`, { text: 'x'.repeat(30001) })).status).toBe(422);
+      const viewer = await inviteUser(t, owner, tripId, 'viewer', 'v@example.com', 'Vera');
+      expect((await viewer.post(`/trips/${tripId}/documents/analyze-text`, { text: mail })).status).toBe(403);
+      const nothing = await owner.post(`/trips/${tripId}/documents/analyze-text`, { text: 'Liebe Grüße aus dem Urlaub' });
+      expect(nothing.body.extracted).toBeNull();
+    });
+  });
 });
+

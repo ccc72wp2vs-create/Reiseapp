@@ -304,3 +304,14 @@ test('bookings: filter by time, kind and open items; grouped by day', async ({ p
   await page.getByRole('button', { name: /^Offen/ }).click();
   await expect(page.getByRole('button', { name: /^Offen/ })).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('booking import from pasted e-mail text (analysed, not stored)', async ({ page }) => {
+  await page.goto('/buchungen');
+  await page.getByRole('button', { name: 'Dokument importieren' }).click();
+  await expect(page.getByText('Dokumente und E-Mail-Texte werden nur zur Analyse verwendet')).toBeVisible();
+  await page.getByRole('button', { name: 'E-Mail-Text einfügen' }).click();
+  await page.getByLabel('Text der Bestätigung').fill('Buchungsnummer: R8E7NL\nFlug FD3073 Krabi - Chiang Mai\nAbflug: 21.11.2026 15:00\nGesamtbetrag: 154,74 EUR bezahlt');
+  await page.getByRole('button', { name: 'Angaben erkennen' }).click();
+  await expect(page.getByText('Nr. R8E7NL')).toBeVisible();
+  await expect(page.getByText('154,74 €')).toBeVisible();
+});

@@ -1,4 +1,4 @@
-import { FileSearch, FileUp, ShieldCheck, Wallet, X } from 'lucide-react';
+import { ClipboardPaste, FileSearch, FileUp, Mail, ShieldCheck, Wallet, X } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { matchDocument } from '../../../shared/documents';
@@ -6,7 +6,7 @@ import type { BookingDto, ExtractedDocument } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { BookingIcon } from '../../components/status';
 import { toast } from '../../components/toast';
-import { Badge, Button, Field, SelectField, Sheet, Toggle, cx } from '../../components/ui';
+import { Badge, Button, Field, SelectField, Sheet, TextAreaField, Toggle, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { analyzeDocument } from '../../lib/documents';
@@ -61,7 +61,8 @@ export function DocumentImportSheet({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
-  const [phase, setPhase] = useState<'pick' | 'reading' | 'review'>('pick');
+  const [phase, setPhase] = useState<'pick' | 'paste' | 'reading' | 'review'>('pick');
+  const [pasted, setPasted] = useState('');
   const [ex, setEx] = useState<ExtractedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,6 +115,34 @@ export function DocumentImportSheet({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Pasted e-mail text: analysed once on the server, then dropped here too.
+  async function onText() {
+    const text = pasted.trim();
+    if (!text) return;
+    setError(null);
+    setPhase('reading');
+    try {
+      const r = await http.post<{ extracted: ExtractedDocument | null }>(`/trips/${s.trip.id}/documents/analyze-text`, { text });
+      setPasted('');
+      setEx(r.extracted);
+      setPhase('review');
+      if (!r.extracted) setError(t.documents.notReadText);
+    } catch (e) {
+      setError(errorMessage(e));
+      setPhase('paste');
+    }
+  }
+
+  async function fromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) setPasted(text);
+      else toast(t.documents.clipboardEmpty, 'info');
+    } catch {
+      toast(t.documents.clipboardDenied, 'info');
+    }
+  }
+
   function done(bookingId: string, message: string) {
     toast(message);
     setEx(null);
@@ -160,9 +189,37 @@ export function DocumentImportSheet({ onClose }: { onClose: () => void }) {
           <div className="space-y-4 text-center">
             <p className="text-[15px] text-text-2">{t.documents.importIntro}</p>
             {phase === 'pick' ? (
-              <Button block icon={<FileUp size={18} />} disabled={!online} onClick={() => input.current?.click()}>
-                {t.documents.choose}
-              </Button>
+              <div className="space-y-2.5">
+                <Button block icon={<FileUp size={18} />} disabled={!online} onClick={() => input.current?.click()}>
+                  {t.documents.choose}
+                </Button>
+                <Button block variant="secondary" icon={<Mail size={18} />} disabled={!online} onClick={() => setPhase('paste')}>
+                  {t.documents.pasteText}
+                </Button>
+              </div>
+            ) : phase === 'paste' ? (
+              <div className="space-y-3 text-left">
+                <p className="text-[13px] text-text-2">{t.documents.pasteHelp}</p>
+                <TextAreaField
+                  label={t.documents.pasteLabel}
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                  rows={8}
+                  maxLength={30000}
+                  placeholder={t.documents.pastePlaceholder}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" icon={<ClipboardPaste size={16} />} onClick={fromClipboard}>
+                    {t.documents.fromClipboard}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setPasted(''); setPhase('pick'); }}>
+                    {t.common.cancel}
+                  </Button>
+                </div>
+                <Button block icon={<FileSearch size={18} />} disabled={!online || !pasted.trim()} onClick={() => void onText()}>
+                  {t.documents.analyzeText}
+                </Button>
+              </div>
             ) : (
               <div className="space-y-3">
                 <Button block loading>

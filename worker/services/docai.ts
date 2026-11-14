@@ -121,6 +121,58 @@ function merge(a: ExtractedDocument | null, b: ExtractedDocument): ExtractedDocu
   };
 }
 
+const MONTHS: Record<string, number> = { jan: 1, feb: 2, mär: 3, mar: 3, apr: 4, mai: 5, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, okt: 10, oct: 10, nov: 11, dez: 12, dec: 12 };
+
+/** Extra patterns for pasted e-mail text: dates and a flight number. */
+function textExtras(text: string): Partial<ExtractedDocument> {
+  const dates: string[] = [];
+  const iso = (y: number, m: number, d: number) => (m >= 1 && m <= 12 && d >= 1 && d <= 31 ? `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` : null);
+  const re = /\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b|\b(\d{4})-(\d{2})-(\d{2})\b|\b(\d{1,2})\.?\s+([A-Za-zÄäÖöÜü]{3,9})\.?\s+(\d{4})\b/g;
+  for (const m of text.matchAll(re)) {
+    const d = m[1] ? iso(+m[3], +m[2], +m[1]) : m[4] ? iso(+m[4], +m[5], +m[6]) : iso(+m[9], MONTHS[m[8].slice(0, 3).toLowerCase()] ?? 0, +m[7]);
+    if (d && !dates.includes(d)) dates.push(d);
+    if (dates.length === 2) break;
+  }
+  const flight = /\b(flug|flight|flugnummer|flight number)\b/i.test(text) ? text.match(/\b([A-Z][A-Z0-9]|[A-Z0-9][A-Z])\s?(\d{2,4})\b/) : null;
+  return {
+    startDate: dates[0] ?? null,
+    endDate: dates[1] ?? null,
+    ...(flight ? { flightNumber: `${flight[1]} ${flight[2]}`, kind: 'flight' as const } : {}),
+  };
+}
+
+/**
+ * Pasted text (e.g. a booking confirmation e-mail): same model and fallback
+ * as for PDFs. Works without Workers AI via the text heuristic. The text is
+ * only held in memory for this request – never stored or logged.
+ */
+export async function analyzeText(ai: Ai | undefined, raw: string): Promise<ExtractedDocument | null> {
+  const text = raw.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12000);
+  if (!text) return null;
+  const extras = textExtras(text);
+  const fallback = { ...heuristicExtraction(text), ...Object.fromEntries(Object.entries(extras).filter(([, v]) => v != null)) } as ExtractedDocument;
+  let parsed: ExtractedDocument | null = null;
+  if (ai) {
+    try {
+      const out = (await ai.run(TEXT_MODEL as never, {
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: `Buchungsbestätigung (E-Mail-Text):\n\n${text}` },
+        ],
+        max_tokens: 600,
+      } as never)) as { response?: unknown };
+      parsed = normalizeExtraction(parseJsonLoose(out.response));
+    } catch (e) {
+      console.error(JSON.stringify({ level: 'warn', msg: 'text analysis failed', error: e instanceof Error ? e.name : 'unknown' }));
+    }
+  }
+  const result = parsed
+    ? { ...merge(parsed, fallback), startDate: parsed.startDate ?? fallback.startDate, endDate: parsed.endDate ?? fallback.endDate, flightNumber: parsed.flightNumber ?? fallback.flightNumber }
+    : fallback;
+  const useful = result.reference || result.amountMinor != null || result.startDate || result.flightNumber || result.title;
+  return useful ? result : null;
+}
+
 function toBase64(bytes: Uint8Array): string {
   let s = '';
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));

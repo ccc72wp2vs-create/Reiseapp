@@ -6,7 +6,7 @@
 import type { DocumentDto, ExtractedDocument } from '../../shared/types';
 import { ApiError } from '../lib/errors';
 import { nowIso } from '../lib/util';
-import { analyzeDocument } from './docai';
+import { analyzeDocument, analyzeText } from './docai';
 
 type Row = Record<string, unknown>;
 
@@ -70,6 +70,13 @@ export async function analyzeOnly(ai: Ai | undefined, file: { name: string; mime
   if (!file.bytes.byteLength) throw new ApiError('validation_failed', 'Leere Datei');
   if (file.bytes.byteLength > DOCUMENT_MAX_BYTES) throw new ApiError('payload_too_large', 'Die Datei ist zu groß (max. 1,9 MB).');
   return analyzeDocument(ai, file);
+}
+
+export const TEXT_MAX_CHARS = 30_000;
+
+export async function analyzeTextOnly(ai: Ai | undefined, text: string): Promise<ExtractedDocument | null> {
+  if (!text.trim()) throw new ApiError('validation_failed', 'Bitte zuerst den Text der Bestätigung einfügen.');
+  return analyzeText(ai, text);
 }
 
 export async function getDocumentFile(db: D1Database, tripId: string, id: string) {
