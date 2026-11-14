@@ -862,16 +862,7 @@ export const de = {
     loadDemo: 'Demo-Reise laden',
     planned: 'Geplant',
     plannedFeatures: 'In Vorbereitung',
-    plannedList: [
-      'KI-Reiseplanung & Reiseassistent',
-      'Wettervorhersage',
-      'Live-Wechselkurse',
-      'Ortssuche & Fahrzeiten',
-      'Buchungsimport per E-Mail',
-      'Dokumente & Belege hochladen',
-      'Benachrichtigungen',
-      'Reisestatistiken & Fotoerinnerungen',
-    ],
+    plannedList: ['Wettervorhersage', 'Live-Wechselkurse', 'Buchungsimport per E-Mail', 'Push-Benachrichtigungen', 'Fotoerinnerungen'],
     version: 'Version',
   },
   settings: {
