@@ -9,6 +9,7 @@ import {
   activityUpdateSchema,
   bookingCreateSchema,
   bookingToExpenseSchema,
+  bookingSyncExpenseSchema,
   bookingUpdateSchema,
   depositCreateSchema,
   depositResolveSchema,
@@ -32,6 +33,7 @@ import {
   googleUiLoadsSchema,
 } from '../../shared/schemas';
 import { computeBalances, suggestSettlements } from '../../shared/finance';
+import { allocate } from '../../shared/money';
 import type { ExpenseCategory } from '../../shared/constants';
 import type { ActivityDto, BookingDto } from '../../shared/types';
 import {
@@ -231,7 +233,11 @@ r.post('/:tripId/bookings/:id/expense', async (c) => {
       currency: b.currency,
       date: input.date ?? b.startDate ?? new Date().toISOString().slice(0, 10),
       category: BOOKING_TO_EXPENSE_CATEGORY[b.type],
-      paidByTravelerId: input.paidByTravelerId,
+      paidByTravelerId: input.eachPaidOwn ? input.participantIds[0] : input.paidByTravelerId,
+      // "Jede:r hat selbst bezahlt": every participant paid exactly their equal share.
+      payers: input.eachPaidOwn
+        ? allocate(b.priceMinor, input.participantIds.map(() => 1)).map((amountMinor, i) => ({ travelerId: input.participantIds[i], amountMinor }))
+        : undefined,
       splitMethod: 'equal',
       splits: input.participantIds.map((travelerId) => ({ travelerId })),
       fxRate: input.fxRate,
@@ -241,6 +247,19 @@ r.post('/:tripId/bookings/:id/expense', async (c) => {
     b.id,
   );
   return c.json({ expense }, 201);
+});
+
+/** Booking price changed after it was transferred: update the linked expense to match. */
+r.post('/:tripId/bookings/:id/sync-expense', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const input = await parseJson(c, bookingSyncExpenseSchema);
+  const b = await getEntity<BookingDto>(c.env.DB, bookingSpec, t.tripId, c.req.param('id'));
+  if (!b) throw new ApiError('not_found', 'Buchung nicht gefunden');
+  if (!b.expenseId) throw new ApiError('validation_failed', 'Die Buchung ist nicht in der Reisekasse erfasst');
+  if (b.priceMinor == null || !b.currency) throw new ApiError('validation_failed', 'Die Buchung hat keinen Preis');
+  const expense = await wallet.syncExpenseAmount(c.env.DB, t.tripId, t.baseCurrency, b.expenseId, b.priceMinor, b.currency, input.fxRate);
+  return c.json({ expense });
 });
 
 // ---------------------------------------------------------------------------

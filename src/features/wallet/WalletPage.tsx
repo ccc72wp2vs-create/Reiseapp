@@ -13,6 +13,7 @@ import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../
 import { todayIn } from '../../../shared/trip';
 import type { ExpenseDto, SettlementDto, TripSnapshot } from '../../../shared/types';
 import { PageHeader, useTrip } from '../../components/AppShell';
+import { MissingWalletHint } from '../bookings/MissingWalletHint';
 import { MoneyField } from '../../components/inputs';
 import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
 import { ExpenseIcon } from '../../components/status';
@@ -138,6 +139,9 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
           <>
             <div className="mb-4">
               <PersonFilter travelers={travelers} selection={selection} bleed="-mx-4 px-4" />
+            </div>
+            <div className="-mt-1 mb-4 empty:hidden [&>a]:mt-0">
+              <MissingWalletHint snap={snap} />
             </div>
             <Card className="relative overflow-hidden p-6">
               <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-text-3">{sel ? t.home.costsShare : t.wallet.total}</p>

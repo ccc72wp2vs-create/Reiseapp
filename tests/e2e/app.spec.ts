@@ -315,3 +315,25 @@ test('booking import from pasted e-mail text (analysed, not stored)', async ({ p
   await expect(page.getByText('Nr. R8E7NL')).toBeVisible();
   await expect(page.getByText('154,74 €')).toBeVisible();
 });
+
+test('paid booking goes straight into the wallet; price change updates the expense', async ({ page }, info) => {
+  test.skip(info.project.name !== 'iphone', 'changes shared data – run once');
+  await page.goto('/buchungen');
+  await page.getByRole('button', { name: 'Buchung hinzufügen' }).click();
+  await page.getByLabel('Titel').fill('Kochkurs Krabi');
+  await page.getByLabel('Art', { exact: true }).selectOption('activity');
+  await page.getByLabel('Gesamtbetrag').fill('100');
+  await page.getByLabel('Buchungsstatus').selectOption('booked');
+  await page.getByLabel('Zahlungsstatus').selectOption('paid');
+  await expect(page.getByText('In die Reisekasse übernehmen')).toBeVisible();
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByText('Gespeichert und in die Reisekasse übernommen')).toBeVisible();
+
+  await page.getByRole('radio', { name: 'Ganze Reise' }).click();
+  await page.getByText('Kochkurs Krabi', { exact: true }).click();
+  await page.getByLabel('Gesamtbetrag').fill('120');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByText('Reisekasse anpassen?')).toBeVisible();
+  await page.getByRole('button', { name: 'Ausgabe anpassen' }).click();
+  await expect(page.getByText('Ausgabe in der Reisekasse angepasst')).toBeVisible();
+});

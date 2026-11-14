@@ -376,5 +376,51 @@ describe('wallet API', () => {
     expect((await owner.post(`/trips/${tripId}/expenses/${other.id}/link-booking`, { bookingId: ferry.id })).status).toBe(409);
     expect((await snapshot(tripId)).bookings.find((x) => x.id === ferry.id)!.priceMinor).toBe(9000);
   });
+
+  it('transfers with "each paid their own share" and keeps the expense in step with price changes', async () => {
+    const tripId = (await importThailand()).body.tripId;
+    const s1 = await snapshot(tripId);
+    const ids = s1.travelers.map((x) => x.id);
+    const b = (
+      await owner.post(`/trips/${tripId}/bookings`, {
+        title: 'Tempel-Tour', type: 'activity', costKind: 'actual', bookingStatus: 'booked', paymentStatus: 'paid',
+        priceMinor: 10001, currency: 'EUR', startDate: '2026-11-22',
+      })
+    ).body.booking;
+    const own = await owner.post(`/trips/${tripId}/bookings/${b.id}/expense`, { paidByTravelerId: ids[0], participantIds: ids, eachPaidOwn: true });
+    expect(own.status).toBe(201);
+    expect(own.body.expense.payers.map((p: { amountMinor: number }) => p.amountMinor).sort()).toEqual([2500, 2500, 2500, 2501]);
+    const bal = (await snapshot(tripId)).expenses.find((e) => e.id === own.body.expense.id)!;
+    // Everyone paid exactly their share → no debts from this booking.
+    for (const sh of bal.shares) expect(bal.payers.find((p) => p.travelerId === sh.travelerId)!.amountMinor).toBe(sh.shareMinor);
+
+    // Price changes later → linked expense follows, payers scaled.
+    const cur = (await snapshot(tripId)).bookings.find((x) => x.id === b.id)!;
+    await owner.patch(`/trips/${tripId}/bookings/${b.id}`, { priceMinor: 12000, version: cur.version });
+    const sync = await owner.post(`/trips/${tripId}/bookings/${b.id}/sync-expense`, {});
+    expect(sync.status).toBe(200);
+    expect(sync.body.expense.amountMinor).toBe(12000);
+    expect(sync.body.expense.payers.reduce((a: number, p: { amountMinor: number }) => a + p.amountMinor, 0)).toBe(12000);
+    expect(sync.body.expense.shares).toHaveLength(4);
+  });
+
+  it('refuses to sync exact splits and bookings without wallet entry', async () => {
+    const tripId = (await importThailand()).body.tripId;
+    const s1 = await snapshot(tripId);
+    const ids = s1.travelers.map((x) => x.id);
+    const b = (await owner.post(`/trips/${tripId}/bookings`, { title: 'X', type: 'other', costKind: 'actual', bookingStatus: 'booked', paymentStatus: 'paid', priceMinor: 1000, currency: 'EUR' })).body.booking;
+    expect((await owner.post(`/trips/${tripId}/bookings/${b.id}/sync-expense`, {})).status).toBe(422);
+    const e = (await owner.post(`/trips/${tripId}/bookings/${b.id}/expense`, { paidByTravelerId: ids[0], participantIds: ids })).body.expense;
+    const full = (await snapshot(tripId)).expenses.find((x) => x.id === e.id)!;
+    await owner.put(`/trips/${tripId}/expenses/${e.id}`, {
+      title: 'X', amountMinor: 1000, currency: 'EUR', date: full.date, category: 'other', paidByTravelerId: ids[0], splitMethod: 'exact',
+      splits: [{ travelerId: ids[0], value: 700 }, { travelerId: ids[1], value: 300 }], version: full.version,
+    });
+    const cur = (await snapshot(tripId)).bookings.find((x) => x.id === b.id)!;
+    await owner.patch(`/trips/${tripId}/bookings/${b.id}`, { priceMinor: 1200, version: cur.version });
+    const r = await owner.post(`/trips/${tripId}/bookings/${b.id}/sync-expense`, {});
+    expect(r.status).toBe(422);
+    expect(r.body.error.message).toMatch(/festen Einzelbeträgen/);
+  });
 });
 

@@ -544,3 +544,43 @@ export async function linkExpenseToBooking(db: D1Database, tripId: string, expen
   }
   return (await getExpense(db, tripId, expenseId))!;
 }
+
+/**
+ * Keeps a booking's wallet expense in step after the booking price changed:
+ * same payers (scaled proportionally), same participants and split method.
+ * Exact amounts per person cannot be scaled reliably → the user adjusts them.
+ */
+export async function syncExpenseAmount(
+  db: D1Database,
+  tripId: string,
+  baseCurrency: string,
+  expenseId: string,
+  amountMinor: number,
+  currency: string,
+  fxRate?: string,
+): Promise<ExpenseDto> {
+  const e = await getExpense(db, tripId, expenseId);
+  if (!e) throw new ApiError('not_found', 'Ausgabe nicht gefunden');
+  if (e.amountMinor === amountMinor && e.currency === currency) return e;
+  if (e.splitMethod === 'exact') {
+    throw new ApiError('validation_failed', 'Die Ausgabe ist mit festen Einzelbeträgen aufgeteilt – bitte in der Reisekasse anpassen.');
+  }
+  const payerAmounts = e.payers.length > 1 ? allocate(amountMinor, e.payers.map((p) => p.amountMinor)) : null;
+  const sameCurrency = currency === e.currency;
+  return updateExpense(db, tripId, baseCurrency, expenseId, e.version, {
+    title: e.title,
+    amountMinor,
+    currency,
+    date: e.date,
+    category: e.category,
+    paidByTravelerId: e.paidByTravelerId,
+    payers: payerAmounts ? e.payers.map((p, i) => ({ travelerId: p.travelerId, amountMinor: payerAmounts[i] })) : undefined,
+    splitMethod: e.splitMethod,
+    splits: e.shares.map((s) => ({ travelerId: s.travelerId, ...(e.splitMethod === 'percent' && s.weight != null ? { value: s.weight } : {}) })),
+    // Keep the historical rate when only the amount changed.
+    fxRate: currency === baseCurrency ? undefined : sameCurrency && e.fxSource !== 'identity' ? e.fxRate : fxRate,
+    fxSource: currency === baseCurrency ? undefined : sameCurrency && e.fxSource !== 'identity' ? (e.fxSource === 'provider' ? 'provider' : e.fxSource === 'cached' ? 'cached' : 'manual') : 'manual',
+    fxDate: sameCurrency ? e.fxDate : null,
+    notes: e.notes,
+  });
+}

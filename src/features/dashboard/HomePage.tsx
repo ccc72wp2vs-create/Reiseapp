@@ -45,6 +45,7 @@ import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
 import { bookingTimeLabel } from '../../lib/bookingLabels';
 import { setStatusBarOverHero } from '../../lib/theme';
 import { CheckinReminders } from '../bookings/CheckinReminders';
+import { MissingWalletHint } from '../bookings/MissingWalletHint';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
 const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
@@ -189,6 +190,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
 
       <div className="px-safe">
         {phase.phase !== 'after' && <CheckinReminders snap={snap} canEdit={canEdit} />}
+        <MissingWalletHint snap={snap} />
         {/* ------------------------------------------------------------ Reminders */}
         {(reminders.length > 0 || clarifications.length > 0 || openDeposits.length > 0) && (phase.phase !== 'after' || openDeposits.length > 0) && (
           <section aria-label={t.home.reminders} className="mt-5 space-y-2.5">
@@ -694,3 +696,4 @@ function CostBucketSheet({ snap, bucket, selected, onClose }: { snap: TripSnapsh
     </Sheet>
   );
 }
+

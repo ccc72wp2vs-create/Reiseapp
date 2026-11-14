@@ -251,3 +251,15 @@ export function costBucketItems(
   }
   return out;
 }
+
+/**
+ * Paid bookings with a fixed price that are not (yet) in the group wallet –
+ * their cost would otherwise be missing from the balances.
+ */
+export function missingInWallet<B extends Pick<BookingDto, 'paymentStatus' | 'costKind' | 'priceMinor' | 'currency' | 'expenseId' | 'bookingStatus'>>(
+  bookings: readonly B[],
+): B[] {
+  return bookings.filter(
+    (b) => b.paymentStatus === 'paid' && b.costKind === 'actual' && b.priceMinor != null && b.priceMinor > 0 && !!b.currency && !b.expenseId && b.bookingStatus !== 'cancelled',
+  );
+}

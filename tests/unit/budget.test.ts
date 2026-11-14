@@ -34,3 +34,11 @@ describe('budget', () => {
     expect(r[0].perPersonPerDayMinor).toBe(313);
   });
 });
+
+import { missingInWallet } from '../../shared/costs';
+describe('missingInWallet', () => {
+  const b = (o: Record<string, unknown>) => ({ paymentStatus: 'paid', costKind: 'actual', priceMinor: 100, currency: 'EUR', expenseId: null, bookingStatus: 'booked', ...o }) as never;
+  it('finds paid fixed-price bookings that are not in the wallet', () => {
+    expect(missingInWallet([b({}), b({ expenseId: 'e' }), b({ paymentStatus: 'unpaid' }), b({ costKind: 'estimate' }), b({ priceMinor: null }), b({ bookingStatus: 'cancelled' })])).toHaveLength(1);
+  });
+});

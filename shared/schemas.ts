@@ -315,9 +315,12 @@ export const bookingUpdateSchema = z.object(bookingFields).partial().extend({ ve
 export const bookingToExpenseSchema = z.object({
   paidByTravelerId: id,
   participantIds: z.array(id).min(1).max(50),
+  /** Everyone paid their own share (equal amounts, no debts arise). */
+  eachPaidOwn: z.boolean().optional(),
   date: dateStr.optional(),
   fxRate: z.string().max(40).optional(),
 });
+export const bookingSyncExpenseSchema = z.object({ fxRate: z.string().max(40).optional() });
 
 // ---------------------------------------------------------------------------
 // Wallet

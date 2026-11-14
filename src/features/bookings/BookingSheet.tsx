@@ -24,7 +24,7 @@ import type { BookingDto, DepositDto, DepositMethod, TripSnapshot } from '../../
 import { useTrip } from '../../components/AppShell';
 import { MoneyField, TimeZoneSelect } from '../../components/inputs';
 import { toast } from '../../components/toast';
-import { Button, ConfirmDialog, Field, Input, SelectField, Sheet, TextAreaField, TextField, Toggle } from '../../components/ui';
+import { Button, ConfirmDialog, Field, Input, SelectField, Sheet, TextAreaField, TextField, Toggle, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { tripStore, useOnline } from '../../lib/store';
@@ -77,6 +77,9 @@ export default function BookingSheet({
   });
   const setD = <K extends keyof typeof dep>(k: K, v: (typeof dep)[K]) => setDep((d) => ({ ...d, [k]: v }));
   const depNeedsRate = dep.currency !== trip.baseCurrency;
+  // Paid booking → straight into the wallet when saving (no separate step to forget).
+  const [wal, setWal] = useState({ on: true, eachOwn: false, payer: '', participants: null as string[] | null, rate: '' });
+  const [syncAsk, setSyncAsk] = useState<{ bookingId: string; label: string; fxRate?: string } | null>(null);
   const defaultTz = destinations[0]?.timezone ?? trip.homeTimezone;
   const b = booking;
   const linkedDeposits = b ? (snap!.deposits ?? []).filter((d) => d.bookingId === b.id) : [];
@@ -118,6 +121,14 @@ export default function BookingSheet({
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const isTransport = TRANSPORT_BOOKING_TYPES.includes(form.type);
   const L = PHASE_LABELS[form.type];
+  const priceNow = form.price.trim() ? parseAmount(form.price, form.currency) : null;
+  const walletEligible =
+    form.paymentStatus === 'paid' && form.costKind === 'actual' && priceNow != null && priceNow > 0 && form.bookingStatus !== 'cancelled' && !b?.expenseId;
+  const walNeedsRate = form.currency !== trip.baseCurrency;
+  const walRateSugg = walNeedsRate ? suggestedRate(snap!.exchangeRates, snap!.expenses, form.currency, form.startDate || todayIn(defaultTz)) : null;
+  const walRate = walNeedsRate ? normalizeRate(wal.rate || (walRateSugg?.rate ?? '')) : null;
+  const walParticipants = wal.participants ?? (form.travelerIds.length ? form.travelerIds : travelers.map((x) => x.id));
+  const walPayer = wal.payer || form.paidByTravelerId || me?.id || travelers[0]?.id || '';
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -129,6 +140,10 @@ export default function BookingSheet({
     if (form.startDate && form.endDate && form.endDate < form.startDate) return setError(`${t.bookings.end}: ${t.errors.invalidDate}`);
     const flightNumber = form.type === 'flight' && form.flightNumber.trim() ? normalizeFlightNumber(form.flightNumber) : null;
     if (form.type === 'flight' && form.flightNumber.trim() && !flightNumber) return setError(t.checkin.invalidFlightNumber);
+    const toWallet = walletEligible && wal.on;
+    if (toWallet && !walParticipants.length) return setError(`${t.bookings.walletSection}: ${t.wallet.forWhom}`);
+    if (toWallet && walNeedsRate && !walRate) return setError(`${t.bookings.walletSection} – ${t.wallet.rate}: ${t.errors.validation}`);
+    const priceChanged = !!b?.expenseId && price != null && (price !== b.priceMinor || form.currency !== b.currency);
     const persons = form.personsCount ? Number(form.personsCount) : null;
     const depAmount = dep.on ? parseAmount(dep.amount, dep.currency) : null;
     const depRate = depNeedsRate ? normalizeRate(dep.rate) : '1';
@@ -161,7 +176,7 @@ export default function BookingSheet({
       costKind: form.costKind,
       bookingStatus: form.bookingStatus,
       paymentStatus: form.paymentStatus,
-      paidByTravelerId: form.paidByTravelerId || null,
+      paidByTravelerId: form.paidByTravelerId || (toWallet && !wal.eachOwn ? walPayer : null),
       clarificationNote: form.clarificationNote.trim() || null,
       notes: form.notes.trim() || null,
       travelerIds: form.travelerIds,
@@ -189,10 +204,24 @@ export default function BookingSheet({
             bookingId: res.booking.id,
           });
         }
+        if (toWallet) {
+          await http.post(`/trips/${trip.id}/bookings/${res.booking.id}/expense`, {
+            paidByTravelerId: wal.eachOwn ? walParticipants[0] : walPayer,
+            participantIds: walParticipants,
+            eachPaidOwn: wal.eachOwn || undefined,
+            ...(walNeedsRate && walRate ? { fxRate: walRate } : {}),
+          });
+        }
         onSaved?.(res.booking);
         return res;
       });
-      toast(t.success.saved);
+      toast(toWallet ? t.bookings.savedToWallet : t.success.saved);
+      if (priceChanged && b) {
+        // Booking price changed after it was transferred → offer to update the expense too.
+        const sugg = form.currency !== trip.baseCurrency && form.currency !== b.currency ? suggestedRate(snap!.exchangeRates, snap!.expenses, form.currency, form.startDate || todayIn(defaultTz)) : null;
+        setSyncAsk({ bookingId: b.id, label: money(price!, form.currency), fxRate: sugg?.rate });
+        return;
+      }
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -372,6 +401,56 @@ export default function BookingSheet({
             <p className="text-[12px] leading-snug text-text-3">{t.bookings.notSpentHint}</p>
           </fieldset>
 
+          {walletEligible && (
+            <fieldset className={cx('space-y-3 rounded-[1.25rem] border p-4', wal.on ? 'border-accent/40 bg-accent-soft' : 'border-line bg-surface')}>
+              <Toggle checked={wal.on} onChange={(v) => setWal((w) => ({ ...w, on: v }))} label={t.bookings.walletSection} />
+              <p className="text-[13px] leading-snug text-text-2">{wal.on ? t.bookings.walletOnHint : t.bookings.walletOffHint}</p>
+              {wal.on && (
+                <>
+                  <SelectField
+                    label={t.wallet.paidBy}
+                    value={wal.eachOwn ? '__own' : walPayer}
+                    onChange={(e) => setWal((w) => (e.target.value === '__own' ? { ...w, eachOwn: true } : { ...w, eachOwn: false, payer: e.target.value }))}
+                  >
+                    {travelers.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                    <option value="__own">{t.bookings.eachPaidOwn}</option>
+                  </SelectField>
+                  <Field label={t.wallet.forWhom}>
+                    <div className="flex flex-wrap gap-2">
+                      {travelers.map((x) => {
+                        const on = walParticipants.includes(x.id);
+                        return (
+                          <button
+                            key={x.id}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => setWal((w) => ({ ...w, participants: on ? walParticipants.filter((id) => id !== x.id) : travelers.filter((tr) => tr.id === x.id || walParticipants.includes(tr.id)).map((tr) => tr.id) }))}
+                            className={cx('inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold', on ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2')}
+                          >
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color }} />
+                            {x.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                  {walNeedsRate && (
+                    <TextField
+                      label={`${t.wallet.rate} (1 ${form.currency} = … ${trip.baseCurrency})`}
+                      inputMode="decimal"
+                      value={wal.rate || (walRateSugg?.rate.replace('.', ',') ?? '')}
+                      onChange={(e) => setWal((w) => ({ ...w, rate: e.target.value }))}
+                    />
+                  )}
+                </>
+              )}
+            </fieldset>
+          )}
+
           <fieldset className="space-y-3 rounded-[1.25rem] border border-line bg-surface p-4">
             <PhaseLegend icon={Lock} label={t.deposits.title} />
             <div className="clear-both" />
@@ -465,6 +544,29 @@ export default function BookingSheet({
           }}
           onClose={() => {
             setJoint(false);
+            onClose();
+          }}
+        />
+      )}
+      {syncAsk && (
+        <ConfirmDialog
+          open
+          danger={false}
+          title={t.bookings.syncTitle}
+          message={t.bookings.syncMessage(syncAsk.label)}
+          confirmLabel={t.bookings.syncConfirm}
+          onClose={() => {
+            setSyncAsk(null);
+            onClose();
+          }}
+          onConfirm={async () => {
+            try {
+              await tripStore.mutate(() => http.post(`/trips/${trip.id}/bookings/${syncAsk.bookingId}/sync-expense`, syncAsk.fxRate ? { fxRate: syncAsk.fxRate } : {}));
+              toast(t.bookings.syncDone);
+            } catch (e) {
+              toast.error(e);
+            }
+            setSyncAsk(null);
             onClose();
           }}
         />

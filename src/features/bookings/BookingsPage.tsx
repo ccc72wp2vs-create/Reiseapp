@@ -1,6 +1,6 @@
 import { ArrowRight, CircleHelp, Clock, Plus, Ticket, Wallet, FileUp, Link2 } from 'lucide-react';
 import { lazy, Suspense, useMemo, useState, useEffect } from 'react';
-import { costInfo, summarizeBookingCosts } from '../../../shared/costs';
+import { costInfo, missingInWallet, summarizeBookingCosts } from '../../../shared/costs';
 import { expensesMatchingBooking } from '../../../shared/match';
 import { normalizeRate } from '../../../shared/money';
 import { bookingSortKey, isTransport, todayIn } from '../../../shared/trip';
@@ -42,6 +42,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
   // Deep link after a document import: /buchungen?id=<booking> opens it directly.
   const [params, setParams] = useSearchParams();
   const openId = params.get('id');
+  const openFilter = params.get('offen') === '1';
   useEffect(() => {
     if (!openId) return;
     const b = snap.bookings.find((x) => x.id === openId);
@@ -66,6 +67,12 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
     }
   };
   const persons = usePersonSelection(snap.travelers);
+  useEffect(() => {
+    if (!openFilter) return;
+    setF({ time: 'all', kind: 'open' });
+    setParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openFilter]);
   const isPast = (b: BookingDto) => !!b.startDate && (b.endDate ?? b.startDate) < today;
   const forPerson = (b: BookingDto) => !persons.filtered || b.travelerIds.length === 0 || b.travelerIds.some((id) => persons.selected.includes(id));
   const inTime = (time: Filters['time']) => bookings.filter((b) => forPerson(b) && (time === 'all' || (time === 'past') === isPast(b)));
@@ -293,6 +300,17 @@ function Timeline({
                     {t.bookings.inWallet}
                   </Badge>
                 </div>
+              ) : missingInWallet([b]).length ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge tone="warn" icon={<Wallet size={12} />}>
+                    {t.bookings.notInWallet}
+                  </Badge>
+                  {canEdit && (
+                    <Button size="sm" variant="soft" icon={<Wallet size={16} />} disabled={!online} onClick={() => onWallet(b)}>
+                      {t.bookings.toWallet}
+                    </Button>
+                  )}
+                </div>
               ) : (
                 canEdit &&
                 info.countsAsSpent && (
@@ -480,7 +498,7 @@ function kindOf(b: BookingDto): Kind {
 /** Something still to do: not booked, not paid, estimate only or marked for clarification. */
 function needsAttention(b: BookingDto): boolean {
   if (b.bookingStatus === 'cancelled') return false;
-  return costInfo(b).needsClarification || b.bookingStatus !== 'booked' || b.paymentStatus === 'unpaid' || b.paymentStatus === 'partial' || b.costKind === 'estimate';
+  return missingInWallet([b]).length > 0 || costInfo(b).needsClarification || b.bookingStatus !== 'booked' || b.paymentStatus === 'unpaid' || b.paymentStatus === 'partial' || b.costKind === 'estimate';
 }
 
 const WD = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
