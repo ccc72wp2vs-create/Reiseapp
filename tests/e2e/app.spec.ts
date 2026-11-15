@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 const EMAIL = 'e2e@example.com';
@@ -10,7 +10,14 @@ async function freezeClock(page: Page) {
   await page.clock.setFixedTime(new Date('2026-11-12T03:00:00Z'));
 }
 
+/**
+ * The session cookie is reused across tests: the server allows only 30
+ * logins per IP and 15 minutes (brute-force protection), the suite has more tests.
+ */
+let session: Awaited<ReturnType<BrowserContext['cookies']>> | null = null;
+
 async function login(page: Page) {
+  if (session) await page.context().addCookies(session);
   await page.goto('/');
   // Wait until the app decided where to go (setup, login or the dashboard).
   await page.locator('h1').first().waitFor();
@@ -26,6 +33,7 @@ async function login(page: Page) {
     await page.getByRole('button', { name: 'Anmelden' }).click();
   }
   await page.waitForURL((u) => u.pathname === '/');
+  session = await page.context().cookies();
 }
 
 async function ensureThailand(page: Page) {
