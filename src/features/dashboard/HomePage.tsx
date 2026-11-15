@@ -219,9 +219,6 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
                   {formatDateShort(viewed.arrivalDate)} – {formatDateShort(viewed.departureDate)}
                 </span>
                 <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.home.nights(diffDays(viewed.arrivalDate, viewed.departureDate))}</span>
-                {viewed.accommodationName && (
-                  <span className="max-w-full truncate rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{viewed.accommodationName}</span>
-                )}
               </>
             )}
             {!browsing && phase.phase === 'during' && (
