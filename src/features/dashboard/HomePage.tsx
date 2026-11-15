@@ -15,7 +15,7 @@ import {
   Languages,
   Lock,
 } from 'lucide-react';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { costBucketItems, costInfo, personCostOverview, tripCostOverview, type CostBucket } from '../../../shared/costs';
 import {
@@ -25,6 +25,7 @@ import {
   destinationOn,
   diffDays,
   nextTransport,
+  sortDestinations,
   todayIn,
   transferReminders,
   tripPhase,
@@ -121,7 +122,20 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const phraseLang = phraseLangFor(trip.destinationCountry);
   // Open deposits: shown from 2 days before the return date (or always without one).
   const openDeposits = (snap.deposits ?? []).filter((d) => d.status === 'open' && (!d.returnDate || diffDays(today, d.returnDate) <= 2));
-  const heroDest = phase.phase === 'before' ? destinations[0] : phase.phase === 'after' ? null : (where.current ?? where.leaving);
+  const homeDest = phase.phase === 'before' ? destinations[0] : phase.phase === 'after' ? null : (where.current ?? where.leaving);
+  // Browse the stops in the hero (tap a stop or swipe); null = today's stop.
+  const stops = useMemo(() => sortDestinations(destinations), [destinations]);
+  const [viewId, setViewId] = useState<string | null>(null);
+  const viewed = viewId ? (stops.find((d) => d.id === viewId) ?? null) : null;
+  const browsing = !!viewed && viewed.id !== homeDest?.id;
+  const heroDest = browsing ? viewed : homeDest;
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  function step(dir: 1 | -1) {
+    if (!stops.length) return;
+    const i = stops.findIndex((d) => d.id === heroDest?.id);
+    const next = stops[Math.min(Math.max((i < 0 ? 0 : i) + dir, 0), stops.length - 1)];
+    setViewId(next.id === homeDest?.id ? null : next.id);
+  }
 
   const todays = activities.filter((a) => a.date === today);
   const todaysBookings = bookingsOnDate(bookings, today);
@@ -139,7 +153,18 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   return (
     <div>
       {/* ------------------------------------------------------------------ Hero */}
-      <section className="relative flex min-h-[max(31dvh,250px)] flex-col justify-end">
+      <section
+        className="relative flex min-h-[max(31dvh,250px)] flex-col justify-end"
+        onTouchStart={(e) => (touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
+        onTouchEnd={(e) => {
+          const t0 = touch.current;
+          touch.current = null;
+          if (!t0 || phase.phase === 'after') return;
+          const dx = e.changedTouches[0].clientX - t0.x;
+          const dy = e.changedTouches[0].clientY - t0.y;
+          if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
+        }}
+      >
         <CoverArt
           name={heroDest?.name ?? trip.name}
           imageUrl={heroDest?.coverImageUrl ?? trip.coverImageUrl}
@@ -164,27 +189,57 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             {greeting()}
             {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}
           </p>
-          <p className="mt-2.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#d8e9f0]">
-            {phase.phase === 'during' ? t.home.currentDestination : phase.phase === 'before' ? t.home.beforeTrip : t.phase.after}
-          </p>
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#d8e9f0]">
+              {browsing && viewed
+                ? stopLabel(viewed, today, stops.indexOf(viewed) + 1, stops.length)
+                : phase.phase === 'during'
+                  ? t.home.currentDestination
+                  : phase.phase === 'before'
+                    ? t.home.beforeTrip
+                    : t.phase.after}
+            </p>
+            {browsing && (
+              <button
+                type="button"
+                onClick={() => setViewId(null)}
+                className="shrink-0 rounded-full bg-white/[0.14] px-3 py-1 text-[12px] font-semibold text-white ring-1 ring-inset ring-white/20 [text-shadow:none] active:scale-95"
+              >
+                {t.home.backToToday}
+              </button>
+            )}
+          </div>
           <h1 className="font-display text-[clamp(38px,11.5vw,56px)] font-semibold leading-[0.95]">
             {phase.phase === 'after' ? trip.name : (heroDest?.name ?? trip.name)}
           </h1>
           <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[14px]">
-            {phase.phase === 'during' && (
+            {browsing && viewed && (
+              <>
+                <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">
+                  {formatDateShort(viewed.arrivalDate)} – {formatDateShort(viewed.departureDate)}
+                </span>
+                <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.home.nights(diffDays(viewed.arrivalDate, viewed.departureDate))}</span>
+                {viewed.accommodationName && (
+                  <span className="max-w-full truncate rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{viewed.accommodationName}</span>
+                )}
+              </>
+            )}
+            {!browsing && phase.phase === 'during' && (
               <>
                 <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">{t.phase.during(phase.day, phase.totalDays)}</span>
                 <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.phase.remaining(phase.daysRemaining)}</span>
               </>
             )}
-            {phase.phase === 'before' && (
+            {!browsing && phase.phase === 'before' && (
               <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">{t.phase.before(phase.daysUntilStart)}</span>
             )}
-            {where.current && phase.phase === 'during' && (
+            {!browsing && where.current && phase.phase === 'during' && (
               <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.home.stayUntil(formatDateShort(where.current.departureDate))}</span>
             )}
           </div>
-          {phase.phase !== 'after' && <TripProgress snap={snap} today={today} />}
+          {phase.phase !== 'after' && (
+            <TripProgress stops={stops} today={today} selectedId={heroDest?.id ?? null} onSelect={(id) => setViewId(id === homeDest?.id ? null : id)} />
+          )}
         </div>
       </section>
 
@@ -450,28 +505,54 @@ function BookingRow({ booking }: { booking: BookingDto }) {
   );
 }
 
-/** Mini route progress: one dot per destination. */
-function TripProgress({ snap, today }: { snap: TripSnapshot; today: string }) {
-  const ds = snap.destinations;
-  if (!ds.length) return null;
+/** Route progress: one segment per stop – tap to look at that stop in the hero. */
+function TripProgress({
+  stops,
+  today,
+  selectedId,
+  onSelect,
+}: {
+  stops: TripSnapshot['destinations'];
+  today: string;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  if (!stops.length) return null;
   return (
     <ol className="mt-3.5 flex items-center gap-1.5" aria-label={t.trips.route}>
-      {ds.map((d) => {
+      {stops.map((d) => {
         const state = d.departureDate <= today ? 'done' : d.arrivalDate <= today ? 'now' : 'next';
+        const selected = d.id === selectedId;
         return (
-          <li key={d.id} className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <span
-              className={cx(
-                'h-1.5 rounded-full',
-                state === 'done' ? 'bg-white/70' : state === 'now' ? 'bg-[#79afc7]' : 'bg-white/25',
-              )}
-            />
-            <span className={cx('truncate text-[11px]', state === 'now' ? 'font-semibold text-white' : 'text-white/65')}>{d.name}</span>
+          <li key={d.id} className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => onSelect(d.id)}
+              aria-pressed={selected}
+              aria-label={t.home.showStop(d.name)}
+              className="flex w-full min-w-0 flex-col gap-1.5 py-1.5 text-left [text-shadow:inherit] active:opacity-70"
+            >
+              <span
+                className={cx(
+                  'h-1.5 w-full rounded-full transition',
+                  state === 'done' ? 'bg-white/70' : state === 'now' ? 'bg-[#79afc7]' : 'bg-white/25',
+                  selected && 'ring-2 ring-white/70 ring-offset-1 ring-offset-transparent',
+                )}
+              />
+              <span className={cx('truncate text-[11px]', selected ? 'font-semibold text-white' : 'text-white/65')}>{d.name}</span>
+            </button>
           </li>
         );
       })}
     </ol>
   );
+}
+
+/** "Station 4 von 6 · in 3 Tagen" / "· bereits besucht" / "· jetzt". */
+function stopLabel(d: TripSnapshot['destinations'][number], today: string, n: number, total: number): string {
+  const when =
+    d.departureDate <= today ? t.home.stopPast : d.arrivalDate <= today ? t.home.stopNow : t.home.stopIn(diffDays(today, d.arrivalDate));
+  return `${t.home.stopOf(n, total)} · ${when}`;
 }
 
 // ---------------------------------------------------------------------------

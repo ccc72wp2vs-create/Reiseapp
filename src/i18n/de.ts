@@ -114,6 +114,13 @@ export const de = {
     remaining: (d: number) => (d === 0 ? 'Letzter Reisetag' : d === 1 ? 'Noch 1 Tag' : `Noch ${d} Tage`),
   },
   home: {
+    backToToday: 'Heute',
+    showStop: (name: string) => `${name} anzeigen`,
+    stopOf: (n: number, total: number) => `Station ${n} von ${total}`,
+    stopPast: 'bereits besucht',
+    stopNow: 'jetzt',
+    stopIn: (days: number) => (days === 1 ? 'morgen' : `in ${days} Tagen`),
+    nights: (n: number) => (n === 1 ? '1 Nacht' : `${n} Nächte`),
     greeting: { morning: 'Guten Morgen', day: 'Hallo', evening: 'Guten Abend' },
     currentDestination: 'Aktuelles Reiseziel',
     travelDay: 'Reisetag',

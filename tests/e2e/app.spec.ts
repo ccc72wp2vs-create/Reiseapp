@@ -337,3 +337,15 @@ test('paid booking goes straight into the wallet; price change updates the expen
   await page.getByRole('button', { name: 'Ausgabe anpassen' }).click();
   await expect(page.getByText('Ausgabe in der Reisekasse angepasst')).toBeVisible();
 });
+
+test('home hero: tap through the stops and back to today', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Phuket' })).toBeVisible();
+  await page.getByRole('button', { name: 'Krabi anzeigen' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Krabi' })).toBeVisible();
+  await expect(page.getByText(/Station 4 von \d+ · in 6 Tagen/)).toBeVisible();
+  await expect(page.getByText('18.11. – 21.11.')).toBeVisible();
+  await expect(page.getByText('3 Nächte')).toBeVisible();
+  await page.getByRole('button', { name: 'Heute' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Phuket' })).toBeVisible();
+});
