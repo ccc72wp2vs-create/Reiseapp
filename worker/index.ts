@@ -6,6 +6,7 @@
  */
 import { createApp } from './app';
 import type { Env } from './env';
+import { refreshActiveTrips } from './services/fx';
 
 const app = createApp();
 
@@ -15,5 +16,9 @@ export default {
     if (url.pathname.startsWith('/api/')) return app.fetch(request, env, ctx);
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return new Response('Not found', { status: 404 });
+  },
+  /** Daily: store the new ECB reference rates for running trips. */
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(refreshActiveTrips(env.DB, new Date().toISOString().slice(0, 10)).then(() => undefined));
   },
 } satisfies ExportedHandler<Env>;

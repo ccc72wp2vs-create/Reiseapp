@@ -41,6 +41,7 @@ import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
 import { CurrencyConverter } from '../../components/CurrencyConverter';
+import { refreshRatesOnce } from '../../lib/rates';
 import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
 import { bookingTimeLabel } from '../../lib/bookingLabels';
 import { setStatusBarOverHero } from '../../lib/theme';
@@ -158,6 +159,14 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
     setActivityDate(date);
     setSheet('activity');
   }
+
+  // Fresh ECB rates for the converter and new expenses (once per session; existing expenses stay as they are).
+  useEffect(() => {
+    if (!online || phase.phase === 'after' || !trip.localCurrency || trip.localCurrency === trip.baseCurrency) return;
+    void refreshRatesOnce(trip.id, (p) => http.post<{ added: number }>(p)).then((n) => {
+      if (n > 0) void tripStore.refresh();
+    });
+  }, [online, trip.id, trip.localCurrency, trip.baseCurrency, phase.phase]);
 
   const todays = activities.filter((a) => a.date === today);
   const todaysBookings = bookingsOnDate(bookings, today);

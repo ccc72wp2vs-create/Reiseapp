@@ -1,5 +1,6 @@
 import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, FileUp, HandCoins, Lock, Plus, Receipt, Send, Trash2, Users } from 'lucide-react';
 import type { PayRequest } from './PaySheet';
+import { storedRateFor } from '../../lib/rates';
 import { BudgetCard } from './BudgetCard';
 import { DepositsCard } from './DepositsCard';
 import { DepositSheet } from './DepositSheet';
@@ -683,7 +684,26 @@ function Rates({ snap }: { snap: TripSnapshot }) {
   const [date, setDate] = useState(todayIn(trip.homeTimezone));
   const [busy, setBusy] = useState(false);
   const [conv, setConv] = useState({ amount: '1000', currency: trip.localCurrency ?? 'USD' });
-  const latest = exchangeRates.filter((r) => r.currency === conv.currency).sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
+  const latest = storedRateFor(exchangeRates, conv.currency, todayIn(trip.homeTimezone));
+  const [refreshing, setRefreshing] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  // Manual rates always listed; automatic ECB rates only the latest few per currency unless expanded.
+  const listed = showAll
+    ? exchangeRates
+    : exchangeRates.filter((r) => r.source === 'manual' || exchangeRates.filter((x) => x.source === 'provider' && x.currency === r.currency && x.effectiveDate > r.effectiveDate).length < 3);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      const r = await http.post<{ added: number }>(`/trips/${trip.id}/exchange-rates/refresh`);
+      if (r.added > 0) await tripStore.refresh();
+      toast(t.wallet.ratesUpdated(r.added));
+    } catch (e) {
+      toast.error(e);
+    } finally {
+      setRefreshing(false);
+    }
+  }
   const amountMinor = parseAmount(conv.amount || '0', conv.currency);
   const result = latest && amountMinor != null ? convertMinor(amountMinor, conv.currency, base, latest.rate) : null;
 
@@ -724,12 +744,20 @@ function Rates({ snap }: { snap: TripSnapshot }) {
         <p className="mt-3 text-[12px] text-text-3">{t.wallet.converterHint}</p>
       </Card>
 
-      <SectionTitle>{t.wallet.rates}</SectionTitle>
+      <SectionTitle
+        action={
+          <Button size="sm" variant="soft" loading={refreshing} disabled={!online} onClick={refresh}>
+            {t.wallet.refreshRates}
+          </Button>
+        }
+      >
+        {t.wallet.rates}
+      </SectionTitle>
       {exchangeRates.length === 0 ? (
         <p className="text-[14px] text-text-3">{t.wallet.noRates}</p>
       ) : (
         <Card className="divide-y divide-line">
-          {exchangeRates.map((r) => (
+          {listed.map((r) => (
             <div key={r.id} className="flex items-center gap-3 p-4 text-[14px]">
               <span className="min-w-0 flex-1">
                 <span className="font-semibold tabular">
@@ -758,6 +786,11 @@ function Rates({ snap }: { snap: TripSnapshot }) {
             </div>
           ))}
         </Card>
+      )}
+      {listed.length < exchangeRates.length && (
+        <button type="button" onClick={() => setShowAll(true)} className="mt-2 text-[14px] font-semibold text-accent">
+          {t.wallet.showAllRates(exchangeRates.length)}
+        </button>
       )}
       {canEdit && (
         <Card className="mt-4 space-y-3 p-5">

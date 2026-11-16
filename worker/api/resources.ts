@@ -59,6 +59,7 @@ import * as docs from '../services/documents';
 import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
+import * as fx from '../services/fx';
 import * as assistant from '../services/assistant';
 import * as google from '../services/google';
 import * as geoapify from '../services/geoapify';
@@ -551,6 +552,17 @@ r.post('/:tripId/exchange-rates', async (c) => {
   const t = c.get('trip');
   const rate = await wallet.createExchangeRate(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, exchangeRateCreateSchema));
   return c.json({ exchangeRate: rate }, 201);
+});
+
+/** Loads missing ECB reference rates for this trip (also runs daily via cron). */
+r.post('/:tripId/exchange-rates/refresh', async (c) => {
+  const t = c.get('trip');
+  try {
+    const res = await fx.refreshTripRates(c.env.DB, t.tripId, new Date().toISOString().slice(0, 10));
+    return c.json(res);
+  } catch {
+    throw new ApiError('service_unavailable', 'Wechselkurse konnten gerade nicht geladen werden. Es gelten weiter die gespeicherten Kurse.');
+  }
 });
 
 r.delete('/:tripId/exchange-rates/:id', async (c) => {

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { convertMinor, currencyExponent, parseAmount, parseRate } from '../../shared/money';
 import type { TripSnapshot } from '../../shared/types';
 import { t } from '../i18n';
-import { formatRate, money } from '../lib/format';
+import { formatDateShort, formatRate, money } from '../lib/format';
 import { suggestedRate } from '../lib/rates';
 import { Input } from './ui';
 
@@ -57,6 +57,7 @@ export function CurrencyConverter({ snap, today }: { snap: TripSnapshot; today: 
       <p className="mt-3 font-display text-[26px] font-semibold tabular" aria-live="polite">
         {result != null ? money(result, to) : <span className="text-text-3">– {to}</span>}
       </p>
+      {rate.from === 'stored' && <p className="mt-1 text-[12px] text-text-3">{t.home.rateStand(formatDateShort(rate.effectiveDate), rate.source === 'provider')}</p>}
     </section>
   );
 }

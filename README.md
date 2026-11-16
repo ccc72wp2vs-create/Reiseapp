@@ -270,6 +270,13 @@ Je Suche: 1 ID-Suche, ≤ 10 Matrix-Elemente, ≤ 8 Ortskarten. Suchen nur auf A
 
 Die Content-Security-Policy (`public/_headers`) erlaubt dafür `maps.googleapis.com`/`maps.gstatic.com` (inkl. `'unsafe-eval'`, wie in Googles CSP-Leitfaden für die Maps JavaScript API), und `Referrer-Policy` ist auf `strict-origin-when-cross-origin` gesetzt, damit die Domain-Einschränkung des Browser-Schlüssels greift (an fremde Hosts geht nur die Origin, kein Pfad).
 
+## Wechselkurse (EZB, automatisch)
+
+- Quelle: offizielle Referenzkurse der Europäischen Zentralbank über die kostenlose Frankfurter-API (`api.frankfurter.dev`) – kein Schlüssel, kein Konto, keine Kosten.
+- Ein Cron-Trigger (`wrangler.jsonc` → `triggers.crons`, täglich 05:20 und 15:20 UTC) speichert für laufende Reisen fehlende Tageskurse als `exchange_rates` mit `source = 'provider'`. Zusätzlich lädt die Startseite einmal pro Sitzung nach, und unter *Kasse → Kurse* gibt es „Kurse aktualisieren“.
+- Vorschläge für neue Ausgaben und der Währungsrechner nehmen den neuesten Kurs bis zum jeweiligen Datum (Wochenende → Freitagskurs). Ein eigener (manueller) Kurs für denselben Tag hat Vorrang.
+- **Bestehende Ausgaben werden nie umgerechnet** – ihr gespeicherter Kurs bleibt unverändert, damit sich Salden nicht verschieben.
+
 ## Kartenanbieter
 
 Standard sind die OpenStreetMap-Standardkacheln – laut [OSM Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/) nur für **geringe Nutzung** geeignet (für eine private App mit wenigen Personen vertretbar). Für mehr Nutzung einen Anbieter mit passenden Bedingungen konfigurieren, z. B. MapTiler, Stadia Maps oder Thunderforest (Schlüssel dort auf die eigene Domain beschränken – Kachel-Schlüssel sind öffentlich sichtbar):
