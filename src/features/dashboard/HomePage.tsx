@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   ArrowRight,
-  BedDouble,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -47,8 +46,8 @@ import { bookingTimeLabel } from '../../lib/bookingLabels';
 import { setStatusBarOverHero } from '../../lib/theme';
 import { CheckinReminders } from '../bookings/CheckinReminders';
 import { MissingWalletHint } from '../bookings/MissingWalletHint';
-import { stopOverview } from '../../../shared/stop';
-import { BookingRow, StopView } from './StopView';
+import { staysAt, stopOverview } from '../../../shared/stop';
+import { BookingRow, StayCard, StopView } from './StopView';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
 const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
@@ -167,9 +166,8 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const transport = nextTransport(bookings, today);
   const route = useMemo(() => buildRoute(trip, destinations, bookings), [trip, destinations, bookings]);
   const nextLeg = route.legs.find((l) => l.date !== null && l.date >= today);
-  const stayBooking = where.current
-    ? bookings.find((b) => b.type === 'hotel' && b.destinationId === where.current!.id && b.bookingStatus !== 'cancelled')
-    : null;
+  const currentStays = where.current ? staysAt(where.current, bookings) : [];
+  const viewerTravelerId = snap.travelers.find((x) => x.userId && x.userId === user?.id)?.id ?? null;
   const upcoming = bookings
     .filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '') > today)
     .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)))
@@ -414,7 +412,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           ))}
         </section>
 
-        {stopData && <StopView o={stopData} canEdit={canEdit} onAddActivity={openActivity} />}
+        {stopData && <StopView o={stopData} canEdit={canEdit} onAddActivity={openActivity} travelers={snap.travelers} viewerTravelerId={viewerTravelerId} />}
 
         {!stopData && (
           <>
@@ -478,24 +476,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             {/* ---------------------------------------------- Stay & next move */}
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {where.current && phase.phase === 'during' && (
-                <Card className="p-5">
-                  <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
-                    <BedDouble size={15} /> {t.home.currentStay}
-                  </div>
-                  <p className="mt-3 font-display text-[22px] font-semibold leading-tight">{where.current.accommodationName ?? where.current.name}</p>
-                  <p className="mt-1 text-[14px] text-text-2">
-                    {where.current.accommodationName ? (where.current.accommodationAddress ?? where.current.name) : t.home.accommodationUnknown}
-                  </p>
-                  <p className="mt-3 text-[13px] text-text-3">
-                    {formatDateShort(where.current.arrivalDate)} – {formatDate(where.current.departureDate)} ·{' '}
-                    {t.common.nights(diffDays(where.current.arrivalDate, where.current.departureDate))}
-                  </p>
-                  {stayBooking && (
-                    <div className="mt-3">
-                      <BookingBadges booking={stayBooking} />
-                    </div>
-                  )}
-                </Card>
+                <StayCard stop={where.current} stays={currentStays} travelers={snap.travelers} viewerTravelerId={viewerTravelerId} label={t.home.currentStay} />
               )}
               {nextLeg && (
                 <Card className="p-5">

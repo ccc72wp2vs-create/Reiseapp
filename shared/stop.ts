@@ -15,7 +15,10 @@ export interface StopOverview {
   days: string[];
   activitiesByDay: Record<string, ActivityDto[]>;
   bookingsByDay: Record<string, BookingDto[]>;
-  stayBooking: BookingDto | null;
+  /** Accommodation bookings of this stop (several when people stay apart). */
+  stays: BookingDto[];
+  /** All (not cancelled) bookings of this stop. */
+  bookings: BookingDto[];
   arrival: RouteLeg | null;
   departure: RouteLeg | null;
   /** Other bookings of this stop (not the stay, not the arrival/departure transport). */
@@ -46,8 +49,8 @@ export function stopOverview(
   const route = buildRoute(snap.trip, snap.destinations, snap.bookings);
   const arrival = route.legs.find((l) => l.to.destination?.id === stop.id) ?? null;
   const departure = route.legs.find((l) => l.from.destination?.id === stop.id) ?? null;
-  const stayBooking = bookings.find((b) => b.type === 'hotel') ?? null;
-  const shown = new Set([stayBooking?.id, arrival?.booking?.id, departure?.booking?.id].filter(Boolean));
+  const stays = bookings.filter((b) => b.type === 'hotel');
+  const shown = new Set([...stays.map((b) => b.id), arrival?.booking?.id, departure?.booking?.id].filter(Boolean));
   const otherBookings = bookings.filter(
     (b) => !shown.has(b.id) && !(isTransport(b) && (b.startDate === stop.arrivalDate || b.startDate === stop.departureDate)),
   );
@@ -70,7 +73,8 @@ export function stopOverview(
     days,
     activitiesByDay,
     bookingsByDay,
-    stayBooking,
+    stays,
+    bookings,
     arrival,
     departure,
     otherBookings,
@@ -78,4 +82,21 @@ export function stopOverview(
     expenses,
     costs,
   };
+}
+
+/** Accommodation bookings for a stop (not cancelled), in booking order. */
+export function staysAt(stop: DestinationDto, bookings: readonly BookingDto[]): BookingDto[] {
+  return bookings
+    .filter((b) => b.type === 'hotel' && b.bookingStatus !== 'cancelled' && (b.destinationId === stop.id || (!b.destinationId && inStay(stop, b.startDate))))
+    .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)));
+}
+
+/**
+ * Splits a stop's accommodations into the viewer's own (they travel on it, or
+ * nobody is assigned) and the others'. Without a viewer, all are "mine".
+ */
+export function splitStays<B extends Pick<BookingDto, 'travelerIds'>>(stays: readonly B[], viewerTravelerId: string | null): { mine: B[]; others: B[] } {
+  if (!viewerTravelerId) return { mine: [...stays], others: [] };
+  const mine = stays.filter((b) => !b.travelerIds.length || b.travelerIds.includes(viewerTravelerId));
+  return { mine, others: stays.filter((b) => !mine.includes(b)) };
 }

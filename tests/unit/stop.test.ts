@@ -34,7 +34,7 @@ describe('stopOverview', () => {
     expect(o.days).toEqual(['2026-11-18', '2026-11-19', '2026-11-20']);
     expect(o.activitiesByDay['2026-11-20'].map((a) => a.id)).toEqual(['a1']);
     expect(o.bookingsByDay['2026-11-19'].map((b) => b.id)).toEqual(['tour']);
-    expect(o.stayBooking?.id).toBe('hotel');
+    expect(o.stays.map((b) => b.id)).toEqual(['hotel']);
     expect(o.arrival?.from.name).toBe('Koh Lanta');
     expect(o.departure?.to.name).toBe('Chiang Mai');
     expect(o.places.map((p) => p.id)).toEqual(['p1']);
@@ -46,5 +46,19 @@ describe('stopOverview', () => {
     expect(stopOverview(snap, 'lanta', '2026-11-19')!.when).toBe('past');
     expect(stopOverview(snap, 'krabi', '2026-11-18')!.when).toBe('now');
     expect(stopOverview(snap, 'nope', '2026-11-18')).toBeNull();
+  });
+});
+
+describe('separate stays (e.g. each couple has its own accommodation)', () => {
+  it('shows each viewer their own stay first and the others as a hint', async () => {
+    const { splitStays } = await import('../../shared/stop');
+    const stays = [
+      { id: 'lj', travelerIds: ['john', 'lilli'] },
+      { id: 'at', travelerIds: ['annika', 'tim'] },
+      { id: 'all', travelerIds: [] as string[] },
+    ];
+    expect(splitStays(stays, 'john')).toEqual({ mine: [stays[0], stays[2]], others: [stays[1]] });
+    expect(splitStays(stays, 'tim').mine.map((b) => b.id)).toEqual(['at', 'all']);
+    expect(splitStays(stays, null)).toEqual({ mine: stays, others: [] });
   });
 });

@@ -5,9 +5,11 @@
  */
 import { BedDouble, CalendarDays, MapPin, Plus, Route, Wallet } from 'lucide-react';
 import { Link } from 'react-router';
-import type { StopOverview } from '../../../shared/stop';
+import { personCostOverview } from '../../../shared/costs';
+import { splitStays, type StopOverview } from '../../../shared/stop';
 import { diffDays, type RouteLeg } from '../../../shared/trip';
-import type { BookingDto } from '../../../shared/types';
+import type { BookingDto, DestinationDto, TravelerDto } from '../../../shared/types';
+import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
 import { BookingBadges, BookingIcon, CategoryIcon, IconTile, ModeIcon } from '../../components/status';
 import { Badge, Button, Card, SectionTitle, cx } from '../../components/ui';
 import { t } from '../../i18n';
@@ -60,8 +62,113 @@ function LegCard({ leg, label }: { leg: RouteLeg; label: string }) {
   );
 }
 
-export function StopView({ o, canEdit, onAddActivity }: { o: StopOverview; canEdit: boolean; onAddActivity: (date: string) => void }) {
-  const { stop, when, costs } = o;
+/** Names of a booking's travelers ("Annika & Tim"). */
+function whoLabel(b: BookingDto, travelers: readonly TravelerDto[]) {
+  return travelers
+    .filter((x) => b.travelerIds.includes(x.id))
+    .map((x) => x.name)
+    .join(' & ');
+}
+
+/** Booking title without a trailing " – Annika & Tim" when that is just the names. */
+function stayTitle(b: BookingDto, travelers: readonly TravelerDto[]) {
+  const m = /^(.*\S)\s+[–-]\s+([^–-]+)$/.exec(b.title);
+  if (!m) return b.title;
+  const names = new Set(m[2].split(/\s*(?:&|und|,)\s*/).map((n) => n.trim().toLowerCase()));
+  const who = travelers.filter((x) => b.travelerIds.includes(x.id)).map((x) => x.name.toLowerCase());
+  return who.length && who.length === names.size && who.every((n) => names.has(n)) ? m[1] : b.title;
+}
+
+/**
+ * Accommodation of a stop. When people stay apart (several accommodation
+ * bookings), everyone sees their own one first and the others' as a hint.
+ */
+export function StayCard({
+  stop,
+  stays,
+  travelers,
+  viewerTravelerId,
+  label,
+}: {
+  stop: DestinationDto;
+  stays: BookingDto[];
+  travelers: readonly TravelerDto[];
+  viewerTravelerId: string | null;
+  label: string;
+}) {
+  const dates = (
+    <p className="mt-3 text-[13px] text-text-3">
+      {formatDateShort(stop.arrivalDate)} – {formatDate(stop.departureDate)} · {t.common.nights(diffDays(stop.arrivalDate, stop.departureDate))}
+    </p>
+  );
+  if (stays.length <= 1) {
+    return (
+      <Card className="p-5">
+        <CardLabel icon={<BedDouble size={15} />}>{label}</CardLabel>
+        <p className="mt-3 font-display text-[22px] font-semibold leading-tight">{stop.accommodationName ?? stays[0]?.title ?? stop.name}</p>
+        <p className="mt-1 text-[14px] text-text-2">
+          {stop.accommodationName ? (stop.accommodationAddress ?? stop.name) : stays[0] ? (stays[0].location ?? stop.name) : t.home.accommodationUnknown}
+        </p>
+        {dates}
+        {stays[0] && (
+          <Link to="/buchungen" className="mt-3 block">
+            <BookingBadges booking={stays[0]} />
+          </Link>
+        )}
+      </Card>
+    );
+  }
+  const { mine, others } = splitStays(stays, viewerTravelerId);
+  const own = viewerTravelerId && mine.length ? mine : [];
+  const list = own.length ? own : stays;
+  return (
+    <Card className="p-5">
+      <CardLabel icon={<BedDouble size={15} />}>{own.length ? t.home.stayYours : t.home.staySeparate}</CardLabel>
+      <div className="mt-3 space-y-4">
+        {list.map((b) => (
+          <Link key={b.id} to="/buchungen" className="block">
+            {!own.length && whoLabel(b, travelers) && <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-accent">{whoLabel(b, travelers)}</p>}
+            <p className="font-display text-[22px] font-semibold leading-tight">{stayTitle(b, travelers)}</p>
+            {b.location && <p className="mt-1 text-[14px] text-text-2">{b.location}</p>}
+            <div className="mt-2">
+              <BookingBadges booking={b} compact />
+            </div>
+          </Link>
+        ))}
+      </div>
+      {dates}
+      {own.length > 0 && others.length > 0 && (
+        <div className="mt-4 space-y-1.5 border-t border-line pt-3">
+          {others.map((b) => (
+            <Link key={b.id} to="/buchungen" className="flex items-start gap-2 text-[14px] leading-snug text-text-2">
+              <BedDouble size={14} className="mt-0.5 shrink-0 text-text-3" />
+              <span className="min-w-0">
+                <span className="font-semibold text-text">{whoLabel(b, travelers) || t.home.stayOthers}:</span> {stayTitle(b, travelers)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+export function StopView({
+  o,
+  canEdit,
+  onAddActivity,
+  travelers,
+  viewerTravelerId,
+}: {
+  o: StopOverview;
+  canEdit: boolean;
+  onAddActivity: (date: string) => void;
+  travelers: TravelerDto[];
+  viewerTravelerId: string | null;
+}) {
+  const { stop, when } = o;
+  const selection = usePersonSelection(travelers);
+  const costs = selection.filtered ? personCostOverview(o.costs.baseCurrency, selection.selected, o.expenses, [], o.bookings) : o.costs;
   const past = when === 'past';
   const base = costs.baseCurrency;
   return (
@@ -139,19 +246,7 @@ export function StopView({ o, canEdit, onAddActivity }: { o: StopOverview; canEd
 
       {/* --------------------------------------------- Stay, arrival, onward */}
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
-        <Card className="p-5">
-          <CardLabel icon={<BedDouble size={15} />}>{t.home.stopStay}</CardLabel>
-          <p className="mt-3 font-display text-[22px] font-semibold leading-tight">{stop.accommodationName ?? stop.name}</p>
-          <p className="mt-1 text-[14px] text-text-2">{stop.accommodationName ? (stop.accommodationAddress ?? stop.name) : t.home.accommodationUnknown}</p>
-          <p className="mt-3 text-[13px] text-text-3">
-            {formatDateShort(stop.arrivalDate)} – {formatDate(stop.departureDate)} · {t.common.nights(diffDays(stop.arrivalDate, stop.departureDate))}
-          </p>
-          {o.stayBooking && (
-            <Link to="/buchungen" className="mt-3 block">
-              <BookingBadges booking={o.stayBooking} />
-            </Link>
-          )}
-        </Card>
+        <StayCard stop={stop} stays={o.stays} travelers={travelers} viewerTravelerId={viewerTravelerId} label={t.home.stopStay} />
         {o.arrival && <LegCard leg={o.arrival} label={t.home.stopArrival} />}
         {o.departure && <LegCard leg={o.departure} label={t.home.stopDeparture} />}
       </div>
@@ -219,6 +314,9 @@ export function StopView({ o, canEdit, onAddActivity }: { o: StopOverview; canEd
       >
         {t.home.stopCosts(stop.name)}
       </SectionTitle>
+      <div className="mb-3">
+        <PersonFilter travelers={travelers} selection={selection} bleed="-mx-4 px-4" />
+      </div>
       <Card className="p-5">
         <CardLabel icon={<Wallet size={15} />}>{t.home.stopSpent}</CardLabel>
         <p className="mt-2 font-display text-[32px] font-semibold leading-none tabular">{money(costs.spentMinor, base)}</p>
