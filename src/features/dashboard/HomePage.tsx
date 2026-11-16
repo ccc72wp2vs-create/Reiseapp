@@ -30,7 +30,7 @@ import {
   transferReminders,
   tripPhase,
 } from '../../../shared/trip';
-import type { BookingDto, TripSnapshot } from '../../../shared/types';
+import type { TripSnapshot } from '../../../shared/types';
 import { pickDefaultTrip, useTrip } from '../../components/AppShell';
 import { CoverArt, Logo } from '../../components/CoverArt';
 import { BookingBadges, BookingIcon, CategoryIcon, ExpenseIcon, IconTile, ModeIcon } from '../../components/status';
@@ -47,6 +47,8 @@ import { bookingTimeLabel } from '../../lib/bookingLabels';
 import { setStatusBarOverHero } from '../../lib/theme';
 import { CheckinReminders } from '../bookings/CheckinReminders';
 import { MissingWalletHint } from '../bookings/MissingWalletHint';
+import { stopOverview } from '../../../shared/stop';
+import { BookingRow, StopView } from './StopView';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
 const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
@@ -110,6 +112,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const online = useOnline();
   const navigate = useNavigate();
   const [sheet, setSheet] = useState<SheetKind>(null);
+  const [activityDate, setActivityDate] = useState<string | null>(null);
   const { trip, destinations, bookings, activities } = snap;
 
   // "Today" is evaluated in the time zone of where the travelers currently are.
@@ -136,6 +139,26 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
     const next = stops[Math.min(Math.max((i < 0 ? 0 : i) + dir, 0), stops.length - 1)];
     setViewId(next.id === homeDest?.id ? null : next.id);
   }
+  const stopData = useMemo(() => (browsing && viewed ? stopOverview(snap, viewed.id, today) : null), [browsing, viewed, snap, today]);
+  // Sticky "Vorschau" bar once the hero has scrolled away.
+  const heroRef = useRef<HTMLElement | null>(null);
+  const [pastHero, setPastHero] = useState(false);
+  useEffect(() => {
+    if (!browsing) return;
+    const update = () => setPastHero(!!heroRef.current && heroRef.current.getBoundingClientRect().bottom < 40);
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    return () => window.removeEventListener('scroll', update);
+  }, [browsing]);
+  function backToToday() {
+    setViewId(null);
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function openActivity(date: string | null) {
+    setActivityDate(date);
+    setSheet('activity');
+  }
 
   const todays = activities.filter((a) => a.date === today);
   const todaysBookings = bookingsOnDate(bookings, today);
@@ -144,7 +167,9 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const transport = nextTransport(bookings, today);
   const route = useMemo(() => buildRoute(trip, destinations, bookings), [trip, destinations, bookings]);
   const nextLeg = route.legs.find((l) => l.date !== null && l.date >= today);
-  const stayBooking = where.current ? bookings.find((b) => b.type === 'hotel' && b.destinationId === where.current!.id && b.bookingStatus !== 'cancelled') : null;
+  const stayBooking = where.current
+    ? bookings.find((b) => b.type === 'hotel' && b.destinationId === where.current!.id && b.bookingStatus !== 'cancelled')
+    : null;
   const upcoming = bookings
     .filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '') > today)
     .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)))
@@ -153,7 +178,28 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   return (
     <div>
       {/* ------------------------------------------------------------------ Hero */}
+      {browsing && viewed && pastHero && (
+        <div className="glass fixed inset-x-0 top-0 z-30 border-b border-line px-safe pt-safe animate-fade">
+          <div className="flex items-center gap-3 py-2.5">
+            <p className="min-w-0 flex-1 truncate text-[14px]">
+              <span className="font-semibold">{t.home.stopPreview(viewed.name)}</span>
+              <span className="text-text-3">
+                {' '}
+                · {formatDateShort(viewed.arrivalDate)} – {formatDateShort(viewed.departureDate)}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={backToToday}
+              className="shrink-0 rounded-full bg-accent-soft px-3.5 py-1.5 text-[13px] font-semibold text-accent active:scale-95"
+            >
+              {t.home.backToToday}
+            </button>
+          </div>
+        </div>
+      )}
       <section
+        ref={heroRef}
         className="relative flex min-h-[max(31dvh,250px)] flex-col justify-end"
         onTouchStart={(e) => (touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
         onTouchEnd={(e) => {
@@ -171,7 +217,10 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           className="absolute inset-0 h-full w-full rounded-b-[2.25rem]"
           label={heroDest?.name ?? trip.name}
         />
-        <div className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#101b33]/90 from-0% via-[#101b33]/50 via-40% to-transparent to-80%" aria-hidden />
+        <div
+          className="absolute inset-0 rounded-b-[2.25rem] bg-gradient-to-t from-[#101b33]/90 from-0% via-[#101b33]/50 via-40% to-transparent to-80%"
+          aria-hidden
+        />
         <div className="absolute inset-x-0 top-0 z-10 px-safe pt-safe">
           <div className="flex items-center justify-end pt-2 text-sand">
             <Link
@@ -202,7 +251,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             {browsing && (
               <button
                 type="button"
-                onClick={() => setViewId(null)}
+                onClick={backToToday}
                 className="shrink-0 rounded-full bg-white/[0.14] px-3 py-1 text-[12px] font-semibold text-white ring-1 ring-inset ring-white/20 [text-shadow:none] active:scale-95"
               >
                 {t.home.backToToday}
@@ -218,20 +267,28 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
                 <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">
                   {formatDateShort(viewed.arrivalDate)} – {formatDateShort(viewed.departureDate)}
                 </span>
-                <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.home.nights(diffDays(viewed.arrivalDate, viewed.departureDate))}</span>
+                <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">
+                  {t.home.nights(diffDays(viewed.arrivalDate, viewed.departureDate))}
+                </span>
               </>
             )}
             {!browsing && phase.phase === 'during' && (
               <>
-                <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">{t.phase.during(phase.day, phase.totalDays)}</span>
+                <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">
+                  {t.phase.during(phase.day, phase.totalDays)}
+                </span>
                 <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.phase.remaining(phase.daysRemaining)}</span>
               </>
             )}
             {!browsing && phase.phase === 'before' && (
-              <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">{t.phase.before(phase.daysUntilStart)}</span>
+              <span className="rounded-full bg-white/[0.14] px-3 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/20">
+                {t.phase.before(phase.daysUntilStart)}
+              </span>
             )}
             {!browsing && where.current && phase.phase === 'during' && (
-              <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">{t.home.stayUntil(formatDateShort(where.current.departureDate))}</span>
+              <span className="rounded-full px-3 py-1.5 text-white/90 ring-1 ring-inset ring-white/20">
+                {t.home.stayUntil(formatDateShort(where.current.departureDate))}
+              </span>
             )}
           </div>
           {phase.phase !== 'after' && (
@@ -300,7 +357,8 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
               <Link to="/buchungen" className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
                 <CircleHelp className="shrink-0 text-warn" size={20} />
                 <p className="flex-1 text-[14px] text-text-2">
-                  <span className="font-semibold text-text">{clarifications.length}</span> {clarifications.length === 1 ? 'Buchung' : 'Buchungen'} mit offenen Angaben
+                  <span className="font-semibold text-text">{clarifications.length}</span> {clarifications.length === 1 ? 'Buchung' : 'Buchungen'} mit offenen
+                  Angaben
                 </p>
                 <ArrowRight size={18} className="text-text-3" />
               </Link>
@@ -311,13 +369,37 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         {/* ------------------------------------------------------- Quick actions */}
         <section aria-label={t.home.quickActions} className="mt-6 grid grid-cols-4 gap-2">
           {[
-            { label: t.home.addActivity, icon: <Plus size={20} />, onClick: () => setSheet('activity'), disabled: !canEdit },
-            { label: t.home.addExpense, icon: <Receipt size={20} />, onClick: () => setSheet('expense'), disabled: !canEdit || !online },
+            {
+              label: t.home.addActivity,
+              icon: <Plus size={20} />,
+              onClick: () => openActivity(stopData && stopData.when !== 'past' ? stopData.days[0] : null),
+              disabled: !canEdit,
+            },
+            {
+              label: t.home.addExpense,
+              icon: <Receipt size={20} />,
+              onClick: () => setSheet('expense'),
+              disabled: !canEdit || !online,
+            },
             // Phrasebook for the trip's country – otherwise the classic "add destination" action.
             phraseLang
-              ? { label: LANG_NAMES[phraseLang], icon: <Languages size={20} />, onClick: () => navigate('/sprache'), disabled: false }
-              : { label: t.home.addDestination, icon: <MapPin size={20} />, onClick: () => setSheet('destination'), disabled: !canEdit || !online },
-            { label: t.home.viewPlan, icon: <CalendarDays size={20} />, onClick: () => navigate('/plan') },
+              ? {
+                  label: LANG_NAMES[phraseLang],
+                  icon: <Languages size={20} />,
+                  onClick: () => navigate('/sprache'),
+                  disabled: false,
+                }
+              : {
+                  label: t.home.addDestination,
+                  icon: <MapPin size={20} />,
+                  onClick: () => setSheet('destination'),
+                  disabled: !canEdit || !online,
+                },
+            {
+              label: t.home.viewPlan,
+              icon: <CalendarDays size={20} />,
+              onClick: () => navigate('/plan'),
+            },
           ].map((a) => (
             <button
               key={a.label}
@@ -332,136 +414,161 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           ))}
         </section>
 
-        <CurrencyConverter snap={snap} today={today} />
+        {stopData && <StopView o={stopData} canEdit={canEdit} onAddActivity={openActivity} />}
 
-        {/* ------------------------------------------------------------- Today */}
-        {phase.phase === 'during' && (
+        {!stopData && (
           <>
-            <SectionTitle action={<Link to={`/plan?tag=${today}`} className="text-[14px] font-semibold text-accent">{t.home.viewPlan}</Link>}>
-              {t.home.todayPlan}
-            </SectionTitle>
-            <Card className="divide-y divide-line overflow-hidden">
-              {todaysBookings.map((b) => (
-                <Link key={b.id} to="/buchungen" className="flex items-center gap-3 p-4">
-                  <IconTile tone={b.bookingStatus === 'booked' ? 'accent' : 'warn'}>
-                    <BookingIcon type={b.type} />
-                  </IconTile>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">{b.title}</p>
-                    <p className="text-[13px] text-text-3">{bookingTimeLabel(b, today, formatTime, t.plan.allDay)}</p>
-                    <div className="mt-2">
-                      <BookingBadges booking={b} compact />
+            <CurrencyConverter snap={snap} today={today} />
+
+            {/* ------------------------------------------------------------- Today */}
+            {phase.phase === 'during' && (
+              <>
+                <SectionTitle
+                  action={
+                    <Link to={`/plan?tag=${today}`} className="text-[14px] font-semibold text-accent">
+                      {t.home.viewPlan}
+                    </Link>
+                  }
+                >
+                  {t.home.todayPlan}
+                </SectionTitle>
+                <Card className="divide-y divide-line overflow-hidden">
+                  {todaysBookings.map((b) => (
+                    <Link key={b.id} to="/buchungen" className="flex items-center gap-3 p-4">
+                      <IconTile tone={b.bookingStatus === 'booked' ? 'accent' : 'warn'}>
+                        <BookingIcon type={b.type} />
+                      </IconTile>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold">{b.title}</p>
+                        <p className="text-[13px] text-text-3">{bookingTimeLabel(b, today, formatTime, t.plan.allDay)}</p>
+                        <div className="mt-2">
+                          <BookingBadges booking={b} compact />
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                  {todays.map((a) => (
+                    <Link key={a.id} to={`/plan?tag=${today}`} className="flex items-center gap-3 p-4">
+                      <IconTile tone="neutral">
+                        <CategoryIcon category={a.category} />
+                      </IconTile>
+                      <div className="min-w-0 flex-1">
+                        <p className={cx('truncate font-semibold', a.completed && 'text-text-3 line-through')}>{a.title}</p>
+                        <p className="text-[13px] text-text-3">
+                          {a.startTime ? `${a.startTime}${a.endTime ? `–${a.endTime}` : ''}` : t.plan.allDay}
+                          {a.locationName ? ` · ${a.locationName}` : ''}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                  {todays.length === 0 && todaysBookings.length === 0 && (
+                    <div className="flex items-center justify-between gap-3 p-4">
+                      <p className="text-[15px] text-text-2">{t.home.noActivitiesToday}</p>
+                      {canEdit && (
+                        <Button size="sm" variant="soft" icon={<Plus size={16} />} onClick={() => openActivity(null)}>
+                          {t.common.add}
+                        </Button>
+                      )}
                     </div>
-                  </div>
-                </Link>
-              ))}
-              {todays.map((a) => (
-                <Link key={a.id} to={`/plan?tag=${today}`} className="flex items-center gap-3 p-4">
-                  <IconTile tone="neutral">
-                    <CategoryIcon category={a.category} />
-                  </IconTile>
-                  <div className="min-w-0 flex-1">
-                    <p className={cx('truncate font-semibold', a.completed && 'text-text-3 line-through')}>{a.title}</p>
-                    <p className="text-[13px] text-text-3">
-                      {a.startTime ? `${a.startTime}${a.endTime ? `–${a.endTime}` : ''}` : t.plan.allDay}
-                      {a.locationName ? ` · ${a.locationName}` : ''}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-              {todays.length === 0 && todaysBookings.length === 0 && (
-                <div className="flex items-center justify-between gap-3 p-4">
-                  <p className="text-[15px] text-text-2">{t.home.noActivitiesToday}</p>
-                  {canEdit && (
-                    <Button size="sm" variant="soft" icon={<Plus size={16} />} onClick={() => setSheet('activity')}>
-                      {t.common.add}
-                    </Button>
                   )}
-                </div>
-              )}
-            </Card>
-          </>
-        )}
+                </Card>
+              </>
+            )}
 
-        {/* ---------------------------------------------- Stay & next move */}
-        <div className="mt-8 grid gap-3 sm:grid-cols-2">
-          {where.current && phase.phase === 'during' && (
-            <Card className="p-5">
-              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
-                <BedDouble size={15} /> {t.home.currentStay}
-              </div>
-              <p className="mt-3 font-display text-[22px] font-semibold leading-tight">{where.current.accommodationName ?? where.current.name}</p>
-              <p className="mt-1 text-[14px] text-text-2">
-                {where.current.accommodationName ? (where.current.accommodationAddress ?? where.current.name) : t.home.accommodationUnknown}
-              </p>
-              <p className="mt-3 text-[13px] text-text-3">
-                {formatDateShort(where.current.arrivalDate)} – {formatDate(where.current.departureDate)} · {t.common.nights(diffDays(where.current.arrivalDate, where.current.departureDate))}
-              </p>
-              {stayBooking && (
-                <div className="mt-3">
-                  <BookingBadges booking={stayBooking} />
-                </div>
+            {/* ---------------------------------------------- Stay & next move */}
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              {where.current && phase.phase === 'during' && (
+                <Card className="p-5">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
+                    <BedDouble size={15} /> {t.home.currentStay}
+                  </div>
+                  <p className="mt-3 font-display text-[22px] font-semibold leading-tight">{where.current.accommodationName ?? where.current.name}</p>
+                  <p className="mt-1 text-[14px] text-text-2">
+                    {where.current.accommodationName ? (where.current.accommodationAddress ?? where.current.name) : t.home.accommodationUnknown}
+                  </p>
+                  <p className="mt-3 text-[13px] text-text-3">
+                    {formatDateShort(where.current.arrivalDate)} – {formatDate(where.current.departureDate)} ·{' '}
+                    {t.common.nights(diffDays(where.current.arrivalDate, where.current.departureDate))}
+                  </p>
+                  {stayBooking && (
+                    <div className="mt-3">
+                      <BookingBadges booking={stayBooking} />
+                    </div>
+                  )}
+                </Card>
               )}
-            </Card>
-          )}
-          {nextLeg && (
-            <Card className="p-5">
-              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
-                <Route size={15} /> {t.home.nextMove}
-              </div>
-              <p className="mt-3 font-display text-[22px] font-semibold leading-tight">
-                {nextLeg.from.name} <span className="text-accent">→</span> {nextLeg.to.name}
-              </p>
-              <p className="mt-1 flex items-center gap-1.5 text-[14px] text-text-2">
-                <ModeIcon mode={nextLeg.mode} /> {t.transportModes[nextLeg.mode]}
-                {nextLeg.date && (
-                  <>
-                    {' · '}
-                    {formatDate(nextLeg.date)}
-                    {diffDays(today, nextLeg.date) > 0 && ` (${t.home.arrivalIn(diffDays(today, nextLeg.date))})`}
-                  </>
-                )}
-              </p>
-              {nextLeg.booking ? (
-                <div className="mt-3">
-                  <BookingBadges booking={nextLeg.booking} compact />
-                </div>
-              ) : (
-                <div className="mt-3">
-                  <Badge tone="warn">{t.transportModes.unknown}</Badge>
-                </div>
+              {nextLeg && (
+                <Card className="p-5">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
+                    <Route size={15} /> {t.home.nextMove}
+                  </div>
+                  <p className="mt-3 font-display text-[22px] font-semibold leading-tight">
+                    {nextLeg.from.name} <span className="text-accent">→</span> {nextLeg.to.name}
+                  </p>
+                  <p className="mt-1 flex items-center gap-1.5 text-[14px] text-text-2">
+                    <ModeIcon mode={nextLeg.mode} /> {t.transportModes[nextLeg.mode]}
+                    {nextLeg.date && (
+                      <>
+                        {' · '}
+                        {formatDate(nextLeg.date)}
+                        {diffDays(today, nextLeg.date) > 0 && ` (${t.home.arrivalIn(diffDays(today, nextLeg.date))})`}
+                      </>
+                    )}
+                  </p>
+                  {nextLeg.booking ? (
+                    <div className="mt-3">
+                      <BookingBadges booking={nextLeg.booking} compact />
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      <Badge tone="warn">{t.transportModes.unknown}</Badge>
+                    </div>
+                  )}
+                </Card>
               )}
-            </Card>
-          )}
-        </div>
-
-        {/* ---------------------------------------------------- Next transport */}
-        {transport && transport.id !== nextLeg?.booking?.id && (
-          <>
-            <SectionTitle>{t.home.nextTransport}</SectionTitle>
-            <BookingRow booking={transport} />
-          </>
-        )}
-
-        {/* ---------------------------------------------------------- Upcoming */}
-        {upcoming.length > 0 && (
-          <>
-            <SectionTitle action={<Link to="/buchungen" className="text-[14px] font-semibold text-accent">{t.bookings.title}</Link>}>
-              {t.home.upcoming}
-            </SectionTitle>
-            <div className="space-y-2.5">
-              {upcoming.map((b) => (
-                <BookingRow key={b.id} booking={b} />
-              ))}
             </div>
+
+            {/* ---------------------------------------------------- Next transport */}
+            {transport && transport.id !== nextLeg?.booking?.id && (
+              <>
+                <SectionTitle>{t.home.nextTransport}</SectionTitle>
+                <BookingRow booking={transport} />
+              </>
+            )}
+
+            {/* ---------------------------------------------------------- Upcoming */}
+            {upcoming.length > 0 && (
+              <>
+                <SectionTitle
+                  action={
+                    <Link to="/buchungen" className="text-[14px] font-semibold text-accent">
+                      {t.bookings.title}
+                    </Link>
+                  }
+                >
+                  {t.home.upcoming}
+                </SectionTitle>
+                <div className="space-y-2.5">
+                  {upcoming.map((b) => (
+                    <BookingRow key={b.id} booking={b} />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* ------------------------------------------------------------ Wallet */}
+            <SectionTitle
+              action={
+                <Link to="/kasse" className="text-[14px] font-semibold text-accent">
+                  {t.wallet.title}
+                </Link>
+              }
+            >
+              {t.home.tripCosts}
+            </SectionTitle>
+            <CostsCard snap={snap} />
           </>
         )}
-
-        {/* ------------------------------------------------------------ Wallet */}
-        <SectionTitle action={<Link to="/kasse" className="text-[14px] font-semibold text-accent">{t.wallet.title}</Link>}>
-          {t.home.tripCosts}
-        </SectionTitle>
-        <CostsCard snap={snap} />
 
         <div className="mt-8 flex flex-wrap gap-2">
           <Link to="/route" className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-[14px] font-semibold">
@@ -474,31 +581,19 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
       </div>
 
       <Suspense fallback={null}>
-        {sheet === 'activity' && <ActivitySheet open onClose={() => setSheet(null)} defaults={{ date: phase.phase === 'during' ? today : trip.startDate }} />}
+        {sheet === 'activity' && (
+          <ActivitySheet
+            open
+            onClose={() => setSheet(null)}
+            defaults={{
+              date: activityDate ?? (phase.phase === 'during' ? today : trip.startDate),
+            }}
+          />
+        )}
         {sheet === 'expense' && <ExpenseSheet open onClose={() => setSheet(null)} />}
         {sheet === 'destination' && <DestinationSheet open onClose={() => setSheet(null)} />}
       </Suspense>
     </div>
-  );
-}
-
-function BookingRow({ booking }: { booking: BookingDto }) {
-  return (
-    <Link to="/buchungen" className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
-      <IconTile tone={booking.bookingStatus === 'booked' ? 'accent' : 'warn'}>
-        <BookingIcon type={booking.type} />
-      </IconTile>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold">{booking.title}</p>
-        <p className="text-[13px] text-text-3">
-          {booking.startDate ? formatDate(booking.startDate) : t.bookings.undated}
-          {booking.startTime ? ` · ${formatTime(booking.startTime)}` : ''}
-        </p>
-        <div className="mt-2">
-          <BookingBadges booking={booking} compact />
-        </div>
-      </div>
-    </Link>
   );
 }
 
@@ -547,8 +642,7 @@ function TripProgress({
 
 /** "Station 4 von 6 · in 3 Tagen" / "· bereits besucht" / "· jetzt". */
 function stopLabel(d: TripSnapshot['destinations'][number], today: string, n: number, total: number): string {
-  const when =
-    d.departureDate <= today ? t.home.stopPast : d.arrivalDate <= today ? t.home.stopNow : t.home.stopIn(diffDays(today, d.arrivalDate));
+  const when = d.departureDate <= today ? t.home.stopPast : d.arrivalDate <= today ? t.home.stopNow : t.home.stopIn(diffDays(today, d.arrivalDate));
   return `${t.home.stopOf(n, total)} · ${when}`;
 }
 
@@ -594,7 +688,13 @@ function NoTrip() {
           text={t.home.noTripText}
           action={
             <div className="flex w-full flex-col gap-3">
-              <Button size="lg" icon={<Download size={18} />} loading={busy === 'thailand-2026'} disabled={!online} onClick={() => void importKey('thailand-2026')}>
+              <Button
+                size="lg"
+                icon={<Download size={18} />}
+                loading={busy === 'thailand-2026'}
+                disabled={!online}
+                onClick={() => void importKey('thailand-2026')}
+              >
                 {t.home.importThailand}
               </Button>
               <Button size="lg" variant="secondary" icon={<Plus size={18} />} disabled={!online} onClick={() => setCreateOpen(true)}>
@@ -627,7 +727,10 @@ function CostsCard({ snap }: { snap: TripSnapshot }) {
   const costs = person ?? group;
   const recent = filtered
     ? expenses
-        .map((e) => ({ e, share: e.shares.filter((x) => selected.includes(x.travelerId)).reduce((a, x) => a + x.baseShareMinor, 0) }))
+        .map((e) => ({
+          e,
+          share: e.shares.filter((x) => selected.includes(x.travelerId)).reduce((a, x) => a + x.baseShareMinor, 0),
+        }))
         .filter((x) => x.share > 0)
         .slice(0, 3)
     : expenses.slice(0, 3).map((e) => ({ e, share: null as number | null }));
@@ -698,7 +801,11 @@ function CostsCard({ snap }: { snap: TripSnapshot }) {
 
 function CostRow({ label, value, tone, onClick }: { label: string; value: string; tone?: 'info'; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition active:bg-surface-2">
+    <button
+      type="button"
+      onClick={onClick}
+      className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-xl px-2 py-1 text-left transition active:bg-surface-2"
+    >
       <span className="min-w-0 text-text-2 underline decoration-line-strong decoration-dotted underline-offset-4">{label}</span>
       <span className={cx('flex shrink-0 items-center gap-1 tabular', tone === 'info' && 'text-info')}>
         {value}
@@ -774,4 +881,3 @@ function CostBucketSheet({ snap, bucket, selected, onClose }: { snap: TripSnapsh
     </Sheet>
   );
 }
-

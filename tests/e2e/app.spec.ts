@@ -352,8 +352,15 @@ test('home hero: tap through the stops and back to today', async ({ page }) => {
   await page.getByRole('button', { name: 'Krabi anzeigen' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Krabi' })).toBeVisible();
   await expect(page.getByText(/Station 4 von \d+ · in 6 Tagen/)).toBeVisible();
-  await expect(page.getByText('18.11. – 21.11.')).toBeVisible();
-  await expect(page.getByText('3 Nächte')).toBeVisible();
+  await expect(page.getByText('18.11. – 21.11.', { exact: true })).toBeVisible();
+  await expect(page.getByText('3 Nächte', { exact: true })).toBeVisible();
+  // The whole home screen follows the stop: plan, stay, arrival, onward travel, costs – no currency converter.
+  await expect(page.getByText('In Krabi geplant')).toBeVisible();
+  await expect(page.getByText('Anreise', { exact: true })).toBeVisible();
+  await expect(page.getByText('Weiterreise', { exact: true })).toBeVisible();
+  await expect(page.getByText('Kosten in Krabi')).toBeVisible();
+  await expect(page.getByText('Währungsrechner')).toHaveCount(0);
   await page.getByRole('button', { name: 'Heute' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Phuket' })).toBeVisible();
+  await expect(page.getByText('In Krabi geplant')).toHaveCount(0);
 });
