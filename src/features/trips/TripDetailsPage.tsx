@@ -254,6 +254,9 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
                 {x.userId ? t.travelers.linked : t.travelers.noAccount}
                 {(x.paypalMe || x.iban) && ` · ${[x.paypalMe && 'PayPal', x.iban && 'IBAN'].filter(Boolean).join(' & ')} ${t.travelers.stored}`}
               </p>
+              {x.partnerId && snap.travelers.some((p) => p.id === x.partnerId) && (
+                <p className="text-[12px] text-text-3">{t.travelers.partnerOf(snap.travelers.find((p) => p.id === x.partnerId)!.name)}</p>
+              )}
               {isOwner && !x.userId && (
                 <button
                   type="button"
@@ -294,7 +297,7 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
         )}
       </Card>
       {inviteFor && <InviteSheet snap={snap} presetTravelerId={inviteFor} onClose={() => setInviteFor(null)} />}
-      {editing && <RenameTraveler traveler={editing} tripId={trip.id} onClose={() => setEditing(null)} />}
+      {editing && <RenameTraveler traveler={editing} travelers={snap.travelers} tripId={trip.id} onClose={() => setEditing(null)} />}
       <ConfirmDialog
         open={!!removing}
         onClose={() => setRemoving(null)}
@@ -309,8 +312,9 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
   );
 }
 
-function RenameTraveler({ traveler, tripId, onClose }: { traveler: TravelerDto; tripId: string; onClose: () => void }) {
+function RenameTraveler({ traveler, travelers, tripId, onClose }: { traveler: TravelerDto; travelers: TravelerDto[]; tripId: string; onClose: () => void }) {
   const [name, setName] = useState(traveler.name);
+  const [partner, setPartner] = useState(traveler.partnerId ?? '');
   const [paypal, setPaypal] = useState(traveler.paypalMe ?? '');
   const [iban, setIban] = useState(traveler.iban ?? '');
   const [busy, setBusy] = useState(false);
@@ -339,6 +343,9 @@ function RenameTraveler({ traveler, tripId, onClose }: { traveler: TravelerDto; 
                     version: traveler.version,
                   }),
                 );
+                if ((traveler.partnerId ?? '') !== partner) {
+                  await tripStore.mutate(() => http.put(`/trips/${tripId}/travelers/${traveler.id}/partner`, { partnerId: partner || null }));
+                }
                 onClose();
               } catch (e) {
                 toast.error(e);
@@ -357,6 +364,21 @@ function RenameTraveler({ traveler, tripId, onClose }: { traveler: TravelerDto; 
         <p className="text-[13px] text-text-2">{t.travelers.paymentHint}</p>
         <TextField label={t.travelers.paypalMe} optional placeholder="z. B. MaxMuster" autoCapitalize="off" autoCorrect="off" value={paypal} onChange={(e) => setPaypal(e.target.value)} />
         <TextField label={t.travelers.iban} optional placeholder="DE…" autoCapitalize="characters" autoCorrect="off" value={iban} onChange={(e) => setIban(e.target.value)} />
+        {travelers.length > 1 && (
+          <>
+            <SelectField label={t.travelers.partner} value={partner} onChange={(e) => setPartner(e.target.value)}>
+              <option value="">{t.travelers.noPartner}</option>
+              {travelers
+                .filter((x) => x.id !== traveler.id)
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+            </SelectField>
+            <p className="-mt-2 text-[13px] text-text-2">{t.travelers.partnerHint}</p>
+          </>
+        )}
       </div>
     </Sheet>
   );

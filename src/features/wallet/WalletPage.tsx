@@ -8,6 +8,7 @@ import { DocumentImportSheet } from '../documents/DocumentImportSheet';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
+import { coupleBalances, coupleSettlements, hasCouples, type CoupleBalance, type CoupleTransfer } from '../../../shared/couples';
 import { balanceBreakdown, computeBalances, directSettlements, netPaidMinor, suggestSettlements, type DirectTransfer } from '../../../shared/finance';
 import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
@@ -18,7 +19,7 @@ import { MoneyField } from '../../components/inputs';
 import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
 import { ExpenseIcon } from '../../components/status';
 import { toast } from '../../components/toast';
-import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, IconButton, Input, Progress, Segmented, SectionTitle, Select, Sheet, Skeleton, TextField, cx } from '../../components/ui';
+import { Badge, Button, Card, Chip, ConfirmDialog, EmptyState, Field, IconButton, Input, Progress, Segmented, SectionTitle, Select, Sheet, Skeleton, TextField, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatRate, money } from '../../lib/format';
@@ -86,6 +87,25 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
     [expenses, settlements],
   );
   const suggestions = settleMode === 'direct' ? direct : minimal;
+  const couplesAvailable = hasCouples(travelers);
+  const [balanceViewState, setBalanceViewState] = useState<'persons' | 'couples'>(() => {
+    try {
+      return localStorage.getItem('travio.balanceView') === 'couples' ? 'couples' : 'persons';
+    } catch {
+      return 'persons';
+    }
+  });
+  const balanceView = couplesAvailable ? balanceViewState : 'persons';
+  const setBalanceView = (v: 'persons' | 'couples') => {
+    setBalanceViewState(v);
+    try {
+      localStorage.setItem('travio.balanceView', v);
+    } catch {
+      /* ignore */
+    }
+  };
+  const couples = useMemo(() => coupleBalances(travelers, balances), [travelers, balances]);
+  const coupleTransfers = useMemo(() => coupleSettlements(couples), [couples]);
   const [pair, setPair] = useState<DirectTransfer | null>(null);
   const [paying, setPaying] = useState<PayRequest | null>(null);
   const [addingDeposit, setAddingDeposit] = useState(false);
@@ -258,7 +278,33 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
           </>
         )}
 
-        {tab === 'balances' && (
+        {tab === 'balances' && couplesAvailable && (
+          <div className="mb-3">
+            <Segmented
+              value={balanceView}
+              onChange={setBalanceView}
+              options={[
+                { value: 'persons', label: t.wallet.viewPersons },
+                { value: 'couples', label: t.wallet.viewCouples },
+              ]}
+            />
+          </div>
+        )}
+        {tab === 'balances' && balanceView === 'couples' && (
+          <CouplesView
+            couples={couples}
+            transfers={coupleTransfers}
+            base={base}
+            name={name}
+            color={color}
+            canEdit={canEdit}
+            canWrite={canWrite}
+            onExplain={setExplain}
+            onPay={(from, to, amountMinor) => setPaying({ fromTravelerId: from, toTravelerId: to, amountMinor, purpose: [] })}
+            onRecord={(from, to, amountMinor) => setSheet({ kind: 'settlement', preset: { from, to, amountMinor } })}
+          />
+        )}
+        {tab === 'balances' && balanceView === 'persons' && (
           <>
             <Card className="divide-y divide-line">
               {balances.map((b) => (
@@ -395,6 +441,124 @@ function ExpenseList({ expenses, snap, onOpen, shareOf }: { expenses: ExpenseDto
         </li>
       ))}
     </ul>
+  );
+}
+
+function CouplesView({
+  couples,
+  transfers,
+  base,
+  name,
+  color,
+  canEdit,
+  canWrite,
+  onExplain,
+  onPay,
+  onRecord,
+}: {
+  couples: CoupleBalance[];
+  transfers: CoupleTransfer[];
+  base: string;
+  name: (id: string) => string;
+  color: (id: string) => string;
+  canEdit: boolean;
+  canWrite: boolean;
+  onExplain: (travelerId: string) => void;
+  onPay: (from: string, to: string, amountMinor: number) => void;
+  onRecord: (from: string, to: string, amountMinor: number) => void;
+}) {
+  /** Chosen paying / receiving member per transfer (defaults to the suggestion). */
+  const [chosen, setChosen] = useState<Record<string, { from?: string; to?: string }>>({});
+  const label = (key: string) => (couples.find((c) => c.key === key)?.memberIds ?? [key]).map(name).join(' & ');
+  const members = (key: string) => couples.find((c) => c.key === key)?.memberIds ?? [key];
+  const signed = (v: number) => `${v > 0 ? '+' : ''}${money(v, base)}`;
+  const tone = (v: number) => (v > 0 ? 'text-success' : v < 0 ? 'text-danger' : 'text-text-3');
+  return (
+    <>
+      <Card className="divide-y divide-line">
+        {couples.map((c) => (
+          <div key={c.key} className="p-4">
+            <div className="flex items-center gap-3">
+              <span className="flex shrink-0 -space-x-3">
+                {c.memberIds.map((id) => (
+                  <span key={id} className="grid h-10 w-10 place-items-center rounded-full text-[14px] font-bold text-[#101b33] ring-2 ring-surface" style={{ background: color(id) }}>
+                    {name(id).slice(0, 1).toUpperCase()}
+                  </span>
+                ))}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold leading-snug [overflow-wrap:anywhere]">{label(c.key)}</p>
+                <p className="text-[13px] text-text-3">{c.balanceMinor > 0 ? t.wallet.youGet : c.balanceMinor < 0 ? t.wallet.youOwe : t.wallet.settled}</p>
+              </div>
+              <span className={cx('font-display text-[20px] font-semibold tabular', tone(c.balanceMinor))}>{signed(c.balanceMinor)}</span>
+            </div>
+            {c.members.length > 1 && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 pl-[3.25rem] text-[13px]">
+                {c.members.map((m) => (
+                  <button key={m.travelerId} type="button" onClick={() => onExplain(m.travelerId)} className="inline-flex items-center gap-1 text-text-2 underline-offset-2 active:underline">
+                    {name(m.travelerId)} <span className={cx('tabular', tone(m.balanceMinor))}>{signed(m.balanceMinor)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </Card>
+      <p className="mt-2 text-[12px] text-text-3">{t.wallet.couplesText}</p>
+      <SectionTitle>{t.wallet.suggestions}</SectionTitle>
+      <p className="mb-3 text-[13px] text-text-3">{t.wallet.couplesSuggestionsText}</p>
+      {transfers.length === 0 ? (
+        <Card className="p-5 text-center text-success">{t.wallet.allSettled}</Card>
+      ) : (
+        <ul className="space-y-2.5">
+          {transfers.map((s) => {
+            const id = `${s.fromKey}>${s.toKey}`;
+            const from = chosen[id]?.from ?? s.fromTravelerId;
+            const to = chosen[id]?.to ?? s.toTravelerId;
+            const pick = (side: 'from' | 'to', key: string, value: string) => {
+              const ids = members(key);
+              if (ids.length < 2) return null;
+              return (
+                <div className="flex flex-wrap gap-1.5">
+                  {ids.map((m) => (
+                    <Chip key={m} active={value === m} onClick={() => setChosen((c) => ({ ...c, [id]: { ...c[id], [side]: m } }))}>
+                      {name(m)}
+                    </Chip>
+                  ))}
+                </div>
+              );
+            };
+            return (
+              <li key={id} className="rounded-[1.25rem] border border-line bg-surface p-4">
+                <div className="flex items-center gap-2 text-[15px]">
+                  <span className="font-semibold">{label(s.fromKey)}</span>
+                  <ArrowRight size={16} className="shrink-0 text-accent" />
+                  <span className="font-semibold">{label(s.toKey)}</span>
+                  <span className="ml-auto font-display text-[19px] font-semibold tabular">{money(s.amountMinor, base)}</span>
+                </div>
+                {(members(s.fromKey).length > 1 || members(s.toKey).length > 1) && (
+                  <div className="mt-3 space-y-2 rounded-2xl bg-surface-2 p-3 text-[13px]">
+                    <p className="text-text-2">{t.wallet.coupleTransfer(name(from), name(to))}</p>
+                    {pick('from', s.fromKey, from)}
+                    {pick('to', s.toKey, to)}
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="primary" icon={<Send size={15} />} onClick={() => onPay(from, to, s.amountMinor)}>
+                    {t.wallet.payNow}
+                  </Button>
+                  {canEdit && (
+                    <Button size="sm" variant="soft" disabled={!canWrite} onClick={() => onRecord(from, to, s.amountMinor)}>
+                      {t.wallet.recordThis}
+                    </Button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
   );
 }
 

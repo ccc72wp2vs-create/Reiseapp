@@ -163,6 +163,7 @@ export const travelerCreateSchema = z.object({
   ).optional(),
 });
 export const travelerUpdateSchema = travelerCreateSchema.partial().extend({ version });
+export const travelerPartnerSchema = z.object({ partnerId: id.nullable() });
 
 export const invitationCreateSchema = z.object({
   role: z.enum(['editor', 'viewer', 'owner']).default('editor'),

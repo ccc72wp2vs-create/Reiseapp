@@ -83,6 +83,8 @@ export interface TravelerDto extends Versioned {
   sortOrder: number;
   paypalMe: string | null;
   iban: string | null;
+  /** Partner in the same trip (mutual), for couple balances. */
+  partnerId: string | null;
 }
 
 export interface DestinationDto extends Versioned {

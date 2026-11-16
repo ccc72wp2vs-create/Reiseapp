@@ -8,6 +8,7 @@ import {
   memberUpdateSchema,
   reorderSchema,
   travelerCreateSchema,
+  travelerPartnerSchema,
   travelerUpdateSchema,
   tripCreateSchema,
   tripUpdateSchema,
@@ -280,6 +281,39 @@ trips.patch('/:tripId/travelers/:id', async (c) => {
     throw e;
   });
   return c.json({ traveler: unwrapUpdate(r, 'Person') });
+});
+
+/**
+ * Sets (or clears) a traveler's partner. Always mutual: both sides point at
+ * each other and any previous partner of either side is released.
+ */
+trips.put('/:tripId/travelers/:id/partner', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const self = c.req.param('id');
+  const { partnerId } = await parseJson(c, travelerPartnerSchema);
+  if (partnerId === self) throw new ApiError('validation_failed', 'Eine Person kann nicht ihr eigener Partner sein');
+  const ids = partnerId ? [self, partnerId] : [self];
+  const found = await c.env.DB.prepare(`SELECT id FROM travelers WHERE trip_id = ? AND id IN (${ids.map(() => '?').join(',')})`)
+    .bind(t.tripId, ...ids)
+    .all<{ id: string }>();
+  if ((found.results ?? []).length !== ids.length) throw new ApiError('not_found', 'Person nicht gefunden');
+  const now = nowIso();
+  const marks = ids.map(() => '?').join(',');
+  const stmts = [
+    c.env.DB.prepare(
+      `UPDATE travelers SET partner_id = NULL, version = version + 1, updated_at = ?
+       WHERE trip_id = ? AND partner_id IS NOT NULL AND (id IN (${marks}) OR partner_id IN (${marks}))`,
+    ).bind(now, t.tripId, ...ids, ...ids),
+  ];
+  if (partnerId) {
+    stmts.push(
+      c.env.DB.prepare('UPDATE travelers SET partner_id = ?, version = version + 1, updated_at = ? WHERE trip_id = ? AND id = ?').bind(partnerId, now, t.tripId, self),
+      c.env.DB.prepare('UPDATE travelers SET partner_id = ?, version = version + 1, updated_at = ? WHERE trip_id = ? AND id = ?').bind(self, now, t.tripId, partnerId),
+    );
+  }
+  await c.env.DB.batch(stmts);
+  return c.json({ ok: true });
 });
 
 trips.delete('/:tripId/travelers/:id', async (c) => {
