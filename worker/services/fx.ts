@@ -105,7 +105,7 @@ export async function refreshTripRates(db: D1Database, tripId: string, today: st
       stmts.push(
         db
           .prepare(
-            `INSERT INTO exchange_rates (id, trip_id, currency, base_currency, rate, source, effective_date, created_by, created_at)
+            `INSERT OR IGNORE INTO exchange_rates (id, trip_id, currency, base_currency, rate, source, effective_date, created_by, created_at)
              VALUES (?, ?, ?, ?, ?, 'provider', ?, NULL, ?)`,
           )
           .bind(uuid(), trip.id, cur, trip.base_currency, rate, date, now),
@@ -113,8 +113,9 @@ export async function refreshTripRates(db: D1Database, tripId: string, today: st
     }
     if (!latest || date > latest) latest = date;
   }
-  if (stmts.length) await db.batch(stmts);
-  return { added: stmts.length, latestDate: latest };
+  // INSERT OR IGNORE + unique index: a parallel refresh from another device never stores a day twice.
+  const added = stmts.length ? (await db.batch(stmts)).reduce((n, r) => n + (r.meta?.changes ?? 0), 0) : 0;
+  return { added, latestDate: latest };
 }
 
 /** Daily job: refresh every trip that is running (or starts within 10 days). */

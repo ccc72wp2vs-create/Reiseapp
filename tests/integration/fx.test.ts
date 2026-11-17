@@ -70,3 +70,13 @@ describe('automatic ECB exchange rates', () => {
     expect(await refreshActiveTrips(t.env.DB, '2026-11-16')).toBe(2);
   });
 });
+
+describe('parallel refreshes', () => {
+  it('store each automatic rate only once', async () => {
+    mockEcb();
+    const [a, b, c] = await Promise.all([1, 2, 3].map(() => owner.post(`/trips/${tripId}/exchange-rates/refresh`)));
+    expect(a.body.added + b.body.added + c.body.added).toBe(2);
+    const snap = (await owner.get(`/trips/${tripId}/snapshot`)).body;
+    expect(snap.exchangeRates.filter((x: { source: string }) => x.source === 'provider')).toHaveLength(2);
+  });
+});
