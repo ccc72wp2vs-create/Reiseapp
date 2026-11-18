@@ -55,6 +55,11 @@ test('dashboard shows the current trip state and transfer reminder', async ({ pa
   const td = page.getByRole('region', { name: 'Morgen ist Reisetag' });
   await expect(td).toBeVisible();
   await expect(td.getByText('Transport noch nicht bestätigt')).toBeVisible();
+  // One tap on a step opens exactly that booking.
+  await td.getByRole('link', { name: /^Abfahrt\s/ }).click();
+  await expect(page).toHaveURL(/\/buchungen/);
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.goto('/');
   await expect(page.getByText('Transfer Koh Lanta → Krabi noch nicht bestätigt.')).toBeVisible();
   // Booked costs are not shown as spent money (costs section starts collapsed: one line)
   const costs = page.getByRole('button', { name: /Reisekosten/ });

@@ -17,7 +17,7 @@ import { formatDate, formatDateShort, formatTime, money } from '../../lib/format
 
 export function BookingRow({ booking }: { booking: BookingDto }) {
   return (
-    <Link to="/buchungen" className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
+    <Link to={`/buchungen?id=${booking.id}`} className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
       <IconTile tone={booking.bookingStatus === 'booked' ? 'accent' : 'warn'}>
         <BookingIcon type={booking.type} />
       </IconTile>
@@ -45,7 +45,7 @@ function CardLabel({ icon, children }: { icon: React.ReactNode; children: React.
 
 function LegCard({ leg, label }: { leg: RouteLeg; label: string }) {
   const b = leg.booking;
-  return (
+  const card = (
     <Card className="p-5">
       <CardLabel icon={<Route size={15} />}>{label}</CardLabel>
       <p className="mt-3 font-display text-[22px] font-semibold leading-tight">
@@ -59,6 +59,13 @@ function LegCard({ leg, label }: { leg: RouteLeg; label: string }) {
       {b && <p className="mt-1 truncate text-[13px] text-text-3">{b.title}</p>}
       <div className="mt-3">{b ? <BookingBadges booking={b} compact /> : <Badge tone="warn">{t.transportModes.unknown}</Badge>}</div>
     </Card>
+  );
+  return b ? (
+    <Link to={`/buchungen?id=${b.id}`} className="block">
+      {card}
+    </Link>
+  ) : (
+    card
   );
 }
 
@@ -111,7 +118,7 @@ export function StayCard({
         </p>
         {dates}
         {stays[0] && (
-          <Link to="/buchungen" className="mt-3 block">
+          <Link to={`/buchungen?id=${stays[0].id}`} className="mt-3 block">
             <BookingBadges booking={stays[0]} />
           </Link>
         )}
@@ -126,7 +133,7 @@ export function StayCard({
       <CardLabel icon={<BedDouble size={15} />}>{own.length ? t.home.stayYours : t.home.staySeparate}</CardLabel>
       <div className="mt-3 space-y-4">
         {list.map((b) => (
-          <Link key={b.id} to="/buchungen" className="block">
+          <Link key={b.id} to={`/buchungen?id=${b.id}`} className="block">
             {!own.length && whoLabel(b, travelers) && <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-accent">{whoLabel(b, travelers)}</p>}
             <p className="font-display text-[22px] font-semibold leading-tight">{stayTitle(b, travelers)}</p>
             {b.location && <p className="mt-1 text-[14px] text-text-2">{b.location}</p>}
@@ -140,7 +147,7 @@ export function StayCard({
       {own.length > 0 && others.length > 0 && (
         <div className="mt-4 space-y-1.5 border-t border-line pt-3">
           {others.map((b) => (
-            <Link key={b.id} to="/buchungen" className="flex items-start gap-2 text-[14px] leading-snug text-text-2">
+            <Link key={b.id} to={`/buchungen?id=${b.id}`} className="flex items-start gap-2 text-[14px] leading-snug text-text-2">
               <BedDouble size={14} className="mt-0.5 shrink-0 text-text-3" />
               <span className="min-w-0">
                 <span className="font-semibold text-text">{whoLabel(b, travelers) || t.home.stayOthers}:</span> {stayTitle(b, travelers)}
@@ -210,7 +217,7 @@ export function StopView({
                 <ul className="mt-2 space-y-2.5">
                   {books.map((b) => (
                     <li key={b.id}>
-                      <Link to="/buchungen" className="flex items-center gap-3">
+                      <Link to={`/buchungen?id=${b.id}`} className="flex items-center gap-3">
                         <IconTile tone={b.bookingStatus === 'booked' ? 'accent' : 'warn'}>
                           <BookingIcon type={b.type} />
                         </IconTile>

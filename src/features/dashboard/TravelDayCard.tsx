@@ -11,16 +11,30 @@ import { cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { formatDate, formatTime } from '../../lib/format';
 
-function Step({ icon, label, title, time, last }: { icon: ReactNode; label: string; title: string; time: string | null; last?: boolean }) {
-  return (
-    <li className="relative flex gap-3 pb-3.5 last:pb-0">
-      {!last && <span className="absolute left-[15px] top-8 h-[calc(100%-1.75rem)] w-px bg-line" aria-hidden />}
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">{icon}</span>
+function Step({ icon, label, title, time, bookingId }: { icon: ReactNode; label: string; title: string; time: string | null; bookingId?: string }) {
+  const inner = (
+    <>
+
+      <span className="relative shrink-0 rounded-full bg-surface">
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-accent">{icon}</span>
+      </span>
       <div className="min-w-0 flex-1 pt-0.5">
         <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-text-3">{label}</p>
         <p className="truncate text-[15px] font-semibold">{title}</p>
       </div>
-      <span className={cx('shrink-0 pt-1 text-[14px] tabular', time ? 'font-semibold' : 'text-text-3')}>{time ?? t.home.tdTimeOpen}</span>
+      <span className={cx('shrink-0 pt-1 text-[14px] tabular', time ? 'font-semibold' : 'text-accent')}>{time ?? t.home.tdTimeOpen}</span>
+    </>
+  );
+  return (
+    <li className="relative pb-3.5 last:pb-0">
+      {bookingId ? (
+        // One tap opens exactly this booking (e.g. to fill in the check-in time).
+        <Link to={`/buchungen?id=${bookingId}`} className="flex gap-3 rounded-2xl active:bg-surface-2">
+          {inner}
+        </Link>
+      ) : (
+        <div className="flex gap-3">{inner}</div>
+      )}
     </li>
   );
 }
@@ -32,17 +46,19 @@ export function TravelDayCard({ day }: { day: TravelDay }) {
     const v = list.map((x) => (which === 'start' ? x.startTime : x.endTime)).find(Boolean);
     return v ? formatTime(v) : null;
   };
-  const steps: { icon: ReactNode; label: string; title: string; time: string | null }[] = [];
-  if (checkout.length) steps.push({ icon: <LogOut size={15} />, label: t.home.tdCheckout, title: checkout.map((x) => x.title).join(' · '), time: hotelTime(checkout, 'end') });
+  const steps: { icon: ReactNode; label: string; title: string; time: string | null; bookingId?: string }[] = [];
+  if (checkout.length)
+    steps.push({ icon: <LogOut size={15} />, label: t.home.tdCheckout, title: checkout.map((x) => x.title).join(' · '), time: hotelTime(checkout, 'end'), bookingId: checkout[0].id });
   steps.push({
     icon: <ModeIcon mode={leg.mode} />,
     label: t.home.tdDeparture,
     title: b ? b.title : `${leg.from.name} → ${leg.to.name}`,
     time: b?.startTime ? formatTime(b.startTime) : null,
+    bookingId: b?.id,
   });
-  if (b?.endTime) steps.push({ icon: <MapPin size={15} />, label: t.home.tdArrival, title: leg.to.name, time: formatTime(b.endTime) });
+  if (b?.endTime) steps.push({ icon: <MapPin size={15} />, label: t.home.tdArrival, title: leg.to.name, time: formatTime(b.endTime), bookingId: b.id });
   if (checkin.length || day.to?.accommodationName)
-    steps.push({ icon: <BedDouble size={15} />, label: t.home.tdCheckin, title: checkin.length ? checkin.map((x) => x.title).join(' · ') : day.to!.accommodationName!, time: hotelTime(checkin, 'start') });
+    steps.push({ icon: <BedDouble size={15} />, label: t.home.tdCheckin, title: checkin.length ? checkin.map((x) => x.title).join(' · ') : day.to!.accommodationName!, time: hotelTime(checkin, 'start'), bookingId: checkin[0]?.id });
 
   return (
     <section aria-label={t.home.travelDayTitle(day.inDays)} className="mt-5 rounded-[1.5rem] border border-accent/30 bg-surface p-4 shadow-card">
@@ -53,13 +69,12 @@ export function TravelDayCard({ day }: { day: TravelDay }) {
       <p className="mt-1 font-display text-[22px] font-semibold leading-tight">
         {leg.from.name} <span className="text-accent">→</span> {leg.to.name}
       </p>
-      <Link to="/buchungen" className="mt-4 block">
-        <ol>
-          {steps.map((s, i) => (
-            <Step key={i} {...s} last={i === steps.length - 1} />
-          ))}
-        </ol>
-      </Link>
+      <ol className="relative mt-4">
+        <span className="absolute bottom-4 left-[15px] top-4 w-px bg-line" aria-hidden />
+        {steps.map((s, i) => (
+          <Step key={i} {...s} />
+        ))}
+      </ol>
       <div className="mt-4 border-t border-line pt-3">
         {issues.length === 0 ? (
           <p className="flex items-center gap-2 text-[14px] font-semibold text-success">

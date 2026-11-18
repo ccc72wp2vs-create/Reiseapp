@@ -322,9 +322,10 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         {tday && <TravelDayCard day={tday} />}
         <MissingWalletHint snap={snap} />
         {bookings
+          .filter((b) => !viewerTravelerId || !b.travelerIds.length || b.travelerIds.includes(viewerTravelerId))
           .filter((b) => b.depositMinor && !b.expenseId && b.paymentStatus !== 'paid' && b.bookingStatus !== 'cancelled' && (!b.startDate || b.startDate <= addDaysToDate(today, 1)))
           .map((b) => (
-            <Link key={`due-${b.id}`} to="/buchungen" className="mt-3 flex items-center gap-3 rounded-[1.25rem] border border-warn/35 bg-warn-soft p-4">
+            <Link key={`due-${b.id}`} to={`/buchungen?id=${b.id}`} className="mt-3 flex items-center gap-3 rounded-[1.25rem] border border-warn/35 bg-warn-soft p-4">
               <Receipt size={20} className="shrink-0 text-warn" />
               <span className="flex-1 text-[14px] font-semibold">{t.deposit.due(b.title, money(remainingMinor(b), b.currency ?? trip.baseCurrency))}</span>
               <ArrowRight size={18} className="shrink-0 text-warn" />
@@ -371,7 +372,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
               return (
                 <Link
                   key={i}
-                  to="/buchungen"
+                  to={r.booking ? `/buchungen?id=${r.booking.id}` : '/buchungen'}
                   className="flex items-start gap-3 rounded-[1.25rem] border border-warn/35 bg-warn-soft p-4 transition active:scale-[0.99]"
                 >
                   <AlertTriangle className="mt-0.5 shrink-0 text-warn" size={20} />
@@ -471,7 +472,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
                 </SectionTitle>
                 <Card className="divide-y divide-line overflow-hidden">
                   {todaysBookings.map((b) => (
-                    <Link key={b.id} to="/buchungen" className="flex items-center gap-3 p-4">
+                    <Link key={b.id} to={`/buchungen?id=${b.id}`} className="flex items-center gap-3 p-4">
                       <IconTile tone={b.bookingStatus === 'booked' ? 'accent' : 'warn'}>
                         <BookingIcon type={b.type} />
                       </IconTile>
