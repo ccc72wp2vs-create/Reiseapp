@@ -16,8 +16,9 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { costBucketItems, costInfo, personCostOverview, tripCostOverview, type CostBucket } from '../../../shared/costs';
+import { costBucketItems, personCostOverview, tripCostOverview, type CostBucket } from '../../../shared/costs';
 import {
+  addDaysToDate,
   bookingSortKey,
   bookingsOnDate,
   buildRoute,
@@ -49,6 +50,9 @@ import { CheckinReminders } from '../bookings/CheckinReminders';
 import { MissingWalletHint } from '../bookings/MissingWalletHint';
 import { staysAt, stopOverview } from '../../../shared/stop';
 import { BookingRow, StayCard, StopView } from './StopView';
+import { TravelDayCard } from './TravelDayCard';
+import { travelDay } from '../../../shared/travelday';
+import { bookingsToClarify } from '../../../shared/clarify';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
 const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
@@ -170,13 +174,21 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
 
   const todays = activities.filter((a) => a.date === today);
   const todaysBookings = bookingsOnDate(bookings, today);
-  const reminders = useMemo(() => transferReminders(trip, destinations, bookings, today), [trip, destinations, bookings, today]);
-  const clarifications = bookings.filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '9999') >= today && costInfo(b).needsClarification);
+  const viewerTravelerId = snap.travelers.find((x) => x.userId && x.userId === user?.id)?.id ?? null;
+  const tday = useMemo(
+    () => (phase.phase === 'after' ? null : travelDay(trip, destinations, bookings, today, addDaysToDate(today, 1), viewerTravelerId)),
+    [trip, destinations, bookings, today, viewerTravelerId, phase.phase],
+  );
+  // The travel-day card already covers that leg – no second reminder for it.
+  const reminders = useMemo(
+    () => transferReminders(trip, destinations, bookings, today).filter((r) => !tday || r.date !== tday.leg.date || r.toName !== tday.leg.to.name),
+    [trip, destinations, bookings, today, tday],
+  );
+  const clarifications = useMemo(() => bookingsToClarify(bookings, today), [bookings, today]);
   const transport = nextTransport(bookings, today);
   const route = useMemo(() => buildRoute(trip, destinations, bookings), [trip, destinations, bookings]);
   const nextLeg = route.legs.find((l) => l.date !== null && l.date >= today);
   const currentStays = where.current ? staysAt(where.current, bookings) : [];
-  const viewerTravelerId = snap.travelers.find((x) => x.userId && x.userId === user?.id)?.id ?? null;
   const upcoming = bookings
     .filter((b) => b.bookingStatus !== 'cancelled' && (b.startDate ?? '') > today)
     .sort((a, b) => bookingSortKey(a).localeCompare(bookingSortKey(b)))
@@ -306,6 +318,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
 
       <div className="px-safe">
         {phase.phase !== 'after' && <CheckinReminders snap={snap} canEdit={canEdit} />}
+        {tday && <TravelDayCard day={tday} />}
         <MissingWalletHint snap={snap} />
         {/* ------------------------------------------------------------ Reminders */}
         {(reminders.length > 0 || clarifications.length > 0 || openDeposits.length > 0) && (phase.phase !== 'after' || openDeposits.length > 0) && (
@@ -361,7 +374,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
               );
             })}
             {clarifications.length > 0 && (
-              <Link to="/buchungen" className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
+              <Link to="/buchungen?klaeren=1" className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
                 <CircleHelp className="shrink-0 text-warn" size={20} />
                 <p className="flex-1 text-[14px] text-text-2">
                   <span className="font-semibold text-text">{clarifications.length}</span> {clarifications.length === 1 ? 'Buchung' : 'Buchungen'} mit offenen

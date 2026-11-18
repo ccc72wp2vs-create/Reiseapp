@@ -2,6 +2,7 @@ import { ArrowRight, CircleHelp, Clock, Plus, Ticket, Wallet, FileUp, Link2 } fr
 import { lazy, Suspense, useMemo, useState, useEffect } from 'react';
 import { costInfo, missingInWallet, summarizeBookingCosts } from '../../../shared/costs';
 import { expensesMatchingBooking } from '../../../shared/match';
+import { bookingsToClarify } from '../../../shared/clarify';
 import { normalizeRate } from '../../../shared/money';
 import { bookingSortKey, isTransport, todayIn } from '../../../shared/trip';
 import type { BookingDto, TripSnapshot } from '../../../shared/types';
@@ -19,6 +20,7 @@ import { tripStore, useOnline } from '../../lib/store';
 import { suggestedRate } from '../wallet/ExpenseSheet';
 
 const BookingSheet = lazy(() => import('./BookingSheet'));
+const ClarifySheet = lazy(() => import('./ClarifySheet'));
 const DocumentImportSheet = lazy(() => import('../documents/DocumentImportSheet').then((m) => ({ default: m.DocumentImportSheet })));
 
 export default function BookingsPage() {
@@ -43,6 +45,13 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
   const [params, setParams] = useSearchParams();
   const openId = params.get('id');
   const openFilter = params.get('offen') === '1';
+  const clarifyParam = params.get('klaeren');
+  const [clarifying, setClarifying] = useState<{ startId: string | null } | null>(null);
+  useEffect(() => {
+    if (!clarifyParam) return;
+    setClarifying({ startId: clarifyParam === '1' ? null : clarifyParam });
+    setParams({}, { replace: true });
+  }, [clarifyParam, setParams]);
   useEffect(() => {
     if (!openId) return;
     const b = snap.bookings.find((x) => x.id === openId);
@@ -57,6 +66,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
   const { trip, bookings, destinations } = snap;
   const today = todayIn(destinations[0]?.timezone ?? trip.homeTimezone);
   const totals = summarizeBookingCosts(bookings);
+  const toClarify = useMemo(() => bookingsToClarify(bookings, today).length, [bookings, today]);
   const [f, setFState] = useState<Filters>(loadFilters);
   const setF = (v: Filters) => {
     setFState(v);
@@ -105,6 +115,17 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
           <EmptyState icon={<Ticket size={26} />} title={t.bookings.empty} text={t.bookings.emptyText} action={canEdit && <Button icon={<Plus size={18} />} disabled={!online} onClick={() => setCreating(true)}>{t.bookings.add}</Button>} />
         ) : (
           <>
+            {canEdit && toClarify > 0 && (
+              <button
+                type="button"
+                onClick={() => setClarifying({ startId: null })}
+                className="mb-4 flex w-full items-center gap-3 rounded-[1.25rem] border border-warn/35 bg-warn-soft p-4 text-left"
+              >
+                <CircleHelp className="shrink-0 text-warn" size={20} />
+                <span className="flex-1 text-[14px] font-semibold">{t.clarifyFlow.open(toClarify)}</span>
+                <span className="text-[14px] font-semibold text-warn">{t.clarifyFlow.start}</span>
+              </button>
+            )}
             {totals.length > 0 && <CostSummary totals={totals} />}
 
             {/* -------------------------------------------------------- Filters */}
@@ -170,6 +191,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
         {creating && <BookingSheet open onClose={() => setCreating(false)} />}
         {importing && <DocumentImportSheet onClose={() => setImporting(false)} />}
         {editing && <BookingSheet key={editing.id} open booking={editing} onClose={() => setEditing(null)} />}
+        {clarifying && <ClarifySheet snap={snap} today={today} startId={clarifying.startId} onClose={() => setClarifying(null)} />}
       </Suspense>
       {toWallet && <ToWalletSheet booking={toWallet} snap={snap} onClose={() => setToWallet(null)} />}
     </div>

@@ -51,7 +51,10 @@ test.beforeEach(async ({ page }) => {
 
 test('dashboard shows the current trip state and transfer reminder', async ({ page }) => {
   await expect(page.getByText('Tag 7 von 21')).toBeVisible();
-  await expect(page.getByText('Transfer Phuket → Koh Lanta noch nicht bestätigt.')).toBeVisible();
+  // Tomorrow is a travel day: the travel-day card replaces the reminder for that leg.
+  const td = page.getByRole('region', { name: 'Morgen ist Reisetag' });
+  await expect(td).toBeVisible();
+  await expect(td.getByText('Transport noch nicht bestätigt')).toBeVisible();
   await expect(page.getByText('Transfer Koh Lanta → Krabi noch nicht bestätigt.')).toBeVisible();
   // Booked costs are not shown as spent money
   await expect(page.getByText('3.831,00 €').first()).toBeVisible();
