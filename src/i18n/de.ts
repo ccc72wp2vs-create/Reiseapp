@@ -886,6 +886,15 @@ export const de = {
     unit_price_unclear: 'Einzelpreis unklar',
     note: 'Klärung nötig',
   },
+  history: {
+    search: 'Ausgaben durchsuchen …',
+    byDay: 'Nach Tag',
+    byStop: 'Nach Station',
+    moreFilters: 'Weitere Filter',
+    shareOf: (who: string) => `Anteil ${who}`,
+    nothing: 'Keine passenden Ausgaben.',
+    maybeDuplicate: 'Möglicherweise doppelt',
+  },
   pins: {
     button: (n: number) => (n === 1 ? '1 Ort ohne Kartenpunkt – suchen' : `${n} Orte ohne Kartenpunkt – suchen`),
     title: 'Kartenpunkte suchen',

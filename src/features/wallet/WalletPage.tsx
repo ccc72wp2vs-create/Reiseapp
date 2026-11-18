@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowRightLeft, Calculator, ScanLine, ChevronRight, CircleHelp as HelpCircle, Coins, FileUp, HandCoins, Lock, Plus, Receipt, Send, Trash2, Users } from 'lucide-react';
+import { ArrowRight, ArrowRightLeft, Calculator, ScanLine, ChevronRight, CircleHelp as HelpCircle, Coins, FileUp, HandCoins, Lock, Plus, Receipt, Search, Send, Trash2, Users } from 'lucide-react';
 import type { PayRequest } from './PaySheet';
 import { storedRateFor } from '../../lib/rates';
 import { BudgetCard } from './BudgetCard';
@@ -10,6 +10,7 @@ import { Link } from 'react-router';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
+import { amountFor, groupByDay, groupByStop, matchesSearch, possibleDuplicates } from '../../../shared/history';
 import { coupleBalances, coupleSettlements, hasCouples, type CoupleBalance, type CoupleTransfer } from '../../../shared/couples';
 import { balanceBreakdown, computeBalances, directSettlements, netPaidMinor, suggestSettlements, type DirectTransfer } from '../../../shared/finance';
 import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../../shared/money';
@@ -423,7 +424,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   );
 }
 
-function ExpenseList({ expenses, snap, onOpen, shareOf }: { expenses: ExpenseDto[]; snap: TripSnapshot; onOpen: (e: ExpenseDto) => void; shareOf?: string[] }) {
+function ExpenseList({ expenses, snap, onOpen, shareOf, dupes }: { expenses: ExpenseDto[]; snap: TripSnapshot; onOpen: (e: ExpenseDto) => void; shareOf?: string[]; dupes?: Set<string> }) {
   const base = snap.trip.baseCurrency;
   const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
   return (
@@ -436,6 +437,7 @@ function ExpenseList({ expenses, snap, onOpen, shareOf }: { expenses: ExpenseDto
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold">{e.title}</span>
+              {dupes?.has(e.id) && <span className="mb-0.5 inline-block rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn">{t.history.maybeDuplicate}</span>}
               <span className="block truncate text-[13px] text-text-3">
                 {formatDateShort(e.date)} · {e.payers.map((p) => name(p.travelerId)).join(' & ')} · {t.wallet.split[e.splitMethod]} ({e.shares.length})
               </span>
@@ -584,18 +586,21 @@ function History({ snap, onOpen }: { snap: TripSnapshot; onOpen: (e: ExpenseDto)
   const [cat, setCat] = useState<ExpenseCategory | ''>('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [query, setQuery] = useState('');
+  const persons = usePersonSelection(snap.travelers);
   const [deleting, setDeleting] = useState<SettlementDto | null>(null);
   const base = snap.trip.baseCurrency;
   const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
   const inRange = (d: string) => (!from || d >= from) && (!to || d <= to);
-  const [sort, setSortState] = useState<'created' | 'date'>(() => {
+  const [sort, setSortState] = useState<'day' | 'stop' | 'created'>(() => {
     try {
-      return localStorage.getItem('travio.historySort') === 'date' ? 'date' : 'created';
+      const v = localStorage.getItem('travio.historySort');
+      return v === 'stop' || v === 'created' ? v : 'day';
     } catch {
-      return 'created';
+      return 'day';
     }
   });
-  const setSort = (v: 'created' | 'date') => {
+  const setSort = (v: 'day' | 'stop' | 'created') => {
     setSortState(v);
     try {
       localStorage.setItem('travio.historySort', v);
@@ -603,46 +608,86 @@ function History({ snap, onOpen }: { snap: TripSnapshot; onOpen: (e: ExpenseDto)
       /* ignore */
     }
   };
-  const order = <T extends { date: string; createdAt: string }>(list: T[]) =>
-    [...list].sort((a, b) => (sort === 'created' ? b.createdAt.localeCompare(a.createdAt) || b.date.localeCompare(a.date) : b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)));
-  const expenses = order(snap.expenses.filter((e) => (!cat || e.category === cat) && inRange(e.date)));
-  const settlements = order(snap.settlements.filter((s) => inRange(s.date)));
-  const sumFiltered = expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
+  const sel = persons.filtered ? persons.selected : undefined;
+  const expenses = snap.expenses
+    .filter((e) => (!cat || e.category === cat) && inRange(e.date) && matchesSearch(e, query) && (!sel || e.shares.some((x) => sel.includes(x.travelerId))))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const settlements = snap.settlements
+    .filter((s) => inRange(s.date) && (!sel || sel.includes(s.fromTravelerId) || sel.includes(s.toTravelerId)))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const sumFiltered = expenses.reduce((a, e) => a + amountFor(e, sel), 0);
+  const dupes = useMemo(() => possibleDuplicates(snap.expenses), [snap.expenses]);
+  const groups =
+    sort === 'day' ? groupByDay(expenses, sel) : sort === 'stop' ? groupByStop(expenses, snap.destinations, snap.bookings, sel) : null;
+  const filtersActive = !!(cat || from || to);
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={t.wallet.category} className="col-span-2">
-          <Select value={cat} onChange={(e) => setCat(e.target.value as ExpenseCategory | '')}>
-            <option value="">{t.wallet.filterAll}</option>
-            {EXPENSE_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {t.expenseCategories[c]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <TextField label={t.wallet.filterFrom} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        <TextField label={t.wallet.filterTo} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+      <label className="relative block">
+        <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-3" />
+        <span className="sr-only">{t.common.search}</span>
+        <Input type="search" placeholder={t.history.search} value={query} onChange={(e) => setQuery(e.target.value)} className="pl-11" />
+      </label>
+      <div className="mt-3">
+        <PersonFilter travelers={snap.travelers} selection={persons} bleed="-mx-4 px-4" />
       </div>
-      <div className="mt-4">
+      <div className="mt-3">
         <Segmented
           label={t.wallet.sortLabel}
           value={sort}
           onChange={setSort}
           options={[
+            { value: 'day', label: t.history.byDay },
+            { value: 'stop', label: t.history.byStop },
             { value: 'created', label: t.wallet.sortCreated },
-            { value: 'date', label: t.wallet.sortDate },
           ]}
         />
       </div>
+      <details className="mt-3 rounded-[1.25rem] border border-line bg-surface px-4 py-3" open={filtersActive}>
+        <summary className="cursor-pointer text-[14px] font-semibold text-text-2">
+          {t.history.moreFilters}
+          {filtersActive ? ' •' : ''}
+        </summary>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Field label={t.wallet.category} className="col-span-2">
+            <Select value={cat} onChange={(e) => setCat(e.target.value as ExpenseCategory | '')}>
+              <option value="">{t.wallet.filterAll}</option>
+              {EXPENSE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {t.expenseCategories[c]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <TextField label={t.wallet.filterFrom} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <TextField label={t.wallet.filterTo} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+      </details>
       <p className="mt-4 text-[14px] text-text-2">
         {expenses.length} · <span className="font-semibold text-text tabular">{money(sumFiltered, base)}</span>
+        {sel && <span className="text-text-3"> · {t.history.shareOf(sel.map(name).join(' & '))}</span>}
       </p>
-      <div className="mt-3">
-        <ExpenseList expenses={expenses} snap={snap} onOpen={onOpen} />
-      </div>
-      {settlements.length > 0 && !cat && (
+      {expenses.length === 0 && <p className="mt-3 text-[14px] text-text-3">{t.history.nothing}</p>}
+      {groups ? (
+        <div className="mt-3 space-y-5">
+          {groups.map((g) => (
+            <section key={g.key}>
+              <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+                <h3 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-text-3">
+                  {g.kind === 'day' ? formatDate(g.label) : g.label || t.report.noStop}
+                </h3>
+                <span className="text-[13px] font-semibold tabular text-text-2">{money(g.totalMinor, base)}</span>
+              </div>
+              <ExpenseList expenses={g.items} snap={snap} onOpen={onOpen} shareOf={sel} dupes={dupes} />
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3">
+          <ExpenseList expenses={expenses} snap={snap} onOpen={onOpen} shareOf={sel} dupes={dupes} />
+        </div>
+      )}
+      {settlements.length > 0 && !cat && !query.trim() && (
         <>
           <SectionTitle>{t.wallet.settlement}</SectionTitle>
           <ul className="space-y-2">
