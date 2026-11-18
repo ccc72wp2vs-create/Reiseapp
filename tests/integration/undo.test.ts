@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { BookingDto, ExpenseDto } from '../../shared/types';
-import { expenseBody } from '../../src/lib/undo';
+import { expenseBody } from '../../shared/undo';
 import { createTestEnv, setupOwner, type TestEnv } from '../helpers/app';
 
 let t: TestEnv;

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import type { UserDto } from '../../../shared/types';
 import { PageHeader } from '../../components/AppShell';
 import { toast } from '../../components/toast';
+import { PushSettings } from './PushSettings';
 import { Button, Card, ConfirmDialog, Input, SectionTitle, Segmented, TextField } from '../../components/ui';
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
@@ -69,6 +70,9 @@ export default function SettingsPage() {
         <p className="mt-3 text-[13px] text-text-3">
           {t.settings.language}: {t.settings.languageValue}
         </p>
+
+        <SectionTitle>{t.push.title}</SectionTitle>
+        <PushSettings />
 
         <SectionTitle>{t.settings.profile}</SectionTitle>
         <Card className="space-y-4 p-5">

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import authRoutes, { invitations } from './api/auth';
 import resources from './api/resources';
 import trips from './api/trips';
+import push from './api/push';
 import { ApiError } from './lib/errors';
 import { bodyLimit, csrfProtection, currentUser, parseJson, requestContext, requireUser, sessionLoader } from './middleware/core';
 import { deleteDemoTrips, importSeedTrip } from './services/seed';
@@ -18,6 +19,9 @@ export function createApp() {
 
   app.route('/auth', authRoutes);
   app.route('/invitations', invitations);
+
+  app.use('/push/*', requireUser);
+  app.route('/push', push);
 
   app.use('/trips/*', requireUser);
   app.use('/trips', requireUser);

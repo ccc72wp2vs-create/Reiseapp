@@ -13,7 +13,11 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "APP_ENV": "production"
+    "APP_ENV": "production",
+    "VAPID_SUBJECT": "https://travio.travio-reise.workers.dev",
+    // Public half of the Web Push key (not secret); the private half is the
+    // Worker secret VAPID_PRIVATE_KEY.
+    "VAPID_PUBLIC_KEY": "BMijOPb7FfJ1s1Jukn91xdWiQOZE8Vo0I3wUCJOvkf6PVehLum_g2RZU_gghdIDi4EOS6pus4UiJI1QEcipm7_A"
   },
   "d1_databases": [
     {
@@ -26,8 +30,9 @@
   ],
   // Workers AI reads uploaded receipts (documents stay in this account).
   "ai": { "binding": "AI" },
-  // Daily ECB reference rates (published ~16:00 CET) for running trips.
-  "triggers": { "crons": ["20 15 * * *", "20 5 * * *"] }
+  // Daily ECB reference rates (published ~16:00 CET) for running trips;
+  // hourly push reminders (check-in open, travel day tomorrow, balance due).
+  "triggers": { "crons": ["20 15 * * *", "20 5 * * *", "0 * * * *"] }
   // Future: private bucket for booking documents (create it first with
   // `npx wrangler r2 bucket create travio-documents`, then uncomment):
   // "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "travio-documents" }]

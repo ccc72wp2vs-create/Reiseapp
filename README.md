@@ -277,6 +277,13 @@ Die Content-Security-Policy (`public/_headers`) erlaubt dafür `maps.googleapis.
 - Vorschläge für neue Ausgaben und der Währungsrechner nehmen den neuesten Kurs bis zum jeweiligen Datum (Wochenende → Freitagskurs). Ein eigener (manueller) Kurs für denselben Tag hat Vorrang.
 - **Bestehende Ausgaben werden nie umgerechnet** – ihr gespeicherter Kurs bleibt unverändert, damit sich Salden nicht verschieben.
 
+## Push-Benachrichtigungen
+
+- Web Push mit VAPID, ohne Inhalt im Push: Der Push weckt nur den Service Worker, der die wartenden Nachrichten über `/api/v1/push/inbox` (mit der Anmeldung) abholt und anzeigt. Dadurch geht kein Reiseinhalt über die Push-Server von Apple/Google.
+- Schlüssel: `VAPID_PUBLIC_KEY` (öffentlich, in `wrangler.jsonc`) und das Worker-Secret `VAPID_PRIVATE_KEY` (JWK). Ohne Secret ist die Funktion ausgeblendet.
+- Anlässe: Check-in geöffnet, morgen Reisetag (abends), Restzahlung fällig (stündlicher Cron, jeweils nur einmal), neue Ausgabe mit eigenem Anteil (sofort, nicht an die Person, die sie erfasst hat). Pro Gerät einzeln abwählbar unter *Mehr → Einstellungen → Benachrichtigungen*.
+- iPhone: nur in der installierten App (Home-Bildschirm, iOS 16.4+).
+
 ## Kartenanbieter
 
 Standard sind die OpenStreetMap-Standardkacheln – laut [OSM Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/) nur für **geringe Nutzung** geeignet (für eine private App mit wenigen Personen vertretbar). Für mehr Nutzung einen Anbieter mit passenden Bedingungen konfigurieren, z. B. MapTiler, Stadia Maps oder Thunderforest (Schlüssel dort auf die eigene Domain beschränken – Kachel-Schlüssel sind öffentlich sichtbar):

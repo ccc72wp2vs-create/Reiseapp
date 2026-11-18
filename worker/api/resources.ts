@@ -63,6 +63,7 @@ import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
 import * as fx from '../services/fx';
+import { notifyExpense } from '../services/push';
 import * as assistant from '../services/assistant';
 import * as google from '../services/google';
 import * as geoapify from '../services/geoapify';
@@ -329,6 +330,8 @@ r.post('/:tripId/expenses', async (c) => {
   const t = c.get('trip');
   const expense = await wallet.createExpense(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, expenseCreateSchema));
   await audit(c.env.DB, { tripId: t.tripId, userId: currentUser(c).id, entity: 'expense', entityId: expense.id, action: 'create' });
+  // Push to the others who have a share ("Lilli: Inas Restaurant – dein Anteil 755 ฿"); never blocks the answer.
+  c.executionCtx?.waitUntil?.(notifyExpense(c.env, t.tripId, currentUser(c).id, expense).catch(() => undefined));
   return c.json({ expense }, 201);
 });
 

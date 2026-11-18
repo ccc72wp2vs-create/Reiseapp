@@ -32,6 +32,12 @@ export interface Env {
   GOOGLE_LIMIT_ROUTE_ELEMENTS?: string;
   GOOGLE_LIMIT_ROUTES?: string;
   GOOGLE_LIMIT_UI_LOADS?: string;
+  /** Web Push: public VAPID key (base64url, uncompressed P-256 point) – not secret. */
+  VAPID_PUBLIC_KEY?: string;
+  /** Web Push: private VAPID key as JWK JSON (secret). */
+  VAPID_PRIVATE_KEY?: string;
+  /** Contact URL sent to push services (defaults to the app URL). */
+  VAPID_SUBJECT?: string;
   /** Future: private R2 bucket for booking documents. */
   DOCUMENTS?: R2Bucket;
 }

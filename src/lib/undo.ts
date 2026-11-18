@@ -4,6 +4,7 @@
  * API with their old ID and values; nothing is kept on the server.
  */
 import type { ActivityDto, BookingDto, ExpenseDto, PlaceDto } from '../../shared/types';
+import { expenseBody } from '../../shared/undo';
 import { toast } from '../components/toast';
 import { t } from '../i18n';
 import { http } from './api';
@@ -28,24 +29,6 @@ export function undoToast(message: string, undo: () => Promise<unknown> | void) 
       },
     },
   });
-}
-
-/** Body that recreates an expense exactly (same ID, payers and shares). */
-export function expenseBody(e: ExpenseDto) {
-  return {
-    id: e.id,
-    title: e.title,
-    amountMinor: e.amountMinor,
-    currency: e.currency,
-    date: e.date,
-    category: e.category,
-    paidByTravelerId: e.payers[0]?.travelerId ?? e.paidByTravelerId,
-    payers: e.payers.length > 1 ? e.payers.map((p) => ({ travelerId: p.travelerId, amountMinor: p.amountMinor })) : undefined,
-    splitMethod: 'exact' as const,
-    splits: e.shares.map((s) => ({ travelerId: s.travelerId, value: s.shareMinor })),
-    ...(e.fxSource !== 'identity' ? { fxRate: e.fxRate, fxSource: e.fxSource === 'provider' ? 'provider' : e.fxSource === 'cached' ? 'cached' : 'manual', fxDate: e.fxDate } : {}),
-    notes: e.notes,
-  };
 }
 
 export function deletedExpense(tripId: string, e: ExpenseDto) {

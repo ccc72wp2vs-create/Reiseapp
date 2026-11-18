@@ -89,3 +89,50 @@ self.addEventListener('fetch', (event) => {
     })(),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Push: the push itself carries no content. On arrival the waiting messages
+// are fetched from the server (same login cookie) and shown. iOS requires a
+// visible notification for every push – a neutral one is shown as fallback.
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    (async () => {
+      let messages = [];
+      try {
+        const res = await fetch('/api/v1/push/inbox', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'X-Travio-Csrf': '1', 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        if (res.ok) messages = (await res.json()).messages || [];
+      } catch (e) {
+        messages = [];
+      }
+      if (!messages.length) {
+        await self.registration.showNotification('TRAVIO', { body: 'Es gibt Neuigkeiten zu eurer Reise.', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: '/' } });
+        return;
+      }
+      for (const m of messages) {
+        await self.registration.showNotification(m.title, { body: m.body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: m.id, data: { url: m.url } });
+      }
+    })(),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const client = all.find((c) => new URL(c.url).origin === self.location.origin);
+      if (client) {
+        await client.focus();
+        if ('navigate' in client) await client.navigate(url).catch(() => undefined);
+        return;
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
+});
