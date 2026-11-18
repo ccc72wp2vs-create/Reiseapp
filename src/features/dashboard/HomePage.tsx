@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   ArrowRight,
-  CalendarDays,
   ChevronDown,
   ChevronRight,
   CircleHelp,
@@ -115,7 +114,6 @@ type SheetKind = 'activity' | 'expense' | 'destination' | null;
 function Dashboard({ snap }: { snap: TripSnapshot }) {
   const { canEdit, user } = useTrip();
   const online = useOnline();
-  const navigate = useNavigate();
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [activityDate, setActivityDate] = useState<string | null>(null);
   const { trip, destinations, bookings, activities } = snap;
@@ -242,7 +240,17 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           aria-hidden
         />
         <div className="absolute inset-x-0 top-0 z-10 px-safe pt-safe">
-          <div className="flex items-center justify-end pt-2 text-sand">
+          <div className="flex items-center justify-end gap-2 pt-2 text-sand">
+            {phraseLang && (
+              <Link
+                to="/sprache"
+                aria-label={`${t.phrasebook.titleGeneric}: ${LANG_NAMES[phraseLang]}`}
+                className="glass inline-flex h-10 items-center gap-1.5 rounded-full border border-white/15 px-3.5 text-[14px] font-semibold text-text"
+              >
+                <Languages size={17} className="shrink-0" />
+                {LANG_NAMES[phraseLang]}
+              </Link>
+            )}
             <Link
               to="/reisen"
               className="glass inline-flex h-10 max-w-[70%] items-center gap-1.5 rounded-full border border-white/15 px-4 text-[14px] font-semibold text-text"
@@ -404,53 +412,6 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
           </section>
         )}
 
-        {/* ------------------------------------------------------- Quick actions */}
-        <section aria-label={t.home.quickActions} className="mt-6 grid grid-cols-4 gap-2">
-          {[
-            {
-              label: t.home.addActivity,
-              icon: <Plus size={20} />,
-              onClick: () => openActivity(stopData && stopData.when !== 'past' ? stopData.days[0] : null),
-              disabled: !canEdit,
-            },
-            {
-              label: t.home.addExpense,
-              icon: <Receipt size={20} />,
-              onClick: () => setSheet('expense'),
-              disabled: !canEdit || !online,
-            },
-            // Phrasebook for the trip's country – otherwise the classic "add destination" action.
-            phraseLang
-              ? {
-                  label: LANG_NAMES[phraseLang],
-                  icon: <Languages size={20} />,
-                  onClick: () => navigate('/sprache'),
-                  disabled: false,
-                }
-              : {
-                  label: t.home.addDestination,
-                  icon: <MapPin size={20} />,
-                  onClick: () => setSheet('destination'),
-                  disabled: !canEdit || !online,
-                },
-            {
-              label: t.home.viewPlan,
-              icon: <CalendarDays size={20} />,
-              onClick: () => navigate('/plan'),
-            },
-          ].map((a) => (
-            <button
-              key={a.label}
-              type="button"
-              onClick={a.onClick}
-              disabled={a.disabled}
-              className="flex flex-col items-center gap-2 rounded-[1.25rem] py-2 text-[12px] font-semibold text-text-2 transition active:scale-95 disabled:opacity-40"
-            >
-              <span className="grid h-14 w-14 place-items-center rounded-[1.25rem] border border-line bg-surface text-accent shadow-card">{a.icon}</span>
-              {a.label}
-            </button>
-          ))}
-        </section>
 
         {stopData && <StopView o={stopData} canEdit={canEdit} onAddActivity={openActivity} travelers={snap.travelers} viewerTravelerId={viewerTravelerId} />}
 
