@@ -202,6 +202,15 @@ describe('receipt split – line items, nothing stored', () => {
     expect(e.body.expense.shares.map((s: { shareMinor: number }) => s.shareMinor).sort()).toEqual([1350, 900].sort());
   });
 
+  it('accepts a real-size phone photo (~1.5 MB) – not only small JSON requests', async () => {
+    const { owner, tripId } = await setupTrip();
+    t.env.AI = mockAi({ merchant: 'X', currency: 'THB', items: [{ name: 'Bier', amount: 100 }] }).ai;
+    const big = new Uint8Array(1_500_000).fill(7);
+    const r = await owner.upload(`/trips/${tripId}/documents/receipt-items`, big, 'image/jpeg', 'foto.jpg');
+    expect(r.status).toBe(200);
+    expect(r.body.receipt.lines).toHaveLength(1);
+  });
+
   it('rejects PDFs for receipt splitting', async () => {
     const { owner, tripId } = await setupTrip();
     const r = await owner.upload(`/trips/${tripId}/documents/receipt-items`, pdf, 'application/pdf', 'x.pdf');
