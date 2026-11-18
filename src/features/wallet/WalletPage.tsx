@@ -11,7 +11,7 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
 import { amountFor, groupByDay, groupByStop, matchesSearch, possibleDuplicates } from '../../../shared/history';
-import { coupleBalances, coupleSettlements, hasCouples, type CoupleBalance, type CoupleTransfer } from '../../../shared/couples';
+import { coupleBalances, coupleSettlements, hasCouples, nextPayer, type CoupleBalance, type CoupleTransfer } from '../../../shared/couples';
 import { balanceBreakdown, computeBalances, directSettlements, netPaidMinor, suggestSettlements, type DirectTransfer } from '../../../shared/finance';
 import { convertMinor, CURRENCY_CODES, normalizeRate, parseAmount } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
@@ -109,6 +109,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
     }
   };
   const couples = useMemo(() => coupleBalances(travelers, balances), [travelers, balances]);
+  const next = useMemo(() => nextPayer(travelers, balances), [travelers, balances]);
   const coupleTransfers = useMemo(() => coupleSettlements(couples), [couples]);
   const [pair, setPair] = useState<DirectTransfer | null>(null);
   const [paying, setPaying] = useState<PayRequest | null>(null);
@@ -161,6 +162,21 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
             <div className="-mt-1 mb-4 empty:hidden [&>a]:mt-0">
               <MissingWalletHint snap={snap} />
             </div>
+            {next && !sel && (
+              <div className="mb-3 flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-3.5">
+                <span className="flex shrink-0 -space-x-2">
+                  {next.memberIds.map((id) => (
+                    <span key={id} className="grid h-8 w-8 place-items-center rounded-full text-[12px] font-bold text-[#101b33] ring-2 ring-surface" style={{ background: color(id) }}>
+                      {name(id).slice(0, 1).toUpperCase()}
+                    </span>
+                  ))}
+                </span>
+                <p className="min-w-0 flex-1 text-[14px]">
+                  <span className="font-semibold">{t.wallet.nextPayer(next.memberIds.map(name).join(' & '), next.memberIds.length > 1)}</span>
+                  <span className="block text-[12px] text-text-3">{t.wallet.nextPayerWhy(money(-next.balanceMinor, base))}</span>
+                </p>
+              </div>
+            )}
             <Card className="relative overflow-hidden p-6">
               <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-text-3">{sel ? t.home.costsShare : t.wallet.total}</p>
               <p className="mt-1 font-display text-[44px] font-semibold leading-none tabular">{money(sel ? sel.spentMinor : total, base)}</p>

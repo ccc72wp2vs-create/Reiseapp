@@ -79,3 +79,20 @@ export function coupleSettlements(couples: readonly CoupleBalance[]): CoupleTran
     toTravelerId: pick(s.toTravelerId, 1),
   }));
 }
+
+/**
+ * Who should pay next so that things even out along the way: the couple (or
+ * single traveler) that has advanced least so far. Null when everything is
+ * roughly even (below `toleranceMinor`).
+ */
+export function nextPayer(
+  travelers: readonly TravelerLike[],
+  balances: readonly TravelerBalance[],
+  toleranceMinor = 1000,
+): { memberIds: string[]; balanceMinor: number } | null {
+  const groups = coupleBalances(travelers, balances);
+  if (groups.length < 2) return null;
+  const lowest = [...groups].sort((a, b) => a.balanceMinor - b.balanceMinor || a.key.localeCompare(b.key))[0];
+  if (lowest.balanceMinor > -toleranceMinor) return null;
+  return { memberIds: lowest.memberIds, balanceMinor: lowest.balanceMinor };
+}

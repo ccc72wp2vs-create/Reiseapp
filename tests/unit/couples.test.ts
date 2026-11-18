@@ -29,3 +29,11 @@ describe('couples', () => {
     expect(coupleSettlements(couples)).toEqual([]);
   });
 });
+
+describe('next payer', () => {
+  it('names the couple that advanced least, or nobody when even', async () => {
+    const { nextPayer } = await import('../../shared/couples');
+    expect(nextPayer(travelers, [bal('john', 3000), bal('lilli', 1000), bal('tim', -2500), bal('annika', -1500)])).toEqual({ memberIds: ['tim', 'annika'], balanceMinor: -4000 });
+    expect(nextPayer(travelers, [bal('john', 300), bal('lilli', 0), bal('tim', -300), bal('annika', 0)])).toBeNull();
+  });
+});

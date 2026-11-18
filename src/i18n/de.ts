@@ -705,6 +705,8 @@ export const de = {
     settleModeMinimal: 'Möglichst wenige',
     settleModeDirect: 'Einzeln',
     viewPersons: 'Personen',
+    nextPayer: (who: string, plural: boolean) => `Als Nächstes ${plural ? 'zahlen' : 'zahlt'} ${who}`,
+    nextPayerWhy: (a: string) => `bisher ${a} weniger vorgestreckt als ihr Anteil – so gleicht es sich unterwegs aus`,
     viewCouples: 'Paare',
     couplesText: 'Salden je Paar zusammengefasst. Was innerhalb eines Paares offen ist, regelt ihr unter euch.',
     couplesSuggestionsText: 'Ausgleich zwischen den Paaren mit möglichst wenigen Überweisungen.',
