@@ -56,7 +56,10 @@ test('dashboard shows the current trip state and transfer reminder', async ({ pa
   await expect(td).toBeVisible();
   await expect(td.getByText('Transport noch nicht bestätigt')).toBeVisible();
   await expect(page.getByText('Transfer Koh Lanta → Krabi noch nicht bestätigt.')).toBeVisible();
-  // Booked costs are not shown as spent money
+  // Booked costs are not shown as spent money (costs section starts collapsed: one line)
+  const costs = page.getByRole('button', { name: /Reisekosten/ });
+  await expect(costs).toContainText(/€ ausgegeben/);
+  await costs.click();
   await expect(page.getByText('3.831,00 €').first()).toBeVisible();
   await expect(page.getByText('0,00 €').first()).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Hauptnavigation' });

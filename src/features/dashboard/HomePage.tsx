@@ -42,6 +42,7 @@ import { http } from '../../lib/api';
 import { formatDate, formatDateShort, formatLongDate, formatTime, money } from '../../lib/format';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
 import { CurrencyConverter } from '../../components/CurrencyConverter';
+import { Collapsible } from '../../components/Collapsible';
 import { refreshRatesOnce } from '../../lib/rates';
 import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
 import { bookingTimeLabel } from '../../lib/bookingLabels';
@@ -516,7 +517,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
               {where.current && phase.phase === 'during' && (
                 <StayCard stop={where.current} stays={currentStays} travelers={snap.travelers} viewerTravelerId={viewerTravelerId} label={t.home.currentStay} />
               )}
-              {nextLeg && (
+              {nextLeg && !(tday && tday.leg.to.name === nextLeg.to.name && tday.leg.date === nextLeg.date) && (
                 <Card className="p-5">
                   <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
                     <Route size={15} /> {t.home.nextMove}
@@ -555,37 +556,41 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
               </>
             )}
 
-            {/* ---------------------------------------------------------- Upcoming */}
+            {/* ------------------------------------------- Upcoming (collapsible) */}
             {upcoming.length > 0 && (
-              <>
-                <SectionTitle
-                  action={
-                    <Link to="/buchungen" className="text-[14px] font-semibold text-accent">
-                      {t.bookings.title}
-                    </Link>
-                  }
-                >
-                  {t.home.upcoming}
-                </SectionTitle>
+              <Collapsible
+                id="upcoming"
+                title={t.home.upcoming}
+                summary={t.home.upcomingSummary(upcoming[0].title, upcoming.length)}
+                defaultOpen={false}
+                action={
+                  <Link to="/buchungen" className="text-[14px] font-semibold text-accent">
+                    {t.bookings.title}
+                  </Link>
+                }
+              >
                 <div className="space-y-2.5">
                   {upcoming.map((b) => (
                     <BookingRow key={b.id} booking={b} />
                   ))}
                 </div>
-              </>
+              </Collapsible>
             )}
 
-            {/* ------------------------------------------------------------ Wallet */}
-            <SectionTitle
+            {/* ---------------------------------------------- Wallet (collapsible) */}
+            <Collapsible
+              id="costs"
+              title={t.home.tripCosts}
+              summary={t.home.costsSummary(money(snap.expenses.reduce((a, e) => a + e.baseAmountMinor, 0), trip.baseCurrency))}
+              defaultOpen={false}
               action={
                 <Link to="/kasse" className="text-[14px] font-semibold text-accent">
                   {t.wallet.title}
                 </Link>
               }
             >
-              {t.home.tripCosts}
-            </SectionTitle>
-            <CostsCard snap={snap} />
+              <CostsCard snap={snap} />
+            </Collapsible>
           </>
         )}
 

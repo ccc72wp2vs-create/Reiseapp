@@ -182,6 +182,8 @@ export const de = {
     transportMissing: (from: string, to: string) => `Für ${from} → ${to} ist noch kein Transport hinterlegt.`,
     clarify: (title: string) => `Klären: ${title}`,
     upcoming: 'Als Nächstes',
+    upcomingSummary: (first: string, n: number) => (n === 1 ? first : `${first} + ${n - 1} weitere`),
+    costsSummary: (spent: string) => `${spent} ausgegeben`,
     noTrip: 'Noch keine Reise',
     noTripText: 'Lege deine erste Reise an oder importiere „Thailand 2026“ mit allen bereits bekannten Daten.',
     importThailand: '„Thailand 2026“ importieren',
