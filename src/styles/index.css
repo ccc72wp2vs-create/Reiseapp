@@ -379,3 +379,14 @@ input[type='time']::-webkit-date-and-time-value {
   background: var(--warn);
   color: #101b33;
 }
+
+/* Endabrechnung als PDF: nur der Inhalt, ohne Navigation und Schaltflächen. */
+@media print {
+  nav[aria-label='Hauptnavigation'],
+  [data-print='hide'] {
+    display: none !important;
+  }
+  .pb-nav {
+    padding-bottom: 0 !important;
+  }
+}

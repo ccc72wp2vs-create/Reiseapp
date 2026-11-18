@@ -6,6 +6,7 @@ import { DepositsCard } from './DepositsCard';
 import { DepositSheet } from './DepositSheet';
 import { JointPaymentSheet } from './JointPaymentSheet';
 import { DocumentImportSheet } from '../documents/DocumentImportSheet';
+import { Link } from 'react-router';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from '../../../shared/constants';
 import { personCostOverview } from '../../../shared/costs';
@@ -309,6 +310,14 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
             onPay={(from, to, amountMinor) => setPaying({ fromTravelerId: from, toTravelerId: to, amountMinor, purpose: [] })}
             onRecord={(from, to, amountMinor) => setSheet({ kind: 'settlement', preset: { from, to, amountMinor } })}
           />
+        )}
+        {tab === 'balances' && (
+          <Link to="/abrechnung" className="mb-3 flex items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
+            <Receipt size={18} className="shrink-0 text-accent" />
+            <span className="flex-1 text-[14px] font-semibold">{t.report.title}</span>
+            <span className="text-[13px] text-text-3">{t.report.hintRow}</span>
+            <ChevronRight size={18} className="shrink-0 text-text-3" />
+          </Link>
         )}
         {tab === 'balances' && balanceView === 'persons' && (
           <>

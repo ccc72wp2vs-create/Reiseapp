@@ -20,6 +20,7 @@ export function AssistantButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Frag TRAVIO"
+        data-print="hide"
         className="fixed z-30 grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-accent text-accent-ink shadow-[0_10px_28px_-10px_var(--accent)] transition active:scale-95"
         style={{ right: 'max(1rem, env(safe-area-inset-right))', bottom: 'calc(5.25rem + env(safe-area-inset-bottom))' }}
       >

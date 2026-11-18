@@ -320,6 +320,13 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         {phase.phase !== 'after' && <CheckinReminders snap={snap} canEdit={canEdit} />}
         {tday && <TravelDayCard day={tday} />}
         <MissingWalletHint snap={snap} />
+        {((phase.phase === 'during' && phase.daysRemaining <= 3) || phase.phase === 'after') && snap.expenses.length > 0 && (
+          <Link to="/abrechnung" className="mt-3 flex items-center gap-3 rounded-[1.25rem] border border-accent/30 bg-accent-soft p-4">
+            <Receipt size={20} className="shrink-0 text-accent" />
+            <span className="flex-1 text-[14px] font-semibold">{t.report.endHint}</span>
+            <ArrowRight size={18} className="shrink-0 text-accent" />
+          </Link>
+        )}
         {/* ------------------------------------------------------------ Reminders */}
         {(reminders.length > 0 || clarifications.length > 0 || openDeposits.length > 0) && (phase.phase !== 'after' || openDeposits.length > 0) && (
           <section aria-label={t.home.reminders} className="mt-5 space-y-2.5">
