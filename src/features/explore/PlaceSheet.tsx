@@ -8,6 +8,7 @@ import { toast } from '../../components/toast';
 import { Button, ConfirmDialog, SelectField, Sheet, TextAreaField, TextField, Toggle } from '../../components/ui';
 import { t } from '../../i18n';
 import { isOnline, tripStore } from '../../lib/store';
+import { deletedPlace } from '../../lib/undo';
 
 export default function PlaceSheet({
   open,
@@ -148,7 +149,7 @@ export default function PlaceSheet({
           message={t.explore.deleteConfirm(place.name)}
           onConfirm={() => {
             tripStore.places.remove(place.id);
-            toast(t.success.deleted);
+            deletedPlace(place);
             onClose();
           }}
         />

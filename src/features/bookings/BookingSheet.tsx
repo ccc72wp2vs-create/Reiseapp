@@ -28,6 +28,7 @@ import { Button, ConfirmDialog, Field, Input, SelectField, Sheet, TextAreaField,
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { tripStore, useOnline } from '../../lib/store';
+import { deletedBooking } from '../../lib/undo';
 
 export interface BookingPrefill {
   title?: string | null;
@@ -597,7 +598,7 @@ export default function BookingSheet({
           message={t.bookings.deleteConfirm(b.title)}
           onConfirm={async () => {
             await tripStore.mutate(() => http.del(`/trips/${trip.id}/bookings/${b.id}?version=${b.version}`));
-            toast(t.success.deleted);
+            deletedBooking(trip.id, b);
             onClose();
           }}
         />

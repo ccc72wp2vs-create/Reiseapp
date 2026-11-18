@@ -12,6 +12,7 @@ import { Button, Chip, ConfirmDialog, SelectField, Sheet, TextAreaField, TextFie
 import { t } from '../../i18n';
 import { formatWeekdayShort } from '../../lib/format';
 import { isOnline, tripStore } from '../../lib/store';
+import { deletedActivity } from '../../lib/undo';
 
 export interface ActivityDefaults {
   date?: string;
@@ -262,7 +263,7 @@ export default function ActivitySheet({
           message={t.plan.deleteConfirm(base.title)}
           onConfirm={() => {
             tripStore.activities.remove(base.id);
-            toast(t.success.deleted);
+            deletedActivity(base);
             onClose();
           }}
         />

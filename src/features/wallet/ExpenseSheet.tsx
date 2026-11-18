@@ -2,6 +2,7 @@ import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { LegacyDocuments } from '../documents/DocumentList';
 import { useMemo, useState, type FormEvent } from 'react';
 import { guessCategory, lastParticipants } from '../../../shared/quickfill';
+import { changedExpense, deletedExpense } from '../../lib/undo';
 import { EXPENSE_CATEGORIES, type ExpenseCategory, type FxSource, type SplitMethod } from '../../../shared/constants';
 import { convertMinor, minorToInput, normalizeRate, parseAmount, sum } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
@@ -230,7 +231,7 @@ export default function ExpenseSheet({
     };
     setBusy(true);
     try {
-      await tripStore.mutate(async () => {
+      const saved = await tripStore.mutate(async () => {
         // Remember a manually entered rate so it is prefilled next time.
         if (offerSave && saveRate) {
           await http.post(`/trips/${trip.id}/exchange-rates`, { currency: form.currency, rate: rateNorm, effectiveDate: form.date });
@@ -243,7 +244,8 @@ export default function ExpenseSheet({
         }
         return res;
       });
-      toast(linkTo ? 'Gespeichert und mit der Buchung verknüpft – zählt nur einmal' : t.success.saved);
+      if (expense && saved?.expense) changedExpense(trip.id, expense, saved.expense.version);
+      else toast(linkTo ? 'Gespeichert und mit der Buchung verknüpft – zählt nur einmal' : t.success.saved);
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -585,7 +587,7 @@ export default function ExpenseSheet({
           message={t.wallet.deleteConfirm(expense.title)}
           onConfirm={async () => {
             await tripStore.mutate(() => http.del(`/trips/${trip.id}/expenses/${expense.id}?version=${expense.version}`));
-            toast(t.success.deleted);
+            deletedExpense(trip.id, expense);
             onClose();
           }}
         />

@@ -890,6 +890,12 @@ export const de = {
     unit_price_unclear: 'Einzelpreis unklar',
     note: 'Klärung nötig',
   },
+  undo: {
+    action: 'Rückgängig',
+    done: 'Wiederhergestellt',
+    deleted: (what: string) => `„${what}“ gelöscht`,
+    saved: 'Änderung gespeichert',
+  },
   quickAdd: {
     open: 'Hinzufügen',
     title: 'Was möchtest du erfassen?',
