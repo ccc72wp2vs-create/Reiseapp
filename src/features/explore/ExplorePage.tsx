@@ -3,12 +3,14 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { PLACE_CATEGORIES, type PlaceCategory } from '../../../shared/constants';
 import { destinationOn, sortDestinations, todayIn, tripPhase } from '../../../shared/trip';
 import type { PlaceDto, TripSnapshot } from '../../../shared/types';
-import { PageHeader, useTrip } from '../../components/AppShell';
+import { useTrip } from '../../components/AppShell';
 import { MapView, type MapMarker } from '../../components/MapView';
 import { CategoryIcon } from '../../components/status';
-import { Badge, Button, Chip, EmptyState, IconButton, Input, Segmented, Skeleton, cx } from '../../components/ui';
+import { Badge, Button, Chip, EmptyState, Input, Segmented, Skeleton, cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { appleMapsUrl } from '../../lib/maps';
+import { formatDateShort } from '../../lib/format';
+import { Navigate, useSearchParams } from 'react-router';
 import { tripStore, useOnline } from '../../lib/store';
 import { http } from '../../lib/api';
 import { toast } from '../../components/toast';
@@ -41,7 +43,14 @@ function defaultStop(snap: TripSnapshot): string {
   return first && tripPhase(snap.trip, today).phase === 'before' ? first.id : 'all';
 }
 
+/** Old address /entdecken → the ideas inside Plan. */
 export default function ExplorePage() {
+  const [params] = useSearchParams();
+  return <Navigate to={`/plan?ansicht=ideen${params.get('nah') ? '&nah=1' : ''}`} replace />;
+}
+
+/** "Ideen" in Plan: saved places, nearby search, map – formerly the Entdecken tab. */
+export function IdeasPanel({ initialSource }: { initialSource?: 'mine' | 'nearby' }) {
   const { snap } = useTrip();
   if (!snap) {
     return (
@@ -52,13 +61,14 @@ export default function ExplorePage() {
       </div>
     );
   }
-  return <Explore snap={snap} />;
+  return <Explore snap={snap} initialSource={initialSource} />;
 }
 
-function Explore({ snap }: { snap: TripSnapshot }) {
+function Explore({ snap, initialSource }: { snap: TripSnapshot; initialSource?: 'mine' | 'nearby' }) {
   const { canEdit } = useTrip();
   const google = useGoogleConfig(snap.trip.id);
-  const [source, setSource] = useState<'mine' | 'nearby'>('mine');
+  const [source, setSource] = useState<'mine' | 'nearby'>(initialSource ?? 'mine');
+  const [onlyOpen, setOnlyOpen] = useState(false);
   const [view, setView] = useState<'list' | 'map'>('list');
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<PlaceCategory | 'all' | 'fav'>('all');
@@ -89,9 +99,10 @@ function Explore({ snap }: { snap: TripSnapshot }) {
     return inStop.filter(
       (p) =>
         (cat === 'all' || (cat === 'fav' ? p.favorite : p.category === cat)) &&
+        (!onlyOpen || !snap.activities.some((a) => a.placeId === p.id)) &&
         (!q || p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)),
     );
-  }, [inStop, query, cat]);
+  }, [inStop, query, cat, onlyOpen, snap.activities]);
   // Most 👍 first – the group's favourites float to the top.
   const sorted = useMemo(() => [...filtered].sort((a, b) => (b.votes?.length ?? 0) - (a.votes?.length ?? 0)), [filtered]);
   const usedCats = PLACE_CATEGORIES.filter((c) => inStop.some((p) => p.category === c));
@@ -102,17 +113,6 @@ function Explore({ snap }: { snap: TripSnapshot }) {
 
   return (
     <div>
-      <PageHeader
-        title={t.explore.title}
-        eyebrow={t.explore.subtitle}
-        action={
-          canEdit && (
-            <IconButton label={t.explore.add} variant="primary" onClick={() => setCreating(true)}>
-              <Plus size={22} />
-            </IconButton>
-          )
-        }
-      />
 
       {google?.enabled && (
         <div className="px-safe pt-4">
@@ -183,6 +183,9 @@ function Explore({ snap }: { snap: TripSnapshot }) {
           <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto px-safe pb-1">
             <Chip active={cat === 'all'} onClick={() => setCat('all')}>
               {t.common.all}
+            </Chip>
+            <Chip active={onlyOpen} onClick={() => setOnlyOpen(!onlyOpen)} icon={<CalendarPlus size={14} />}>
+              {t.ideas.notPlanned} ({inStop.filter((p) => !snap.activities.some((a) => a.placeId === p.id)).length})
             </Chip>
             <Chip active={cat === 'fav'} onClick={() => setCat('fav')} icon={<Star size={14} />}>
               {t.explore.favorites}
@@ -341,7 +344,9 @@ function PlaceCard({
       </div>
       {place.description && <p className="mt-3 line-clamp-2 text-[14px] leading-relaxed text-text-2">{place.description}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {planned.length > 0 && <Badge tone="accent">{t.explore.planned} ({planned.length})</Badge>}
+        {planned.length > 0 && (
+          <Badge tone="accent">{t.ideas.plannedOn([...new Set(planned.map((a) => a.date))].sort().map((d) => formatDateShort(d)).join(', '))}</Badge>
+        )}
         {place.lat == null && <Badge>{t.explore.noCoords}</Badge>}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">

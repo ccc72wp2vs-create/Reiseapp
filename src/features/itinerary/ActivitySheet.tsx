@@ -2,12 +2,13 @@ import { Copy, Trash2 } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { ACTIVITY_CATEGORIES, BOOKING_STATUSES, type ActivityCategory, type BookingStatus } from '../../../shared/constants';
 import { minorToInput, parseAmount } from '../../../shared/money';
-import { eachDate } from '../../../shared/trip';
+import { destinationForDate, eachDate } from '../../../shared/trip';
+import { Link } from 'react-router';
 import type { ActivityDto } from '../../../shared/types';
 import { useTrip } from '../../components/AppShell';
 import { coordToInput, CoordsFields, MoneyField, parseCoord } from '../../components/inputs';
 import { toast } from '../../components/toast';
-import { Button, ConfirmDialog, SelectField, Sheet, TextAreaField, TextField, Toggle } from '../../components/ui';
+import { Button, Chip, ConfirmDialog, SelectField, Sheet, TextAreaField, TextField, Toggle } from '../../components/ui';
 import { t } from '../../i18n';
 import { formatWeekdayShort } from '../../lib/format';
 import { isOnline, tripStore } from '../../lib/store';
@@ -84,6 +85,27 @@ export default function ActivitySheet({
     }));
   }
 
+  // Saved places of the chosen day's stop – not yet planned first.
+  const dayStop = destinationForDate(snap!.destinations, form.date);
+  const placeIdeas = useMemo(
+    () =>
+      snap!.places
+        .filter((p) => !dayStop || p.destinationId === dayStop.id)
+        .sort(
+          (a, b) =>
+            Number(snap!.activities.some((x) => x.placeId === a.id)) - Number(snap!.activities.some((x) => x.placeId === b.id)) ||
+            Number(b.favorite) - Number(a.favorite) ||
+            a.name.localeCompare(b.name),
+        )
+        .slice(0, 20),
+    [snap, dayStop],
+  );
+  function pickIdea(id: string) {
+    const p = snap!.places.find((x) => x.id === id);
+    if (!p) return;
+    setForm((f) => ({ ...f, placeId: id, title: p.name, category: p.category, locationName: p.address ?? p.name, lat: coordToInput(p.lat), lng: coordToInput(p.lng), googlePlaceId: p.googlePlaceId ?? null }));
+  }
+
   function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -148,6 +170,22 @@ export default function ActivitySheet({
         }
       >
         <form id="activity-form" onSubmit={submit} className="space-y-4" noValidate>
+          {!base && placeIdeas.length > 0 && (
+            <div>
+              <p className="mb-2 text-[13px] font-semibold text-text-2">{t.ideas.fromPlaces}</p>
+              <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                {placeIdeas.map((p) => (
+                  <Chip key={p.id} active={form.placeId === p.id} onClick={() => pickIdea(p.id)}>
+                    {p.favorite ? '★ ' : ''}
+                    {p.name}
+                  </Chip>
+                ))}
+              </div>
+              <Link to="/plan?ansicht=ideen&nah=1" onClick={onClose} className="mt-1 inline-block text-[13px] font-semibold text-accent">
+                {t.ideas.searchNearby} →
+              </Link>
+            </div>
+          )}
           <TextField label={t.plan.titleField} required autoFocus={!base} value={form.title} onChange={(e) => set('title', e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
             <SelectField label={t.plan.category} value={form.category} onChange={(e) => set('category', e.target.value as ActivityCategory)}>

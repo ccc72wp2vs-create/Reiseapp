@@ -1,6 +1,7 @@
 import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { LegacyDocuments } from '../documents/DocumentList';
 import { useMemo, useState, type FormEvent } from 'react';
+import { guessCategory, lastParticipants } from '../../../shared/quickfill';
 import { EXPENSE_CATEGORIES, type ExpenseCategory, type FxSource, type SplitMethod } from '../../../shared/constants';
 import { convertMinor, minorToInput, normalizeRate, parseAmount, sum } from '../../../shared/money';
 import { todayIn } from '../../../shared/trip';
@@ -55,6 +56,9 @@ export interface ExpensePrefill {
   amountMinor?: number | null;
   currency?: string | null;
   date?: string;
+  category?: ExpenseCategory | null;
+  payerId?: string | null;
+  participantIds?: string[] | null;
 }
 
 export default function ExpenseSheet({
@@ -86,10 +90,13 @@ export default function ExpenseSheet({
       amount: expense ? minorToInput(expense.amountMinor, expense.currency) : pf?.amountMinor != null ? minorToInput(pf.amountMinor, defaultCurrency) : '',
       currency: defaultCurrency,
       date,
-      category: (expense?.category ?? 'food') as ExpenseCategory,
-      payers: expense ? expense.payers.map((p) => p.travelerId) : [me?.id ?? travelers[0]?.id ?? ''],
+      category: (expense?.category ?? pf?.category ?? guessCategory(pf?.title ?? '') ?? 'food') as ExpenseCategory,
+      payers: expense ? expense.payers.map((p) => p.travelerId) : [pf?.payerId ?? me?.id ?? travelers[0]?.id ?? ''],
       payerValues: Object.fromEntries((expense?.payers ?? []).map((p) => [p.travelerId, minorToInput(p.amountMinor, expense!.currency)])) as Record<string, string>,
-      participants: expense ? expense.shares.map((s) => s.travelerId) : travelers.map((x) => x.id),
+      // New: the group from the prefill, else the same people as in my last expense, else everyone.
+      participants: expense
+        ? expense.shares.map((s) => s.travelerId)
+        : (pf?.participantIds?.filter((id) => travelers.some((x) => x.id === id)) ?? lastParticipants(expenses, me?.id ?? null) ?? travelers.map((x) => x.id)),
       method: (expense?.splitMethod ?? 'equal') as SplitMethod,
       values: Object.fromEntries(
         (expense?.shares ?? []).map((s) => [
@@ -110,6 +117,14 @@ export default function ExpenseSheet({
   const [linkTo, setLinkTo] = useState<string | null>(null);
   const [noLink, setNoLink] = useState<string[]>([]);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+  // The category follows the title ("Taxi" → Transport) until it is chosen by hand.
+  const [catTouched, setCatTouched] = useState(!!expense || !!prefill?.category);
+  const setTitle = (v: string) =>
+    setForm((f) => ({ ...f, title: v, category: catTouched ? f.category : (guessCategory(v) ?? f.category) }));
+  const pickCategory = (c: ExpenseCategory) => {
+    setCatTouched(true);
+    set('category', c);
+  };
   const presets = useMemo(() => splitPresets(travelers, expenses, snap!.bookings), [travelers, expenses, snap]);
   const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
@@ -295,7 +310,7 @@ export default function ExpenseSheet({
               </div>
             </div>
           )}
-          {!quick && <TextField label={t.wallet.titleField} required autoFocus={!expense} value={form.title} onChange={(e) => set('title', e.target.value)} />}
+          {!quick && <TextField label={t.wallet.titleField} required autoFocus={!expense} value={form.title} onChange={(e) => setTitle(e.target.value)} />}
           <MoneyField
             label={t.wallet.amount}
             amount={form.amount}
@@ -318,7 +333,7 @@ export default function ExpenseSheet({
               optional
               placeholder={t.wallet.quickTitlePlaceholder(t.expenseCategories[form.category])}
               value={form.title}
-              onChange={(e) => set('title', e.target.value)}
+              onChange={(e) => setTitle(e.target.value)}
             />
           )}
           {needsRate && (!quick || !rateNorm) && (
@@ -368,7 +383,7 @@ export default function ExpenseSheet({
                     key={c}
                     type="button"
                     aria-pressed={form.category === c}
-                    onClick={() => set('category', c)}
+                    onClick={() => pickCategory(c)}
                     className={cx('inline-flex h-10 shrink-0 items-center rounded-full border px-3.5 text-[14px] font-semibold', form.category === c ? 'border-transparent bg-text text-bg' : 'border-line bg-surface text-text-2')}
                   >
                     {t.expenseCategories[c]}
@@ -380,7 +395,7 @@ export default function ExpenseSheet({
           <div className={cx('grid gap-3 [&>*]:min-w-0', quick ? 'grid-cols-1' : 'grid-cols-2')}>
             <TextField label={t.wallet.date} type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
             {!quick && (
-              <SelectField label={t.wallet.category} value={form.category} onChange={(e) => set('category', e.target.value as ExpenseCategory)}>
+              <SelectField label={t.wallet.category} value={form.category} onChange={(e) => pickCategory(e.target.value as ExpenseCategory)}>
                 {EXPENSE_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {t.expenseCategories[c]}

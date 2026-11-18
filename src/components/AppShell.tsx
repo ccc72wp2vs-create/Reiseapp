@@ -1,4 +1,4 @@
-import { CalendarDays, Compass, Home, LayoutGrid, Wallet } from 'lucide-react';
+import { CalendarDays, Home, LayoutGrid, Plus, Wallet } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { AssistantButton } from '../features/assistant/AssistantButton';
@@ -9,12 +9,13 @@ import { t } from '../i18n';
 import { useAuth } from '../lib/auth';
 import { getSelectedTripId, tripsList, tripStore, useTrips, useTripState } from '../lib/store';
 import { SyncIndicator } from './SyncStatus';
+import { QuickAddButton } from './QuickAdd';
 import { cx } from './ui';
 
 const NAV = [
   { to: '/', label: t.nav.home, icon: Home, end: true },
   { to: '/plan', label: t.nav.plan, icon: CalendarDays },
-  { to: '/entdecken', label: t.nav.explore, icon: Compass },
+  { to: '+', label: '', icon: Plus },
   { to: '/kasse', label: t.nav.wallet, icon: Wallet },
   { to: '/mehr', label: t.nav.more, icon: LayoutGrid },
 ];
@@ -77,7 +78,12 @@ function BottomNav() {
   return (
     <nav aria-label={t.nav.main} className="glass fixed inset-x-0 bottom-0 z-40 border-t border-line">
       <ul className="mx-auto flex max-w-3xl items-stretch justify-around px-2 pt-1.5" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}>
-        {NAV.map(({ to, label, icon: Icon, end }) => (
+        {NAV.map(({ to, label, icon: Icon, end }) =>
+          to === '+' ? (
+            <li key="plus" className="flex flex-1 items-start justify-center">
+              <QuickAddButton />
+            </li>
+          ) : (
           <li key={to} className="flex-1">
             <NavLink
               to={to}
@@ -99,7 +105,8 @@ function BottomNav() {
               )}
             </NavLink>
           </li>
-        ))}
+          ),
+        )}
       </ul>
     </nav>
   );

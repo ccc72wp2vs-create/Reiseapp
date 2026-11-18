@@ -1,4 +1,4 @@
-import { Briefcase, ChevronRight, CloudOff, Download, FlaskConical, Languages, Luggage, Map, Settings, Siren, Receipt, Smartphone, Sparkles, Ticket, Trash2, Users } from 'lucide-react';
+import { Briefcase, ChevronRight, CloudOff, Download, FlaskConical, Languages, Lightbulb, Luggage, Map, Settings, Siren, Receipt, Smartphone, Sparkles, Ticket, Trash2, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { PageHeader, useTrip } from '../../components/AppShell';
@@ -59,6 +59,7 @@ export default function MorePage() {
           <Row to="/reisen" icon={<Briefcase size={19} />} label={t.trips.title} hint={snap?.trip.name} />
           <Row to="/reise" icon={<Users size={19} />} label={t.trips.overview} hint={`${t.destinations.title} · ${t.travelers.title}`} />
           <Row to="/route" icon={<Map size={19} />} label={t.trips.route} />
+          <Row to="/plan?ansicht=ideen" icon={<Lightbulb size={19} />} label={t.ideas.moreRow} hint={t.ideas.moreHint} />
           <Row to="/buchungen" icon={<Ticket size={19} />} label={t.bookings.title} hint={snap ? `${snap.bookings.length}` : undefined} />
           <Row to="/rueckblick" icon={<Sparkles size={19} />} label={t.recap.title} hint={t.recap.share} />
           <Row to="/abrechnung" icon={<Receipt size={19} />} label={t.report.title} hint={t.report.hintRow} />

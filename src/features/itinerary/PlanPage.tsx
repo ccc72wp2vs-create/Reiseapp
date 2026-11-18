@@ -1,8 +1,10 @@
-import { AlertTriangle, ArrowDown, ArrowUp, CalendarDays, Check, CloudUpload, MapPin, Navigation, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, CloudUpload, Lightbulb, MapPin, Navigation, Plus } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { bookingsOnDate, destinationForDate, destinationOn, diffDays, eachDate, overlappingActivities, todayIn } from '../../../shared/trip';
 import type { ActivityDto, TripSnapshot } from '../../../shared/types';
+import { ACTIVITY_CATEGORIES, type ActivityCategory } from '../../../shared/constants';
+import { toast } from '../../components/toast';
 import { PageHeader, useTrip } from '../../components/AppShell';
 import { moveId, SortableList } from '../../components/SortableList';
 import { BookingBadges, BookingIcon, CategoryIcon, IconTile } from '../../components/status';
@@ -14,6 +16,7 @@ import { appleMapsUrl, googleMapsUrl, hasMapTarget } from '../../lib/maps';
 import { tripStore, usePendingIds } from '../../lib/store';
 
 const ActivitySheet = lazy(() => import('./ActivitySheet'));
+const IdeasPanel = lazy(() => import('../explore/ExplorePage').then((m) => ({ default: m.IdeasPanel })));
 
 export default function PlanPage() {
   const { snap } = useTrip();
@@ -31,7 +34,7 @@ export default function PlanPage() {
 }
 
 function Plan({ snap }: { snap: TripSnapshot }) {
-  const { canEdit } = useTrip();
+
   const [params, setParams] = useSearchParams();
   const { trip, destinations, activities, bookings } = snap;
   const tz = destinations[0]?.timezone ?? trip.homeTimezone;
@@ -57,33 +60,44 @@ function Plan({ snap }: { snap: TripSnapshot }) {
   }, [selected, mode]);
 
   const select = (d: string) => setParams({ tag: d }, { replace: true });
+  const view = params.get('ansicht') === 'ideen' ? 'ideas' : 'days';
+  const setView = (v: 'days' | 'ideas') => setParams(v === 'ideas' ? { ansicht: 'ideen' } : { tag: selected }, { replace: true });
 
   return (
     <div>
       <PageHeader
         title={t.plan.title}
         eyebrow={trip.name}
-        action={
-          canEdit && (
-            <IconButton label={t.plan.addActivity} variant="primary" onClick={() => setCreating(true)}>
-              <Plus size={22} />
-            </IconButton>
-          )
-        }
       >
         <Segmented
           className="mt-5"
-          value={mode}
-          onChange={setMode}
+          value={view}
+          onChange={setView}
           label={t.plan.title}
           options={[
-            { value: 'day', label: t.plan.day(days.indexOf(selected) + 1) },
-            { value: 'all', label: t.common.all },
+            { value: 'days', label: <><CalendarDays size={15} /> {t.ideas.tabDays}</> },
+            { value: 'ideas', label: <><Lightbulb size={15} /> {t.ideas.tabIdeas}</> },
           ]}
         />
+        {view === 'days' && (
+          <Segmented
+            className="mt-3"
+            value={mode}
+            onChange={setMode}
+            label={t.plan.title}
+            options={[
+              { value: 'day', label: t.plan.day(days.indexOf(selected) + 1) },
+              { value: 'all', label: t.common.all },
+            ]}
+          />
+        )}
       </PageHeader>
 
-      {mode === 'day' ? (
+      {view === 'ideas' ? (
+        <Suspense fallback={<Skeleton className="mx-4 mt-4 h-40" />}>
+          <IdeasPanel initialSource={params.get('nah') ? 'nearby' : 'mine'} />
+        </Suspense>
+      ) : mode === 'day' ? (
         <>
           <div ref={stripRef} className="no-scrollbar relative mt-4 flex snap-x gap-2 overflow-x-auto px-safe pb-2" role="tablist" aria-label={t.plan.title}>
             {days.map((d, i) => {
@@ -177,7 +191,7 @@ function DayView({
           <ul className="space-y-2.5">
             {dayBookings.map((b) => (
               <li key={b.id}>
-                <Link to="/buchungen" className="flex items-start gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
+                <Link to={`/buchungen?id=${b.id}`} className="flex items-start gap-3 rounded-[1.25rem] border border-line bg-surface p-4">
                   <IconTile tone={b.bookingStatus === 'booked' ? 'accent' : 'warn'}>
                     <BookingIcon type={b.type} />
                   </IconTile>
@@ -196,6 +210,8 @@ function DayView({
           </ul>
         </div>
       )}
+
+      {dest && <DayIdeas snap={snap} date={date} destId={dest.id} destName={dest.name} canEdit={canEdit} />}
 
       <div className="mt-6">
         {dayActs.length === 0 ? (
@@ -379,5 +395,65 @@ function AllDays({ snap, days, today, onSelect }: { snap: TripSnapshot; days: st
         );
       })}
     </ol>
+  );
+}
+
+/** Saved places of the day's stop that are not planned yet – one tap plans them for this day. */
+function DayIdeas({ snap, date, destId, destName, canEdit }: { snap: TripSnapshot; date: string; destId: string; destName: string; canEdit: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ideas = snap.places
+    .filter((p) => p.destinationId === destId && !snap.activities.some((a) => a.placeId === p.id))
+    .sort((a, b) => Number(b.favorite) - Number(a.favorite) || (b.votes?.length ?? 0) - (a.votes?.length ?? 0) || a.name.localeCompare(b.name));
+  if (!ideas.length) return null;
+  return (
+    <div className="mt-5 rounded-[1.25rem] border border-accent/25 bg-accent-soft">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex w-full items-center gap-2.5 p-3.5 text-left">
+        <Lightbulb size={18} className="shrink-0 text-accent" />
+        <span className="flex-1 text-[14px] font-semibold">{t.ideas.dayRow(ideas.length, destName)}</span>
+        <ChevronDown size={18} className={cx('shrink-0 text-text-3 transition', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <ul className="space-y-1.5 px-3 pb-3">
+          {ideas.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 rounded-2xl bg-surface p-2.5 pl-3">
+              <CategoryIcon category={p.category} size={16} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-semibold">
+                  {p.favorite ? '★ ' : ''}
+                  {p.name}
+                </span>
+                {p.notes && <span className="block truncate text-[12px] text-text-3">{p.notes}</span>}
+              </span>
+              {canEdit && (
+                <IconButton
+                  label={`${t.ideas.addToDay}: ${p.name}`}
+                  className="h-9 w-9"
+                  onClick={() => {
+                    tripStore.activities.create({
+                      title: p.name,
+                      date,
+                      category: (ACTIVITY_CATEGORIES as readonly string[]).includes(p.category) ? (p.category as ActivityCategory) : 'sightseeing',
+                      placeId: p.id,
+                      locationName: p.address ?? p.name,
+                      lat: p.lat,
+                      lng: p.lng,
+                      googlePlaceId: p.googlePlaceId ?? null,
+                    });
+                    toast(t.ideas.added(p.name));
+                  }}
+                >
+                  <Plus size={18} />
+                </IconButton>
+              )}
+            </li>
+          ))}
+          <li className="pt-1 text-center">
+            <Link to="/plan?ansicht=ideen" className="text-[13px] font-semibold text-accent">
+              {t.ideas.allIdeas}
+            </Link>
+          </li>
+        </ul>
+      )}
+    </div>
   );
 }

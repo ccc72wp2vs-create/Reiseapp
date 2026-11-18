@@ -106,9 +106,6 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
               <IconButton label={t.documents.importTitle} disabled={!online} onClick={() => setImporting(true)}>
                 <FileUp size={20} />
               </IconButton>
-              <IconButton label={t.bookings.add} variant="primary" disabled={!online} onClick={() => setCreating(true)}>
-                <Plus size={22} />
-              </IconButton>
             </>
           )
         }

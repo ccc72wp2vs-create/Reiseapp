@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowRightLeft, Calculator, ScanLine, ChevronRight, CircleHelp as HelpCircle, Coins, FileUp, HandCoins, Lock, Plus, Receipt, Search, Send, Trash2, Users } from 'lucide-react';
+import { ArrowRight, ArrowRightLeft, Calculator, ScanLine, ChevronRight, CircleHelp as HelpCircle, Coins, FileUp, HandCoins, Lock, Receipt, Search, Send, Trash2, Users } from 'lucide-react';
 import type { PayRequest } from './PaySheet';
 import { storedRateFor } from '../../lib/rates';
 import { BudgetCard } from './BudgetCard';
@@ -135,13 +135,6 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       <PageHeader
         title={t.wallet.title}
         eyebrow={trip.name}
-        action={
-          canEdit && (
-            <IconButton label={t.wallet.addExpense} variant="primary" disabled={!online} onClick={() => setSheet({ kind: 'expense' })}>
-              <Plus size={22} />
-            </IconButton>
-          )
-        }
       >
         <div className="no-scrollbar -mx-1 mt-5 overflow-x-auto px-1">
           <Segmented

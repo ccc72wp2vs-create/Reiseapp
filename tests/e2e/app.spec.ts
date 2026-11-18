@@ -68,7 +68,8 @@ test('dashboard shows the current trip state and transfer reminder', async ({ pa
   await expect(page.getByText('3.831,00 €').first()).toBeVisible();
   await expect(page.getByText('0,00 €').first()).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Hauptnavigation' });
-  for (const label of ['Start', 'Plan', 'Entdecken', 'Kasse', 'Mehr']) await expect(nav.getByRole('link', { name: label })).toBeVisible();
+  for (const label of ['Start', 'Plan', 'Kasse', 'Mehr']) await expect(nav.getByRole('link', { name: label })).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'Hinzufügen' })).toBeVisible();
 });
 
 test('bookings keep booked, paid, planned and unclear amounts apart', async ({ page }) => {
@@ -128,7 +129,8 @@ test('offline editing is queued and synchronised', async ({ page, context }, inf
 
 test('wallet: equal split expense updates balances', async ({ page }, info) => {
   await page.goto('/kasse');
-  await page.getByRole('button', { name: 'Ausgabe erfassen' }).first().click();
+  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+  await page.getByRole('button', { name: /^Ausgabe erfassen/ }).click();
   await page.getByLabel('Wofür?').fill(`Abendessen ${info.project.name}`);
   await page.getByLabel('Betrag').fill('40');
   await page.getByLabel('Währung').selectOption('EUR');
@@ -338,7 +340,8 @@ test('booking import from pasted e-mail text (analysed, not stored)', async ({ p
 test('paid booking goes straight into the wallet; price change updates the expense', async ({ page }, info) => {
   test.skip(info.project.name !== 'iphone', 'changes shared data – run once');
   await page.goto('/buchungen');
-  await page.getByRole('button', { name: 'Buchung hinzufügen' }).click();
+  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+  await page.getByRole('button', { name: /^Buchung hinzufügen/ }).click();
   await page.getByLabel('Titel').fill('Kochkurs Krabi');
   await page.getByLabel('Art', { exact: true }).selectOption('activity');
   await page.getByLabel('Gesamtbetrag').fill('100');
