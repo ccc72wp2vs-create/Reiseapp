@@ -9,12 +9,13 @@ describe('changelog', () => {
     expect(compareVersions('2.2', '2.10')).toBe(-1);
   });
   it('shows only what is newer than last seen', () => {
-    expect(unseenChanges('2.13.0', '2.15.0').map((e) => e.version)).toEqual(['2.15.0', '2.14.0']);
+    expect(unseenChanges('2.11.0', '2.15.0').map((e) => e.version)).toEqual(['2.13.0']);
+    // An update without a notable feature shows nothing.
+    expect(unseenChanges('2.13.0', '2.15.0')).toEqual([]);
     expect(unseenChanges(pkg.version, pkg.version)).toEqual([]);
   });
-  it('has an entry for the current feature version (newest first; patch fixes need none)', () => {
-    const minor = (v: string) => v.split('.').slice(0, 2).join('.');
-    expect(minor(CHANGELOG[0].version)).toBe(minor(pkg.version));
+  it('never announces a version that is not released yet; newest first', () => {
     expect(compareVersions(CHANGELOG[0].version, pkg.version)).toBeLessThanOrEqual(0);
+    for (let i = 1; i < CHANGELOG.length; i++) expect(compareVersions(CHANGELOG[i - 1].version, CHANGELOG[i].version)).toBe(1);
   });
 });

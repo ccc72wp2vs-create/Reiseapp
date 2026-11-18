@@ -1,6 +1,7 @@
 /**
- * "Neu in TRAVIO": short release notes shown once after an update. Only the
- * entries newer than what this device has already seen are shown.
+ * "Neu in TRAVIO": shown once after an update – but ONLY for new, genuinely
+ * useful features. Fixes, layout tweaks and small polish get no entry, and
+ * an update without an entry shows no window at all.
  * Newest first. Keep each item to one or two short sentences.
  */
 export interface ChangeItem {
@@ -19,36 +20,15 @@ export interface ChangeEntry {
 
 export const CHANGELOG: ChangeEntry[] = [
   {
-    version: '2.15.0',
-    date: '2026-11-18',
-    items: [
-      { icon: 'sparkles', title: 'Neuigkeiten nach Updates', text: 'Dieses Fenster zeigt nach jedem Update kurz, was neu ist. Später nachlesen: Mehr → Neuigkeiten.', to: '/mehr' },
-    ],
-  },
-  {
-    version: '2.14.0',
-    date: '2026-11-18',
-    items: [
-      { icon: 'language', title: 'Sprachhilfe oben', text: 'Der Knopf „Thai“ sitzt jetzt oben rechts auf der Startseite – ein Tipp, fertig.', to: '/sprache' },
-    ],
-  },
-  {
     version: '2.13.0',
-    date: '2026-11-18',
-    items: [
-      { icon: 'bell', title: 'Push-Benachrichtigungen', text: 'Check-in offen, morgen Reisetag, Restzahlung fällig, neue Ausgabe für dich. Einschalten unter Mehr → Einstellungen (iPhone: nur in der installierten App).', to: '/einstellungen' },
-    ],
-  },
-  {
-    version: '2.12.0',
     date: '2026-11-18',
     items: [
       { icon: 'plus', title: 'Ein „+“ für alles', text: 'Unten in der Mitte: Ausgabe, Beleg aufteilen, Buchung, Aktivität, Ort – plus „Nochmal erfassen“ für wiederkehrende Ausgaben.' },
       { icon: 'receipt', title: 'Ausgabe als Satz', text: 'Im „+“ einfach tippen, z. B. „Taxi 450 Baht, Lilli hat bezahlt, für alle“ – das Formular ist dann ausgefüllt.' },
       { icon: 'lightbulb', title: 'Ideen im Plan', text: '„Entdecken“ steckt jetzt im Plan unter „Ideen“. Unter jedem Tag stehen die gemerkten Orte der Station zum Einplanen.', to: '/plan?ansicht=ideen' },
+      { icon: 'bell', title: 'Push-Benachrichtigungen', text: 'Check-in offen, morgen Reisetag, Restzahlung fällig, neue Ausgabe für dich. Einschalten unter Mehr → Einstellungen (iPhone: nur in der installierten App).', to: '/einstellungen' },
       { icon: 'undo', title: 'Rückgängig', text: 'Nach dem Löschen oder Ändern ein paar Sekunden lang „Rückgängig“ – nichts geht mehr aus Versehen verloren.' },
-      { icon: 'wallet', title: 'Wer zahlt als Nächstes?', text: 'Die Kasse zeigt, welches Paar zuletzt am wenigsten vorgestreckt hat.', to: '/kasse' },
-      { icon: 'route', title: 'Direkt ins richtige Feld', text: 'Ein Tipp auf „Uhrzeit offen“ öffnet die Buchung mit dem Uhrzeitfeld.' },
+      { icon: 'wallet', title: 'Wer zahlt als Nächstes?', text: 'Die Kasse zeigt, welches Paar bisher am wenigsten vorgestreckt hat.', to: '/kasse' },
     ],
   },
 ];
