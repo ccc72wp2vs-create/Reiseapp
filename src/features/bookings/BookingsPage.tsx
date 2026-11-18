@@ -21,6 +21,8 @@ import { suggestedRate } from '../wallet/ExpenseSheet';
 
 const BookingSheet = lazy(() => import('./BookingSheet'));
 const ClarifySheet = lazy(() => import('./ClarifySheet'));
+const BookingDepositSheet = lazy(() => import('./BookingDepositSheet'));
+import { DepositLine } from './BookingDepositSheet';
 const DocumentImportSheet = lazy(() => import('../documents/DocumentImportSheet').then((m) => ({ default: m.DocumentImportSheet })));
 
 export default function BookingsPage() {
@@ -63,6 +65,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [toWallet, setToWallet] = useState<BookingDto | null>(null);
+  const [depositFor, setDepositFor] = useState<BookingDto | null>(null);
   const { trip, bookings, destinations } = snap;
   const today = todayIn(destinations[0]?.timezone ?? trip.homeTimezone);
   const totals = summarizeBookingCosts(bookings);
@@ -177,7 +180,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
               groups.map((g) => (
                 <section key={g.key}>
                   <SectionTitle>{g.label}</SectionTitle>
-                  <Timeline items={g.items} snap={snap} onEdit={setEditing} onWallet={setToWallet} muted={g.past} />
+                  <Timeline items={g.items} snap={snap} onEdit={setEditing} onWallet={setToWallet} onDeposit={setDepositFor} muted={g.past} />
                 </section>
               ))
             )}
@@ -191,6 +194,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
         {creating && <BookingSheet open onClose={() => setCreating(false)} />}
         {importing && <DocumentImportSheet onClose={() => setImporting(false)} />}
         {editing && <BookingSheet key={editing.id} open booking={editing} onClose={() => setEditing(null)} />}
+        {depositFor && <BookingDepositSheet booking={depositFor} snap={snap} onClose={() => setDepositFor(null)} />}
         {clarifying && <ClarifySheet snap={snap} today={today} startId={clarifying.startId} onClose={() => setClarifying(null)} />}
       </Suspense>
       {toWallet && <ToWalletSheet booking={toWallet} snap={snap} onClose={() => setToWallet(null)} />}
@@ -203,12 +207,14 @@ function Timeline({
   snap,
   onEdit,
   onWallet,
+  onDeposit,
   muted,
 }: {
   items: BookingDto[];
   snap: TripSnapshot;
   onEdit: (b: BookingDto) => void;
   onWallet: (b: BookingDto) => void;
+  onDeposit: (b: BookingDto) => void;
   muted?: boolean;
 }) {
   const { canEdit } = useTrip();
@@ -316,6 +322,12 @@ function Timeline({
                 </div>
               )}
               {b.notes && <p className="mt-3 text-[13px] leading-relaxed text-text-2">{b.notes}</p>}
+              <DepositLine booking={b} snap={snap} canEdit={canEdit} />
+              {canEdit && !b.expenseId && !b.depositExpenseId && b.costKind === 'actual' && b.priceMinor != null && b.currency && b.paymentStatus !== 'paid' && b.bookingStatus !== 'cancelled' && (
+                <Button size="sm" variant="ghost" className="mt-2" disabled={!online} onClick={() => onDeposit(b)}>
+                  + {t.deposit.button}
+                </Button>
+              )}
               {b.expenseId ? (
                 <div className="mt-3">
                   <Badge tone="success" icon={<Wallet size={12} />}>

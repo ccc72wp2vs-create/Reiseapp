@@ -321,6 +321,13 @@ export const bookingToExpenseSchema = z.object({
   date: dateStr.optional(),
   fxRate: z.string().max(40).optional(),
 });
+export const bookingDepositSchema = z.object({
+  amountMinor: z.number().int().min(1).max(1e13),
+  paidByTravelerId: id,
+  participantIds: z.array(id).min(1).max(50),
+  date: dateStr,
+  fxRate: z.string().max(40).optional(),
+});
 export const bookingSyncExpenseSchema = z.object({ fxRate: z.string().max(40).optional() });
 
 // ---------------------------------------------------------------------------

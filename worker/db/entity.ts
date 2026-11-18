@@ -341,8 +341,9 @@ export const bookingSpec: EntitySpec = {
     flightNumber: f('flight_number'),
     checkinDoneAt: f('checkin_done_at'),
   },
-  readonly: { createdBy: f('created_by'), expenseId: f('expense_id') },
-  selectFrom: 'SELECT bookings.*, (SELECT e.id FROM expenses e WHERE e.booking_id = bookings.id) AS expense_id FROM bookings',
+  readonly: { createdBy: f('created_by'), expenseId: f('expense_id'), depositExpenseId: f('deposit_expense_id'), depositMinor: f('deposit_minor', 'int') },
+  selectFrom:
+    'SELECT bookings.*, (SELECT e.id FROM expenses e WHERE e.booking_id = bookings.id) AS expense_id, (SELECT d.amount_minor FROM expenses d WHERE d.id = bookings.deposit_expense_id AND d.currency = bookings.currency) AS deposit_minor FROM bookings',
   refs: {
     destinationId: 'destinations',
     fromDestinationId: 'destinations',

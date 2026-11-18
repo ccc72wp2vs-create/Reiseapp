@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { costBucketItems, personCostOverview, tripCostOverview, type CostBucket } from '../../../shared/costs';
+import { costBucketItems, personCostOverview, remainingMinor, tripCostOverview, type CostBucket } from '../../../shared/costs';
 import {
   addDaysToDate,
   bookingSortKey,
@@ -320,6 +320,15 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         {phase.phase !== 'after' && <CheckinReminders snap={snap} canEdit={canEdit} />}
         {tday && <TravelDayCard day={tday} />}
         <MissingWalletHint snap={snap} />
+        {bookings
+          .filter((b) => b.depositMinor && !b.expenseId && b.paymentStatus !== 'paid' && b.bookingStatus !== 'cancelled' && (!b.startDate || b.startDate <= addDaysToDate(today, 1)))
+          .map((b) => (
+            <Link key={`due-${b.id}`} to="/buchungen" className="mt-3 flex items-center gap-3 rounded-[1.25rem] border border-warn/35 bg-warn-soft p-4">
+              <Receipt size={20} className="shrink-0 text-warn" />
+              <span className="flex-1 text-[14px] font-semibold">{t.deposit.due(b.title, money(remainingMinor(b), b.currency ?? trip.baseCurrency))}</span>
+              <ArrowRight size={18} className="shrink-0 text-warn" />
+            </Link>
+          ))}
         {((phase.phase === 'during' && phase.daysRemaining <= 3) || phase.phase === 'after') && snap.expenses.length > 0 && (
           <Link to="/abrechnung" className="mt-3 flex items-center gap-3 rounded-[1.25rem] border border-accent/30 bg-accent-soft p-4">
             <Receipt size={20} className="shrink-0 text-accent" />

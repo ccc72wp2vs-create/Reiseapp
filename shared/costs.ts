@@ -30,7 +30,15 @@ export interface CostInfo {
 type CostFields = Pick<
   BookingDto,
   'priceMinor' | 'currency' | 'personsCount' | 'unitPriceMinor' | 'costKind' | 'bookingStatus' | 'paymentStatus' | 'clarificationNote'
->;
+> & { depositMinor?: number | null };
+
+/**
+ * What of a booking is not yet in the wallet: the price minus a down payment
+ * that was already recorded as its own expense (Anzahlung).
+ */
+export function remainingMinor(b: Pick<BookingDto, 'priceMinor'> & { depositMinor?: number | null }): number {
+  return Math.max(0, (b.priceMinor ?? 0) - (b.depositMinor ?? 0));
+}
 
 export function costInfo(b: CostFields): CostInfo {
   const hasPrice = b.priceMinor != null && !!b.currency;
@@ -90,7 +98,11 @@ export function summarizeBookingCosts(bookings: readonly CostFields[]): Currency
     else if (b.bookingStatus === 'booked') {
       t.committedMinor += b.priceMinor;
       if (b.paymentStatus === 'paid') t.paidMinor += b.priceMinor;
-      else t.openMinor += b.priceMinor;
+      else {
+        // A recorded down payment is paid, only the rest is open.
+        t.paidMinor += b.priceMinor - remainingMinor(b);
+        t.openMinor += remainingMinor(b);
+      }
     } else {
       // concrete price but not booked yet → still only planned
       t.estimatedMinor += b.priceMinor;
@@ -136,13 +148,14 @@ export function tripCostOverview(
   const other = new Map<string, number>();
   for (const b of bookings) {
     if (b.priceMinor == null || !b.currency || b.bookingStatus === 'cancelled' || b.expenseId) continue;
+    const rest = remainingMinor(b);
     if (b.currency !== baseCurrency) {
-      other.set(b.currency, (other.get(b.currency) ?? 0) + b.priceMinor);
+      other.set(b.currency, (other.get(b.currency) ?? 0) + rest);
       continue;
     }
-    if (b.costKind === 'budget_cap') o.budgetCapMinor += b.priceMinor;
-    else if (b.costKind === 'estimate' || b.bookingStatus !== 'booked') o.plannedMinor += b.priceMinor;
-    else o.bookedNotInWalletMinor += b.priceMinor;
+    if (b.costKind === 'budget_cap') o.budgetCapMinor += rest;
+    else if (b.costKind === 'estimate' || b.bookingStatus !== 'booked') o.plannedMinor += rest;
+    else o.bookedNotInWalletMinor += rest;
   }
   o.projectedMinor = o.spentMinor + o.bookedNotInWalletMinor + o.plannedMinor + o.budgetCapMinor;
   o.otherCurrencies = [...other].map(([currency, minor]) => ({ currency, minor }));
@@ -196,11 +209,13 @@ export function personCostOverview(
   const other = new Map<string, number>();
   for (const b of bookings) {
     if (b.priceMinor == null || !b.currency || b.bookingStatus === 'cancelled' || b.expenseId) continue;
+    const rest = remainingMinor(b);
+    if (!rest) continue;
     if (!b.travelerIds.length) {
-      if (b.currency === baseCurrency) o.unassignedMinor += b.priceMinor;
+      if (b.currency === baseCurrency) o.unassignedMinor += rest;
       continue;
     }
-    const parts = allocate(b.priceMinor, b.travelerIds.map(() => 1));
+    const parts = allocate(rest, b.travelerIds.map(() => 1));
     const mine = b.travelerIds.reduce((a, id, i) => a + (sel.has(id) ? parts[i] : 0), 0);
     if (!mine) continue;
     if (b.currency !== baseCurrency) {
@@ -238,10 +253,11 @@ export function costBucketItems(
   const out: CostBucketItem[] = [];
   for (const b of bookings) {
     if (b.priceMinor == null || b.currency !== baseCurrency || b.bookingStatus === 'cancelled' || b.expenseId) continue;
-    let amount = b.priceMinor;
+    let amount = remainingMinor(b);
+    if (!amount) continue;
     if (sel) {
       if (!b.travelerIds.length) continue;
-      const parts = allocate(b.priceMinor, b.travelerIds.map(() => 1));
+      const parts = allocate(amount, b.travelerIds.map(() => 1));
       amount = b.travelerIds.reduce((a, id, i) => a + (sel.has(id) ? parts[i] : 0), 0);
       if (!amount) continue;
     }

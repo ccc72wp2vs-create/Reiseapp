@@ -9,6 +9,7 @@ import {
   activityUpdateSchema,
   bookingCreateSchema,
   bookingToExpenseSchema,
+  bookingDepositSchema,
   bookingSyncExpenseSchema,
   bookingUpdateSchema,
   depositCreateSchema,
@@ -34,6 +35,7 @@ import {
 } from '../../shared/schemas';
 import { computeBalances, suggestSettlements } from '../../shared/finance';
 import { allocate } from '../../shared/money';
+import { remainingMinor } from '../../shared/costs';
 import type { ExpenseCategory } from '../../shared/constants';
 import type { ActivityDto, BookingDto } from '../../shared/types';
 import {
@@ -49,6 +51,7 @@ import {
   type UpdateResult,
 } from '../db/entity';
 import { ApiError } from '../lib/errors';
+import { nowIso } from '../lib/util';
 import { currentUser, loadTripAccess, parseJson, requireRole } from '../middleware/core';
 import * as packing from '../services/packing';
 import * as plan from '../services/plan';
@@ -223,21 +226,24 @@ r.post('/:tripId/bookings/:id/expense', async (c) => {
   if (b.paymentStatus !== 'paid') {
     throw new ApiError('validation_failed', 'Bitte die Buchung zuerst als „bezahlt“ markieren');
   }
+  const rest = remainingMinor(b);
+  if (rest <= 0) throw new ApiError('validation_failed', 'Die Anzahlung deckt bereits den ganzen Preis.');
   const expense = await wallet.createExpense(
     c.env.DB,
     t.tripId,
     t.baseCurrency,
     currentUser(c).id,
     {
-      title: b.title,
-      amountMinor: b.priceMinor,
+      // With a recorded down payment only the rest goes to the wallet now.
+      title: b.depositMinor ? `${b.title} – Restzahlung` : b.title,
+      amountMinor: rest,
       currency: b.currency,
       date: input.date ?? b.startDate ?? new Date().toISOString().slice(0, 10),
       category: BOOKING_TO_EXPENSE_CATEGORY[b.type],
       paidByTravelerId: input.eachPaidOwn ? input.participantIds[0] : input.paidByTravelerId,
       // "Jede:r hat selbst bezahlt": every participant paid exactly their equal share.
       payers: input.eachPaidOwn
-        ? allocate(b.priceMinor, input.participantIds.map(() => 1)).map((amountMinor, i) => ({ travelerId: input.participantIds[i], amountMinor }))
+        ? allocate(rest, input.participantIds.map(() => 1)).map((amountMinor, i) => ({ travelerId: input.participantIds[i], amountMinor }))
         : undefined,
       splitMethod: 'equal',
       splits: input.participantIds.map((travelerId) => ({ travelerId })),
@@ -250,6 +256,57 @@ r.post('/:tripId/bookings/:id/expense', async (c) => {
   return c.json({ expense }, 201);
 });
 
+/**
+ * Anzahlung: records a down payment as its own wallet expense (who paid, for
+ * whom) and links it to the booking. The rest stays open until the booking is
+ * marked as paid – then only the remaining amount goes to the wallet.
+ */
+r.post('/:tripId/bookings/:id/deposit', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const input = await parseJson(c, bookingDepositSchema);
+  const b = await getEntity<BookingDto>(c.env.DB, bookingSpec, t.tripId, c.req.param('id'));
+  if (!b) throw new ApiError('not_found', 'Buchung nicht gefunden');
+  if (b.expenseId) throw new ApiError('conflict', 'Diese Buchung ist bereits vollständig in der Reisekasse.');
+  if (b.depositExpenseId) throw new ApiError('conflict', 'Für diese Buchung ist schon eine Anzahlung erfasst.');
+  if (b.priceMinor == null || !b.currency) throw new ApiError('validation_failed', 'Bitte zuerst den Gesamtpreis eintragen.');
+  if (input.amountMinor >= b.priceMinor) throw new ApiError('validation_failed', 'Die Anzahlung muss kleiner als der Gesamtpreis sein.');
+  const expense = await wallet.createExpense(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, {
+    title: `${b.title} – Anzahlung`,
+    amountMinor: input.amountMinor,
+    currency: b.currency,
+    date: input.date,
+    category: BOOKING_TO_EXPENSE_CATEGORY[b.type],
+    paidByTravelerId: input.paidByTravelerId,
+    splitMethod: 'equal',
+    splits: input.participantIds.map((travelerId) => ({ travelerId })),
+    fxRate: input.fxRate,
+    fxSource: 'manual',
+    notes: 'Anzahlung zur Buchung',
+  });
+  await c.env.DB.prepare(
+    "UPDATE bookings SET deposit_expense_id = ?, payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'partial' END, version = version + 1, updated_at = ? WHERE id = ? AND trip_id = ?",
+  )
+    .bind(expense.id, nowIso(), b.id, t.tripId)
+    .run();
+  return c.json({ expense }, 201);
+});
+
+/** Removes a recorded down payment (and its wallet expense). */
+r.delete('/:tripId/bookings/:id/deposit', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const b = await getEntity<BookingDto>(c.env.DB, bookingSpec, t.tripId, c.req.param('id'));
+  if (!b?.depositExpenseId) throw new ApiError('not_found', 'Keine Anzahlung erfasst');
+  await c.env.DB.prepare(
+    "UPDATE bookings SET deposit_expense_id = NULL, payment_status = CASE WHEN payment_status = 'partial' THEN 'unpaid' ELSE payment_status END, version = version + 1, updated_at = ? WHERE id = ? AND trip_id = ?",
+  )
+    .bind(nowIso(), b.id, t.tripId)
+    .run();
+  await wallet.deleteExpense(c.env.DB, t.tripId, b.depositExpenseId);
+  return c.json({ ok: true });
+});
+
 /** Booking price changed after it was transferred: update the linked expense to match. */
 r.post('/:tripId/bookings/:id/sync-expense', async (c) => {
   requireRole(c, 'editor');
@@ -259,7 +316,7 @@ r.post('/:tripId/bookings/:id/sync-expense', async (c) => {
   if (!b) throw new ApiError('not_found', 'Buchung nicht gefunden');
   if (!b.expenseId) throw new ApiError('validation_failed', 'Die Buchung ist nicht in der Reisekasse erfasst');
   if (b.priceMinor == null || !b.currency) throw new ApiError('validation_failed', 'Die Buchung hat keinen Preis');
-  const expense = await wallet.syncExpenseAmount(c.env.DB, t.tripId, t.baseCurrency, b.expenseId, b.priceMinor, b.currency, input.fxRate);
+  const expense = await wallet.syncExpenseAmount(c.env.DB, t.tripId, t.baseCurrency, b.expenseId, remainingMinor(b), b.currency, input.fxRate);
   return c.json({ expense });
 });
 

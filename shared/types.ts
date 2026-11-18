@@ -182,6 +182,10 @@ export interface BookingDto extends Versioned {
   flightNumber?: string | null;
   /** When online check-in was marked as done (ISO timestamp). */
   checkinDoneAt?: string | null;
+  /** Down payment recorded as its own wallet expense (Anzahlung), if any. */
+  depositExpenseId?: string | null;
+  /** Amount of that down payment (booking currency). */
+  depositMinor?: number | null;
   /** Travelers this booking applies to (empty = not assigned). */
   travelerIds: string[];
   createdBy: string | null;
