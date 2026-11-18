@@ -59,6 +59,8 @@ test('dashboard shows the current trip state and transfer reminder', async ({ pa
   await td.getByRole('link', { name: /^Abfahrt\s/ }).click();
   await expect(page).toHaveURL(/\/buchungen/);
   await expect(page.getByRole('dialog')).toBeVisible();
+  // "Uhrzeit offen" jumps straight into the time field.
+  await expect(page.locator('[data-field="startTime"]')).toBeFocused();
   await page.goto('/');
   await expect(page.getByText('Transfer Koh Lanta → Krabi noch nicht bestätigt.')).toBeVisible();
   // Booked costs are not shown as spent money (costs section starts collapsed: one line)

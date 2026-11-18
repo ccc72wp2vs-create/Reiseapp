@@ -1,5 +1,5 @@
 import { CalendarCheck, CalendarX, DoorOpen, Flag, KeyRound, Lock, Users, PlaneLanding, PlaneTakeoff, Ship, Trash2, Undo2, type LucideIcon } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   BOOKING_STATUSES,
   BOOKING_TYPES,
@@ -55,10 +55,13 @@ export default function BookingSheet({
   booking,
   prefill,
   onSaved,
+  focusField,
 }: {
   open: boolean;
   onClose: () => void;
   booking?: BookingDto | null;
+  /** Field to jump to when opened from a hint (e.g. "Uhrzeit offen"). */
+  focusField?: 'startTime' | 'endTime' | 'bookingStatus' | null;
   /** Values for a new booking, e.g. recognised from a receipt. */
   prefill?: BookingPrefill;
   onSaved?: (booking: BookingDto) => void;
@@ -118,6 +121,19 @@ export default function BookingSheet({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  // Opened from a hint: scroll to the field, focus it and highlight it briefly.
+  useEffect(() => {
+    if (!focusField || !open) return;
+    const id = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${focusField}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.focus({ preventScroll: true });
+      el.classList.add('ring-4', 'ring-accent/50');
+      window.setTimeout(() => el.classList.remove('ring-4', 'ring-accent/50'), 2200);
+    }, 350);
+    return () => window.clearTimeout(id);
+  }, [focusField, open]);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const isTransport = TRANSPORT_BOOKING_TYPES.includes(form.type);
   const L = PHASE_LABELS[form.type];
@@ -270,7 +286,7 @@ export default function BookingSheet({
                 </option>
               ))}
             </SelectField>
-            <SelectField label={t.bookings.bookingStatus} value={form.bookingStatus} onChange={(e) => set('bookingStatus', e.target.value as BookingStatus)}>
+            <SelectField label={t.bookings.bookingStatus} data-field="bookingStatus" value={form.bookingStatus} onChange={(e) => set('bookingStatus', e.target.value as BookingStatus)}>
               {BOOKING_STATUSES.map((x) => (
                 <option key={x} value={x}>
                   {t.bookingStatus[x]}
@@ -298,7 +314,7 @@ export default function BookingSheet({
             <PhaseLegend icon={L.startIcon} label={L.start} />
             <div className="clear-both grid grid-cols-2 gap-3 [&>*]:min-w-0">
               <TextField label={t.bookings.date} type="date" value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
-              <TextField label={t.bookings.time} type="time" optional value={form.startTime} onChange={(e) => set('startTime', e.target.value)} />
+              <TextField label={t.bookings.time} type="time" optional data-field="startTime" value={form.startTime} onChange={(e) => set('startTime', e.target.value)} />
             </div>
             <TimeZoneSelect label={t.bookings.timezone} value={form.startTimezone} onChange={(v) => set('startTimezone', v)} />
             {isTransport && <TextField label={L.from} optional placeholder={L.fromPlaceholder} value={form.fromLocation} onChange={(e) => set('fromLocation', e.target.value)} />}
@@ -307,7 +323,7 @@ export default function BookingSheet({
             <PhaseLegend icon={L.endIcon} label={L.end} />
             <div className="clear-both grid grid-cols-2 gap-3 [&>*]:min-w-0">
               <TextField label={t.bookings.date} type="date" value={form.endDate} onChange={(e) => set('endDate', e.target.value)} />
-              <TextField label={t.bookings.time} type="time" optional value={form.endTime} onChange={(e) => set('endTime', e.target.value)} />
+              <TextField label={t.bookings.time} type="time" optional data-field="endTime" value={form.endTime} onChange={(e) => set('endTime', e.target.value)} />
             </div>
             <TimeZoneSelect label={t.bookings.timezone} value={form.endTimezone} onChange={(v) => set('endTimezone', v)} />
             {isTransport && <TextField label={L.to} optional placeholder={L.toPlaceholder} value={form.toLocation} onChange={(e) => set('toLocation', e.target.value)} />}

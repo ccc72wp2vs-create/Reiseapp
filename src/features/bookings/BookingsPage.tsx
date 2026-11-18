@@ -46,6 +46,8 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
   // Deep link after a document import: /buchungen?id=<booking> opens it directly.
   const [params, setParams] = useSearchParams();
   const openId = params.get('id');
+  const fieldParam = params.get('feld');
+  const [focusField, setFocusField] = useState<'startTime' | 'endTime' | 'bookingStatus' | null>(null);
   const openFilter = params.get('offen') === '1';
   const clarifyParam = params.get('klaeren');
   const [clarifying, setClarifying] = useState<{ startId: string | null } | null>(null);
@@ -58,9 +60,11 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
     if (!openId) return;
     const b = snap.bookings.find((x) => x.id === openId);
     if (b) {
+      setFocusField(fieldParam === 'startTime' || fieldParam === 'endTime' || fieldParam === 'bookingStatus' ? fieldParam : null);
       setEditing(b);
       setParams({}, { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId, snap.bookings, setParams]);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -190,7 +194,7 @@ function Bookings({ snap }: { snap: TripSnapshot }) {
       <Suspense fallback={null}>
         {creating && <BookingSheet open onClose={() => setCreating(false)} />}
         {importing && <DocumentImportSheet onClose={() => setImporting(false)} />}
-        {editing && <BookingSheet key={editing.id} open booking={editing} onClose={() => setEditing(null)} />}
+        {editing && <BookingSheet key={editing.id} open booking={editing} focusField={focusField} onClose={() => { setEditing(null); setFocusField(null); }} />}
         {depositFor && <BookingDepositSheet booking={depositFor} snap={snap} onClose={() => setDepositFor(null)} />}
         {clarifying && <ClarifySheet snap={snap} today={today} startId={clarifying.startId} onClose={() => setClarifying(null)} />}
       </Suspense>

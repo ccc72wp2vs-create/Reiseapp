@@ -11,7 +11,7 @@ import { cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { formatDate, formatTime } from '../../lib/format';
 
-function Step({ icon, label, title, time, bookingId }: { icon: ReactNode; label: string; title: string; time: string | null; bookingId?: string }) {
+function Step({ icon, label, title, time, bookingId, field }: { icon: ReactNode; label: string; title: string; time: string | null; bookingId?: string; field?: 'startTime' | 'endTime' }) {
   const inner = (
     <>
 
@@ -29,7 +29,7 @@ function Step({ icon, label, title, time, bookingId }: { icon: ReactNode; label:
     <li className="relative pb-3.5 last:pb-0">
       {bookingId ? (
         // One tap opens exactly this booking (e.g. to fill in the check-in time).
-        <Link to={`/buchungen?id=${bookingId}`} className="flex gap-3 rounded-2xl active:bg-surface-2">
+        <Link to={`/buchungen?id=${bookingId}${!time && field ? `&feld=${field}` : ''}`} className="flex gap-3 rounded-2xl active:bg-surface-2">
           {inner}
         </Link>
       ) : (
@@ -46,19 +46,20 @@ export function TravelDayCard({ day }: { day: TravelDay }) {
     const v = list.map((x) => (which === 'start' ? x.startTime : x.endTime)).find(Boolean);
     return v ? formatTime(v) : null;
   };
-  const steps: { icon: ReactNode; label: string; title: string; time: string | null; bookingId?: string }[] = [];
+  const steps: { icon: ReactNode; label: string; title: string; time: string | null; bookingId?: string; field?: 'startTime' | 'endTime' }[] = [];
   if (checkout.length)
-    steps.push({ icon: <LogOut size={15} />, label: t.home.tdCheckout, title: checkout.map((x) => x.title).join(' · '), time: hotelTime(checkout, 'end'), bookingId: checkout[0].id });
+    steps.push({ icon: <LogOut size={15} />, label: t.home.tdCheckout, title: checkout.map((x) => x.title).join(' · '), time: hotelTime(checkout, 'end'), bookingId: checkout[0].id, field: 'endTime' });
   steps.push({
     icon: <ModeIcon mode={leg.mode} />,
     label: t.home.tdDeparture,
     title: b ? b.title : `${leg.from.name} → ${leg.to.name}`,
     time: b?.startTime ? formatTime(b.startTime) : null,
     bookingId: b?.id,
+    field: 'startTime',
   });
   if (b?.endTime) steps.push({ icon: <MapPin size={15} />, label: t.home.tdArrival, title: leg.to.name, time: formatTime(b.endTime), bookingId: b.id });
   if (checkin.length || day.to?.accommodationName)
-    steps.push({ icon: <BedDouble size={15} />, label: t.home.tdCheckin, title: checkin.length ? checkin.map((x) => x.title).join(' · ') : day.to!.accommodationName!, time: hotelTime(checkin, 'start'), bookingId: checkin[0]?.id });
+    steps.push({ icon: <BedDouble size={15} />, label: t.home.tdCheckin, title: checkin.length ? checkin.map((x) => x.title).join(' · ') : day.to!.accommodationName!, time: hotelTime(checkin, 'start'), bookingId: checkin[0]?.id, field: 'startTime' });
 
   return (
     <section aria-label={t.home.travelDayTitle(day.inDays)} className="mt-5 rounded-[1.5rem] border border-accent/30 bg-surface p-4 shadow-card">
@@ -87,7 +88,15 @@ export function TravelDayCard({ day }: { day: TravelDay }) {
               {issues.map((x, i) => (
                 <Link
                   key={i}
-                  to={'booking' in x ? `/buchungen?klaeren=${x.booking.id}` : '/buchungen'}
+                  to={
+                    x.kind === 'transport_time_missing'
+                      ? `/buchungen?id=${x.booking.id}&feld=startTime`
+                      : x.kind === 'transport_unconfirmed'
+                        ? `/buchungen?id=${x.booking.id}&feld=bookingStatus`
+                        : 'booking' in x
+                          ? `/buchungen?klaeren=${x.booking.id}`
+                          : '/buchungen'
+                  }
                   className="inline-flex items-center gap-1.5 rounded-full bg-warn-soft px-3 py-1.5 text-[13px] font-semibold text-warn"
                 >
                   <AlertTriangle size={14} /> {t.home.tdIssue[x.kind]}
