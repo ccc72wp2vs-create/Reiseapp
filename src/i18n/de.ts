@@ -890,6 +890,14 @@ export const de = {
     unit_price_unclear: 'Einzelpreis unklar',
     note: 'Klärung nötig',
   },
+  whatsNew: {
+    title: 'Neu in TRAVIO',
+    version: (v: string) => `Version ${v}`,
+    ok: 'Alles klar',
+    show: 'Ansehen',
+    moreRow: 'Neuigkeiten',
+    moreHint: 'Was sich zuletzt geändert hat',
+  },
   push: {
     title: 'Benachrichtigungen',
     onTitle: 'Auf diesem Gerät eingeschaltet',

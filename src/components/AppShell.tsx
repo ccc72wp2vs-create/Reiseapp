@@ -10,6 +10,7 @@ import { useAuth } from '../lib/auth';
 import { getSelectedTripId, tripsList, tripStore, useTrips, useTripState } from '../lib/store';
 import { SyncIndicator } from './SyncStatus';
 import { QuickAddButton } from './QuickAdd';
+import { WhatsNewOnUpdate } from './WhatsNew';
 import { cx } from './ui';
 
 const NAV = [
@@ -70,6 +71,7 @@ export function AppShell() {
       </main>
       <AssistantButton />
       <BottomNav />
+      <WhatsNewOnUpdate />
     </div>
   );
 }

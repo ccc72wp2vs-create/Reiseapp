@@ -1,6 +1,7 @@
 import { Briefcase, ChevronRight, CloudOff, Download, FlaskConical, Languages, Lightbulb, Luggage, Map, Settings, Siren, Receipt, Smartphone, Sparkles, Ticket, Trash2, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { WhatsNewSheet } from '../../components/WhatsNew';
 import { PageHeader, useTrip } from '../../components/AppShell';
 import { OfflineCapabilities } from '../../components/SyncStatus';
 import { toast } from '../../components/toast';
@@ -32,6 +33,7 @@ export default function MorePage() {
   const [offlineOpen, setOfflineOpen] = useState(false);
   const [confirmDemo, setConfirmDemo] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [newsOpen, setNewsOpen] = useState(false);
   const phraseLang = phraseLangFor(snap?.trip.destinationCountry);
   const hasDemo = (trips ?? []).some((x) => x.isDemo);
   const items = snap ? snap.packingItems.filter((i) => snap.packingLists.some((l) => l.id === i.listId && !l.isTemplate)) : [];
@@ -73,6 +75,7 @@ export default function MorePage() {
           <Row to="/einstellungen" icon={<Settings size={19} />} label={t.settings.title} hint={`${t.settings.appearance} · ${t.settings.profile} · ${t.more.privacy}`} />
           <Row to="/installieren" icon={<Smartphone size={19} />} label={t.more.install} />
           <Row onClick={() => setOfflineOpen(true)} icon={<CloudOff size={19} />} label={t.more.offline} />
+          <Row onClick={() => setNewsOpen(true)} icon={<Sparkles size={19} />} label={t.whatsNew.moreRow} hint={t.whatsNew.moreHint} />
         </ul>
 
         <SectionTitle>{t.more.demo}</SectionTitle>
@@ -105,6 +108,7 @@ export default function MorePage() {
           TRAVIO · {t.more.version} {__APP_VERSION__}
         </p>
       </div>
+      {newsOpen && <WhatsNewSheet onClose={() => setNewsOpen(false)} />}
       <Sheet open={offlineOpen} onClose={() => setOfflineOpen(false)} title={t.more.offline}>
         <OfflineCapabilities />
       </Sheet>

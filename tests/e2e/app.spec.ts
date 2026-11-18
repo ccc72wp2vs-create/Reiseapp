@@ -44,6 +44,10 @@ async function ensureThailand(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // The "Neu in TRAVIO" sheet would cover the screens – only its own test shows it.
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('e2e-whatsnew')) localStorage.setItem('travio.seenVersion', '999.0.0');
+  });
   await freezeClock(page);
   await login(page);
   await ensureThailand(page);
@@ -414,4 +418,20 @@ test('plus: expense typed as a sentence opens the prefilled form', async ({ page
   await sheet.getByRole('button', { name: 'Speichern' }).click();
   await page.getByRole('radio', { name: 'Verlauf' }).click();
   await expect(page.getByText('Satztaxi')).toBeVisible();
+});
+
+test('after an update "Neu in TRAVIO" appears once', async ({ page }) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('e2e-whatsnew', '1');
+    localStorage.setItem('travio.seenVersion', '2.11.0');
+  });
+  await page.reload();
+  const sheet = page.getByRole('dialog', { name: 'Neu in TRAVIO' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText('Ein „+“ für alles')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Alles klar' }).click();
+  await expect(sheet).toBeHidden();
+  await page.reload();
+  await page.waitForTimeout(1200);
+  await expect(page.getByRole('dialog', { name: 'Neu in TRAVIO' })).toHaveCount(0);
 });
