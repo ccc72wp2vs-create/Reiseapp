@@ -20,6 +20,7 @@ import { Nearby } from './google/Nearby';
 
 const PlaceSheet = lazy(() => import('./PlaceSheet'));
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
+const PinFinderSheet = lazy(() => import('./PinFinderSheet'));
 
 /** Destination the travelers are at today (null outside the trip). */
 function currentStopId(snap: TripSnapshot): string | null {
@@ -64,6 +65,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
   const [editing, setEditing] = useState<PlaceDto | null>(null);
   const [creating, setCreating] = useState(false);
   const [planning, setPlanning] = useState<PlaceDto | null>(null);
+  const [findingPins, setFindingPins] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const { places, destinations } = snap;
   const route = useMemo(() => sortDestinations(destinations), [destinations]);
@@ -193,6 +195,15 @@ function Explore({ snap }: { snap: TripSnapshot }) {
           </div>
 
           <div className="px-safe pt-4">
+            {canEdit && google?.provider === 'geoapify' && filtered.some((p) => p.lat == null) && (
+              <button
+                type="button"
+                onClick={() => setFindingPins(true)}
+                className="mb-3 flex w-full items-center gap-3 rounded-[1.25rem] border border-accent/30 bg-accent-soft p-3.5 text-left text-[14px] font-semibold text-accent"
+              >
+                <MapPin size={18} className="shrink-0" /> {t.pins.button(filtered.filter((p) => p.lat == null).length)}
+              </button>
+            )}
             {view === 'map' && (
               <div className="mb-4">
                 <MapView markers={markers} selectedId={selected} onSelect={setSelected} className="h-[52dvh] min-h-[320px]" />
@@ -216,6 +227,7 @@ function Explore({ snap }: { snap: TripSnapshot }) {
       )}
 
       <Suspense fallback={null}>
+        {findingPins && <PinFinderSheet snap={snap} places={filtered} onClose={() => setFindingPins(false)} />}
         {creating && <PlaceSheet open onClose={() => setCreating(false)} defaultDestinationId={route.some((d) => d.id === stop) ? stop : null} />}
         {editing && <PlaceSheet key={editing.id} open place={editing} onClose={() => setEditing(null)} />}
         {planning && (

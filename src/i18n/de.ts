@@ -886,6 +886,17 @@ export const de = {
     unit_price_unclear: 'Einzelpreis unklar',
     note: 'Klärung nötig',
   },
+  pins: {
+    button: (n: number) => (n === 1 ? '1 Ort ohne Kartenpunkt – suchen' : `${n} Orte ohne Kartenpunkt – suchen`),
+    title: 'Kartenpunkte suchen',
+    step: (i: number, n: number) => `Ort ${i} von ${n}`,
+    searching: 'Suche passende Orte in der Nähe …',
+    none: 'Nichts Passendes gefunden – überspringen und später selbst setzen.',
+    take: 'Übernehmen',
+    skip: 'Überspringen',
+    distance: (km: string) => `${km} km vom Zentrum der Station`,
+    done: (n: number) => (n === 0 ? 'Fertig.' : n === 1 ? '1 Kartenpunkt gespeichert.' : `${n} Kartenpunkte gespeichert.`),
+  },
   deposit: {
     title: 'Anzahlung erfassen',
     button: 'Anzahlung',

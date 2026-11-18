@@ -229,3 +229,47 @@ export async function nearby(
   }
   return { provider: 'geoapify', origin: args.origin, mode: args.mode, results: results.slice(0, args.limit), routing: matrix.status, filteredOut };
 }
+
+export interface GeocodeCandidate {
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  /** Distance to the stop's centre in km (if known). */
+  distanceKm: number | null;
+}
+
+/**
+ * Finds map points for a saved place by its name, close to its stop
+ * (1 credit). Results are OpenStreetMap data (storable with attribution).
+ */
+export async function geocode(env: Env, text: string, near: { lat: number; lng: number } | null): Promise<GeocodeCandidate[]> {
+  const key = requireKey(env);
+  await spend(env, 1);
+  const q = new URLSearchParams({ text, limit: '4', lang: 'de', format: 'json', apiKey: key });
+  if (near) {
+    q.set('bias', `proximity:${near.lng},${near.lat}`);
+    q.set('filter', `circle:${near.lng},${near.lat},40000`);
+  }
+  const res = await fetch(`${BASE}/v1/geocode/search?${q}`);
+  if (!res.ok) {
+    logFailure('geocode', res.status);
+    throw new ApiError('service_unavailable', 'Die Kartensuche ist gerade nicht erreichbar.');
+  }
+  const body = (await res.json()) as { results?: Record<string, unknown>[] };
+  const out: GeocodeCandidate[] = [];
+  for (const r of body.results ?? []) {
+    const lat = Number(r.lat);
+    const lng = Number(r.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const dist = Number(r.distance);
+    out.push({
+      name: str(r.name) ?? str(r.address_line1) ?? text,
+      address: str(r.formatted) ?? str(r.address_line2),
+      lat,
+      lng,
+      distanceKm: Number.isFinite(dist) ? Math.round(dist / 100) / 10 : null,
+    });
+  }
+  return out;
+}

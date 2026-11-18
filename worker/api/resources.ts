@@ -461,6 +461,24 @@ r.post('/:tripId/maps/nearby', async (c) => {
   );
 });
 
+/** Map point suggestions for a saved place without coordinates (OpenStreetMap). */
+r.post('/:tripId/maps/geocode', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const { placeId } = await parseJson(c, z.object({ placeId: z.string().uuid() }));
+  const place = await c.env.DB.prepare(
+    `SELECT p.name, p.address, d.name AS dest, d.lat, d.lng FROM saved_places p LEFT JOIN destinations d ON d.id = p.destination_id WHERE p.id = ? AND p.trip_id = ?`,
+  )
+    .bind(placeId, t.tripId)
+    .first<{ name: string; address: string | null; dest: string | null; lat: number | null; lng: number | null }>();
+  if (!place) throw new ApiError('not_found', 'Ort nicht gefunden');
+  const near = place.lat != null && place.lng != null ? { lat: place.lat, lng: place.lng } : null;
+  // Strip list notes like "(Tour)" or "Railay / Phra Nang Beach (Longtail …)" to the searchable part.
+  const text = [place.name.replace(/\(.*?\)/g, '').split(/·|\//)[0].trim(), place.address && place.address !== place.dest ? place.address : place.dest].filter(Boolean).join(', ');
+  c.header('Cache-Control', 'no-store');
+  return c.json({ candidates: await geoapify.geocode(c.env, text, near), attribution: '© OpenStreetMap contributors · Powered by Geoapify' });
+});
+
 r.post('/:tripId/maps/distance', async (c) => {
   const input = await parseJson(c, googleDistanceSchema);
   const origin = await originFor(c, input.location);

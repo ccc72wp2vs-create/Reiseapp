@@ -134,3 +134,23 @@ describe('Frag TRAVIO with OpenStreetMap places', () => {
     expect(r.body.answer).toMatch(/Restaurants in der Nähe/);
   });
 });
+
+describe('map points for saved places', () => {
+  it('suggests OpenStreetMap points near the stop for a place without coordinates', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (u: string) => {
+      calls.push(u);
+      return Response.json({ results: [{ name: 'Khao Thong Hill Viewpoint', formatted: 'Ao Nang, Krabi, Thailand', lat: 8.05, lon: 98.82, distance: 4300 }, { lat: 'x', lon: 1 }] });
+    });
+    const snap = (await owner.get(`/trips/${tripId}/snapshot`)).body;
+    const krabi = snap.destinations.find((d: { name: string }) => d.name === 'Krabi');
+    const p = (await owner.post(`/trips/${tripId}/places`, { name: 'Khao Thong View Point (Sunset)', category: 'sightseeing', destinationId: krabi.id })).body.place;
+    const r = await owner.post(`/trips/${tripId}/maps/geocode`, { placeId: p.id });
+    expect(r.status).toBe(200);
+    expect(r.body.candidates).toEqual([{ name: 'Khao Thong Hill Viewpoint', address: 'Ao Nang, Krabi, Thailand', lat: 8.05, lng: 98.82, distanceKm: 4.3 }]);
+    expect(calls[0]).toContain('/v1/geocode/search');
+    expect(new URL(calls[0]).searchParams.get('text')).toBe('Khao Thong View Point, Krabi');
+    expect(calls[0]).toContain('bias=proximity');
+    expect(calls[0]).not.toContain('Sunset');
+  });
+});
