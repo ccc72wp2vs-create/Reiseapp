@@ -218,12 +218,22 @@ input[type='time']::-webkit-date-and-time-value {
 
 /* Solid status bar area: prevents content from scrolling visibly under the
    iOS status bar and keeps the system blur tinted correctly. */
+/* iOS 26+ draws a soft blur ("scroll edge effect") about 40pt below the
+   status bar in installed web apps; it cannot be switched off. In the
+   installed app this zone is covered by a calm, solid strip and page content
+   starts below it, so nothing readable ever sits inside the blur. */
+:root {
+  --edge: 0px;
+}
+:root.ios-standalone {
+  --edge: 2.5rem;
+}
 .statusbar-backdrop {
   position: fixed;
   inset: 0 0 auto 0;
   /* Safari (not installed) reports 0 – keep a thin strip so the browser
      can sample its colour for the top bar tint. */
-  height: max(env(safe-area-inset-top), 3px);
+  height: calc(max(env(safe-area-inset-top), 3px) + var(--edge));
   z-index: 35;
   pointer-events: none;
   background: var(--bg);
@@ -241,7 +251,7 @@ input[type='time']::-webkit-date-and-time-value {
 
 /* Safe area helpers */
 .pt-safe {
-  padding-top: max(env(safe-area-inset-top), 0.75rem);
+  padding-top: calc(max(env(safe-area-inset-top), 0.75rem) + var(--edge));
 }
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);

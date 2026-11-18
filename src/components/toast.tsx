@@ -43,7 +43,7 @@ export function Toaster() {
     <div
       aria-live="polite"
       className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex flex-col items-center gap-2 px-4"
-      style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}
+      style={{ paddingTop: 'calc(max(env(safe-area-inset-top), 0.75rem) + var(--edge))' }}
     >
       {list.map((t) => (
         <div

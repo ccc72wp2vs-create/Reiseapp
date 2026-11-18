@@ -6,3 +6,10 @@ try {
 } catch (e) {
   /* storage unavailable */
 }
+// Installed on iPhone (iOS 26+): the system blurs ~40pt below the status bar
+// over whatever scrolls there – keep that zone calm (see .ios-standalone in CSS).
+try {
+  if (navigator.standalone === true) document.documentElement.classList.add('ios-standalone');
+} catch (e) {
+  /* ignore */
+}

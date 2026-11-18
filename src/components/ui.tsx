@@ -426,7 +426,7 @@ export function Sheet({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cx(
-          'animate-sheet relative flex max-h-[92dvh] w-full flex-col rounded-t-[1.75rem] border border-line bg-bg-elevated shadow-float outline-none sm:rounded-[1.75rem]',
+          'animate-sheet relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-var(--edge)-0.5rem)] w-full flex-col rounded-t-[1.75rem] border border-line bg-bg-elevated shadow-float outline-none sm:rounded-[1.75rem]',
           size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg',
         )}
       >

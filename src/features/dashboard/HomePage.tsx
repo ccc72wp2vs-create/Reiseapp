@@ -62,7 +62,9 @@ const TripSheet = lazy(() => import('../trips/TripSheet'));
 /** Keeps the status bar dark while the dark hero image is behind it. */
 function useHeroStatusBar() {
   useEffect(() => {
-    const update = () => setStatusBarOverHero(window.scrollY < window.innerHeight * 0.45);
+    // Only while the page sits at the very top: as soon as it scrolls, the hero
+    // text would slide into the iOS edge blur – then a calm solid strip covers it.
+    const update = () => setStatusBarOverHero(window.scrollY < 12);
     update();
     window.addEventListener('scroll', update, { passive: true });
     return () => {
@@ -261,7 +263,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
             </Link>
           </div>
         </div>
-        <div className="relative px-safe pb-[18px] pt-[calc(max(env(safe-area-inset-top),0.75rem)+3.75rem)] text-[#f5f9fc] [text-shadow:0_1px_10px_rgb(16_27_51/0.45)]">
+        <div className="relative px-safe pb-[18px] pt-[calc(max(env(safe-area-inset-top),0.75rem)+3.75rem+var(--edge))] text-[#f5f9fc] [text-shadow:0_1px_10px_rgb(16_27_51/0.45)]">
           <p className="text-[14px] font-medium text-white/85">
             {greeting()}
             {user ? `, ${user.displayName.split(' ')[0]}` : ''} · {formatLongDate(today)}

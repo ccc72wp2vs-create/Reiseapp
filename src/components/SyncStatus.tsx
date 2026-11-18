@@ -48,7 +48,7 @@ export function SyncIndicator() {
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-center px-4" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.5rem)' }}>
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-center px-4" style={{ paddingTop: 'calc(max(env(safe-area-inset-top), 0.5rem) + var(--edge))' }}>
         <button
           type="button"
           onClick={() => setOpen(true)}
