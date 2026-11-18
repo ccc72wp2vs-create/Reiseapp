@@ -367,3 +367,25 @@ test('home hero: tap through the stops and back to today', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Phuket' })).toBeVisible();
   await expect(page.getByText('In Krabi geplant')).toHaveCount(0);
 });
+
+test('receipt split: assign lines to people, tip on everyone, saved as one expense', async ({ page }, info) => {
+  test.skip(info.project.name === 'iphone-se', 'changes shared data');
+  await page.goto('/kasse');
+  await page.getByRole('button', { name: 'Beleg aufteilen' }).click();
+  await page.getByRole('button', { name: /Ohne Foto/ }).click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByLabel('Lokal / Laden').fill('E2E Strandbar');
+  await sheet.getByLabel('Position').first().fill('Bier');
+  await sheet.getByLabel('Betrag').first().fill('100');
+  await sheet.getByRole('button', { name: 'E2E', exact: true }).first().click();
+  await sheet.getByRole('button', { name: 'Position hinzufügen' }).click();
+  await sheet.getByLabel('Position').nth(1).fill('Pommes');
+  await sheet.getByLabel('Betrag').nth(1).fill('200');
+  await sheet.getByLabel(/Trinkgeld/).fill('40');
+  await sheet.getByLabel(/^Kurs/).fill('0,026');
+  await expect(sheet.getByText('Summe')).toBeVisible();
+  await expect(sheet.getByText('340,00 ฿').first()).toBeVisible();
+  await sheet.getByRole('button', { name: 'Als Ausgabe speichern' }).click();
+  await page.getByRole('radio', { name: 'Verlauf' }).click();
+  await expect(page.getByText('E2E Strandbar')).toBeVisible();
+});

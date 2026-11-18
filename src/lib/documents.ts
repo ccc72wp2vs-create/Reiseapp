@@ -6,6 +6,7 @@
  */
 import { MAX_UPLOAD_BYTES } from '../../shared/constants';
 import type { ApiErrorBody, DocumentAnalysis, ExtractedDocument } from '../../shared/types';
+import type { ReceiptScan } from '../../shared/receipt';
 import { t } from '../i18n';
 import { ApiError } from './api';
 
@@ -57,3 +58,25 @@ export async function analyzeDocument(tripId: string, file: File, signal?: Abort
 
 /** Old, previously stored documents (kept, read-only). */
 export const documentUrl = (tripId: string, id: string) => `/api/v1/trips/${tripId}/documents/${id}/file`;
+
+/** Receipt photo → line items (analysed in memory on the server, nothing stored). */
+export async function analyzeReceipt(tripId: string, file: File, signal?: AbortSignal): Promise<ReceiptScan | null> {
+  const body = await shrinkImage(file);
+  let res: Response;
+  try {
+    res = await fetch(`/api/v1/trips/${tripId}/documents/receipt-items`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal,
+      headers: { 'X-Travio-Csrf': '1', 'Content-Type': 'image/jpeg', Accept: 'application/json' },
+      body,
+    });
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e;
+    throw new ApiError(0, 'network', t.errors.network);
+  }
+  const json = (await res.json().catch(() => null)) as ({ receipt?: ReceiptScan | null } & Partial<ApiErrorBody>) | null;
+  if (!res.ok) throw new ApiError(res.status, json?.error?.code ?? 'network', json?.error?.message ?? t.errors.generic);
+  return json?.receipt ?? null;
+}

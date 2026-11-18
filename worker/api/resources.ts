@@ -450,6 +450,14 @@ r.post('/:tripId/expenses/:id/link-booking', async (c) => {
 });
 
 /** Pasted e-mail / confirmation text – analysed in memory, never stored. */
+/** Receipt photo → line items for splitting (in memory, nothing stored). */
+r.post('/:tripId/documents/receipt-items', async (c) => {
+  requireRole(c, 'editor');
+  const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase();
+  c.header('Cache-Control', 'no-store');
+  return c.json({ receipt: await docs.analyzeReceiptOnly(c.env.AI, { mime, bytes: new Uint8Array(await c.req.arrayBuffer()) }) });
+});
+
 r.post('/:tripId/documents/analyze-text', async (c) => {
   requireRole(c, 'editor');
   const { text } = await parseJson(c, z.object({ text: z.string().max(docs.TEXT_MAX_CHARS, 'Der Text ist zu lang.') }));

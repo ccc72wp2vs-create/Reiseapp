@@ -178,3 +178,33 @@ Gesamtbetrag: 154,74 EUR – bezahlt`;
   });
 });
 
+
+describe('receipt split – line items, nothing stored', () => {
+  it('reads line items from a photo and the split is saved as one exact expense', async () => {
+    const { owner, tripId, me, other } = await setupTrip();
+    const { ai, calls } = mockAi({ merchant: 'Inas Restaurant', date: '2026-11-16', currency: 'EUR', items: [{ qty: 1, name: 'Schnitzel', amount: 12.5 }, { qty: 2, name: 'Bier', amount: 8 }], tip: 2, total: 22.5 });
+    t.env.AI = ai;
+    const before = counts();
+    const r = await owner.upload(`/trips/${tripId}/documents/receipt-items`, png, 'image/jpeg', 'foto.jpg');
+    expect(r.status).toBe(200);
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    expect(r.body.receipt).toMatchObject({ merchant: 'Inas Restaurant', currency: 'EUR', tipMinor: 200, totalMinor: 2250, lines: [{ name: 'Schnitzel', qty: 1, amountMinor: 1250 }, { name: 'Bier', qty: 2, amountMinor: 800 }] });
+    expect(calls).toEqual(['@cf/mistralai/mistral-small-3.1-24b-instruct:image']);
+    expect(counts()).toEqual(before);
+    expect(stored()).toBe(0);
+
+    // The client saves the split through the normal expense API.
+    const e = await owner.post(`/trips/${tripId}/expenses`, {
+      title: 'Inas Restaurant', amountMinor: 2250, currency: 'EUR', date: '2026-11-16', category: 'food', paidByTravelerId: me.id,
+      splitMethod: 'exact', splits: [{ travelerId: me.id, value: 1350 }, { travelerId: other.id, value: 900 }],
+    });
+    expect(e.status).toBe(201);
+    expect(e.body.expense.shares.map((s: { shareMinor: number }) => s.shareMinor).sort()).toEqual([1350, 900].sort());
+  });
+
+  it('rejects PDFs for receipt splitting', async () => {
+    const { owner, tripId } = await setupTrip();
+    const r = await owner.upload(`/trips/${tripId}/documents/receipt-items`, pdf, 'application/pdf', 'x.pdf');
+    expect(r.status).toBe(422);
+  });
+});

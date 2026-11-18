@@ -6,7 +6,8 @@
 import type { DocumentDto, ExtractedDocument } from '../../shared/types';
 import { ApiError } from '../lib/errors';
 import { nowIso } from '../lib/util';
-import { analyzeDocument, analyzeText } from './docai';
+import { analyzeDocument, analyzeReceiptItems, analyzeText } from './docai';
+import type { ReceiptScan } from '../../shared/receipt';
 
 type Row = Record<string, unknown>;
 
@@ -102,4 +103,11 @@ export async function linkDocument(db: D1Database, tripId: string, id: string, l
 export async function deleteDocument(db: D1Database, tripId: string, id: string) {
   const res = await db.prepare('DELETE FROM documents WHERE id = ? AND trip_id = ?').bind(id, tripId).run();
   if (res.meta.changes === 0) throw new ApiError('not_found', 'Beleg nicht gefunden');
+}
+
+export async function analyzeReceiptOnly(ai: Ai | undefined, file: { mime: string; bytes: Uint8Array }): Promise<ReceiptScan | null> {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mime)) throw new ApiError('validation_failed', 'Bitte ein Foto der Quittung (JPG, PNG, WebP).');
+  if (!file.bytes.byteLength) throw new ApiError('validation_failed', 'Leere Datei');
+  if (file.bytes.byteLength > DOCUMENT_MAX_BYTES) throw new ApiError('payload_too_large', 'Die Datei ist zu groß (max. 1,9 MB).');
+  return analyzeReceiptItems(ai, file);
 }

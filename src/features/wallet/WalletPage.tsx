@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowRightLeft, Calculator, ChevronRight, CircleHelp as HelpCircle, Coins, FileUp, HandCoins, Lock, Plus, Receipt, Send, Trash2, Users } from 'lucide-react';
+import { ArrowRight, ArrowRightLeft, Calculator, ScanLine, ChevronRight, CircleHelp as HelpCircle, Coins, FileUp, HandCoins, Lock, Plus, Receipt, Send, Trash2, Users } from 'lucide-react';
 import type { PayRequest } from './PaySheet';
 import { storedRateFor } from '../../lib/rates';
 import { BudgetCard } from './BudgetCard';
@@ -28,6 +28,7 @@ import { tripStore, useOnline } from '../../lib/store';
 
 const ExpenseSheet = lazy(() => import('./ExpenseSheet'));
 const SettlementSheet = lazy(() => import('./SettlementSheet'));
+const ReceiptSplitSheet = lazy(() => import('./ReceiptSplitSheet'));
 const PaySheet = lazy(() => import('./PaySheet'));
 
 export default function WalletPage() {
@@ -111,6 +112,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
   const [paying, setPaying] = useState<PayRequest | null>(null);
   const [addingDeposit, setAddingDeposit] = useState(false);
   const [joint, setJoint] = useState(false);
+  const [splittingReceipt, setSplittingReceipt] = useState(false);
   const [importing, setImporting] = useState(false);
   const name = (id: string) => travelers.find((x) => x.id === id)?.name ?? '?';
   const color = (id: string) => travelers.find((x) => x.id === id)?.color ?? '#999';
@@ -211,6 +213,9 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                   </Button>
                   <Button size="sm" variant="secondary" icon={<Users size={16} />} disabled={!canWrite || travelers.length < 2} onClick={() => setJoint(true)}>
                     {t.joint.button}
+                  </Button>
+                  <Button size="sm" variant="secondary" icon={<ScanLine size={16} />} disabled={!canWrite || travelers.length < 2} onClick={() => setSplittingReceipt(true)}>
+                    {t.receipt.button}
                   </Button>
                   <Button size="sm" variant="secondary" icon={<FileUp size={16} />} disabled={!canWrite} onClick={() => setImporting(true)}>
                     {t.documents.import}
@@ -402,6 +407,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
       <Suspense fallback={null}>
         {sheet?.kind === 'expense' && <ExpenseSheet key={sheet.expense?.id ?? 'new'} open expense={sheet.expense} onClose={() => setSheet(null)} />}
         {sheet?.kind === 'settlement' && <SettlementSheet open preset={sheet.preset} onClose={() => setSheet(null)} />}
+        {splittingReceipt && <ReceiptSplitSheet snap={snap} onClose={() => setSplittingReceipt(false)} />}
         {paying && <PaySheet snap={snap} req={paying} canRecord={canEdit} onClose={() => setPaying(null)} />}
       </Suspense>
     </div>

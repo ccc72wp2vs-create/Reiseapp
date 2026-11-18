@@ -9,6 +9,7 @@
 import { BOOKING_TYPES } from '../../shared/constants';
 import { currencyExponent, isSupportedCurrency } from '../../shared/money';
 import type { ExtractedDocument } from '../../shared/types';
+import { normalizeReceipt, type ReceiptScan } from '../../shared/receipt';
 
 const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const VISION_MODEL = '@cf/mistralai/mistral-small-3.1-24b-instruct';
@@ -221,6 +222,34 @@ export async function analyzeDocument(ai: Ai | undefined, file: { name: string; 
   } catch (e) {
     // Never log document content – only that (and roughly why) it failed.
     console.error(JSON.stringify({ level: 'warn', msg: 'document analysis failed', error: e instanceof Error ? e.name : 'unknown' }));
+    return null;
+  }
+}
+
+const RECEIPT_SYSTEM = `Du liest eine Restaurant- oder Einkaufsquittung (auch handschriftlich) und gibst NUR ein JSON-Objekt zurück:
+{"merchant": "Name des Lokals/Ladens oder null", "date": "YYYY-MM-DD oder null", "currency": "ISO-Code, z. B. THB, EUR", "items": [{"qty": 1, "name": "Position", "amount": 180.00}], "tip": "Trinkgeld/Service als Zahl oder 0", "total": "Gesamtbetrag als Zahl oder null"}
+Regeln: Jede Position einzeln mit ihrem Zeilenbetrag (nicht Stückpreis). Rabatte als negative Beträge. Zwischensummen, Gesamtsumme und Trinkgeld NICHT als Position. Dezimalpunkt verwenden. Nichts erfinden. Thailändische Jahreszahlen (z. B. 2569 oder "69") in den gregorianischen Kalender umrechnen (2569 → 2026).`;
+
+/** Line items of a receipt photo – analysed in memory only, nothing stored. */
+export async function analyzeReceiptItems(ai: Ai | undefined, file: { mime: string; bytes: Uint8Array }): Promise<ReceiptScan | null> {
+  if (!ai || !file.mime.startsWith('image/')) return null;
+  try {
+    const out = (await ai.run(VISION_MODEL as never, {
+      messages: [
+        { role: 'system', content: RECEIPT_SYSTEM },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Lies alle Positionen dieser Quittung aus.' },
+            { type: 'image_url', image_url: { url: `data:${file.mime};base64,${toBase64(file.bytes)}` } },
+          ],
+        },
+      ],
+      max_tokens: 1500,
+    } as never)) as { response?: unknown };
+    return normalizeReceipt(parseJsonLoose(out.response));
+  } catch (e) {
+    console.error(JSON.stringify({ level: 'warn', msg: 'receipt analysis failed', error: e instanceof Error ? e.name : 'unknown' }));
     return null;
   }
 }
