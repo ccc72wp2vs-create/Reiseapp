@@ -1114,7 +1114,7 @@ export const de = {
     loadDemo: 'Demo-Reise laden',
     planned: 'Geplant',
     plannedFeatures: 'In Vorbereitung',
-    plannedList: ['Wettervorhersage', 'Push-Benachrichtigungen', 'Fotoerinnerungen'],
+    plannedList: ['Wettervorhersage', 'Fotoerinnerungen'],
     version: 'Version',
   },
   settings: {
