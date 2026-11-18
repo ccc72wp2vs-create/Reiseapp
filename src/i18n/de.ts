@@ -900,6 +900,9 @@ export const de = {
     place: 'Ort merken',
     placeHint: 'Restaurant, Strand, Tipp',
     again: 'Nochmal erfassen',
+    sentenceLabel: 'Ausgabe als Satz',
+    sentencePlaceholder: 'z. B. Taxi 450 Baht, Lilli hat bezahlt, für alle',
+    sentenceGo: 'Ausgabe vorbereiten',
   },
   ideas: {
     tabDays: 'Tage',

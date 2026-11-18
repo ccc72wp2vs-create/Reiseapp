@@ -402,3 +402,16 @@ test('receipt split: assign lines to people, tip on everyone, saved as one expen
   await page.getByRole('radio', { name: 'Verlauf' }).click();
   await expect(page.getByText('E2E Strandbar')).toBeVisible();
 });
+
+test('plus: expense typed as a sentence opens the prefilled form', async ({ page }, info) => {
+  test.skip(info.project.name === 'iphone-se', 'changes shared data');
+  await page.goto('/kasse');
+  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+  await page.getByLabel('Ausgabe als Satz').fill('Satztaxi 45 Euro, Reisende:r 2 hat bezahlt, für alle');
+  await page.getByRole('button', { name: 'Ausgabe vorbereiten' }).click();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet.getByLabel('Betrag')).toHaveValue(/45/);
+  await sheet.getByRole('button', { name: 'Speichern' }).click();
+  await page.getByRole('radio', { name: 'Verlauf' }).click();
+  await expect(page.getByText('Satztaxi')).toBeVisible();
+});
