@@ -1,0 +1,56 @@
+import { describe, expect, it } from 'vitest';
+import { classifyNews, matchStop, newsFor, parseRss, placeTerms } from '../../shared/news';
+
+const rss = `<?xml version="1.0"?><rss><channel>
+<item><title><![CDATA[Ferry services from Ao Nang suspended due to storm]]></title><link>https://example.com/a</link>
+<description><![CDATA[<p>Boats to Railay &amp; Phi Phi halted.</p>]]></description><pubDate>Wed, 18 Nov 2026 08:00:00 +0700</pubDate><guid>a1</guid></item>
+<item><title>PM meets cabinet in Bangkok</title><link>https://example.com/b</link><description>Politics.</description><guid>b1</guid></item>
+<item><title>Yi Peng lantern festival draws crowds to Chiang Mai</title><link>https://example.com/c</link><guid>c1</guid></item>
+<item><gdacs:alertlevel>Orange</gdacs:alertlevel><title>Flood in Thailand</title><geo:Point><geo:lat>8.1</geo:lat><geo:long>98.9</geo:long></geo:Point><guid>g1</guid></item>
+</channel></rss>`;
+
+const stops = [
+  { id: 'krabi', name: 'Krabi' },
+  { id: 'cm', name: 'Chiang Mai' },
+  { id: 'bkk', name: 'Bangkok (Don Mueang)' },
+];
+
+describe('local news', () => {
+  it('parses RSS including CDATA, entities and namespaced tags', () => {
+    const items = parseRss(rss);
+    expect(items).toHaveLength(4);
+    expect(items[0]).toMatchObject({ guid: 'a1', title: 'Ferry services from Ao Nang suspended due to storm', link: 'https://example.com/a', description: 'Boats to Railay & Phi Phi halted.' });
+    expect(items[3].extra['gdacs:alertlevel']).toBe('Orange');
+    expect(items[3].extra['geo:lat']).toBe('8.1');
+  });
+
+  it('knows the areas around a stop', () => {
+    expect(placeTerms('Krabi')).toEqual(expect.arrayContaining(['krabi', 'ao nang', 'railay']));
+    expect(placeTerms('Koh Lanta')).toEqual(expect.arrayContaining(['koh lanta', 'lanta']));
+    expect(matchStop('Ferry services from Ao Nang suspended', stops)?.id).toBe('krabi');
+    expect(matchStop('Lantern festival in Chiang Mai', stops)?.id).toBe('cm');
+    expect(matchStop('Nothing about our places', stops)).toBeNull();
+  });
+
+  it('keeps travel topics with a level and drops politics', () => {
+    expect(classifyNews('Ferry services from Ao Nang suspended due to storm')).toEqual({ kind: 'weather', severity: 'urgent' });
+    expect(classifyNews('New flights between Krabi and Chiang Mai')).toEqual({ kind: 'traffic', severity: 'info' });
+    expect(classifyNews('Police warn tourists about jet ski scam in Phuket')).toEqual({ kind: 'safety', severity: 'important' });
+    expect(classifyNews('Yi Peng lantern festival draws crowds')).toEqual({ kind: 'festival', severity: 'info' });
+    expect(classifyNews('PM meets cabinet in Bangkok')).toBeNull();
+    expect(classifyNews('Court verdict on protest leaders')).toBeNull();
+  });
+
+  it('lists a stop’s items plus country-wide ones, most important first', () => {
+    const list = newsFor(
+      [
+        { destinationId: 'cm', severity: 'info' as const, publishedAt: '2026-11-18T10:00:00Z', id: 'x' },
+        { destinationId: 'krabi', severity: 'info' as const, publishedAt: '2026-11-18T09:00:00Z', id: 'y' },
+        { destinationId: 'krabi', severity: 'urgent' as const, publishedAt: '2026-11-17T09:00:00Z', id: 'z' },
+        { destinationId: null, severity: 'important' as const, publishedAt: '2026-11-16T09:00:00Z', id: 'aa' },
+      ],
+      'krabi',
+    );
+    expect(list.map((n) => n.id)).toEqual(['z', 'aa', 'y']);
+  });
+});

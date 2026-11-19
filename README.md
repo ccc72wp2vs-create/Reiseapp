@@ -277,6 +277,13 @@ Die Content-Security-Policy (`public/_headers`) erlaubt dafür `maps.googleapis.
 - Vorschläge für neue Ausgaben und der Währungsrechner nehmen den neuesten Kurs bis zum jeweiligen Datum (Wochenende → Freitagskurs). Ein eigener (manueller) Kurs für denselben Tag hat Vorrang.
 - **Bestehende Ausgaben werden nie umgerechnet** – ihr gespeicherter Kurs bleibt unverändert, damit sich Salden nicht verschieben.
 
+## Lage vor Ort (Nachrichten & Warnungen)
+
+- Stündlich (Cron) holt der Server öffentliche Quellen: Auswärtiges Amt (Open Data, Reise- und Sicherheitshinweise Thailand – nur wenn in den letzten 14 Tagen geändert), GDACS (UN-Katastrophenwarnungen, im Umkreis von 400 km um eine kommende Station) und englischsprachige Thai-Nachrichten per RSS (Bangkok Post, The Thaiger, Khaosod English).
+- Gefiltert wird auf Ortsbezug (Stationen samt umliegender Orte, z. B. Ao Nang/Railay für Krabi) und Reise-Themen (Verkehr, Wetter, Sicherheit, Feste); Politik u. Ä. fällt raus. Drei Stufen: dringend / wichtig / interessant.
+- Kurzfassungen auf Deutsch mit Workers AI (höchstens 6 pro Lauf), sonst die Original-Schlagzeile. Gespeichert in `news_items`, 30 Tage.
+- Anzeige: Hinweiszeile (dringend/wichtig) und Tages-Briefing auf der Startseite, „Lage vor Ort“ in der Stations-Ansicht, Feste als Vorschlag unter Plan → Ideen. Dringendes zusätzlich als Push (abwählbar).
+
 ## Push-Benachrichtigungen
 
 - Web Push mit VAPID, ohne Inhalt im Push: Der Push weckt nur den Service Worker, der die wartenden Nachrichten über `/api/v1/push/inbox` (mit der Anmeldung) abholt und anzeigt. Dadurch geht kein Reiseinhalt über die Push-Server von Apple/Google.

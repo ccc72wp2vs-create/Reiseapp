@@ -435,3 +435,27 @@ test('after an update "Neu in TRAVIO" appears once', async ({ page }) => {
   await page.waitForTimeout(1200);
   await expect(page.getByRole('dialog', { name: 'Neu in TRAVIO' })).toHaveCount(0);
 });
+
+test('Lage vor Ort: hint, list and festival idea from the news', async ({ page }) => {
+  const now = new Date('2026-11-12T08:00:00+07:00').toISOString();
+  await page.route('**/api/v1/trips/*/news', async (route) => {
+    const snap = await (await page.request.get(route.request().url().replace('/news', '/snapshot'))).json();
+    const phuket = snap.destinations.find((d: { name: string }) => d.name === 'Phuket');
+    const lanta = snap.destinations.find((d: { name: string }) => d.name === 'Koh Lanta');
+    await route.fulfill({
+      json: {
+        items: [
+          { id: 'n1', destinationId: phuket.id, source: 'Bangkok Post', kind: 'weather', severity: 'urgent', title: 'Ferries from Rassada pier suspended', summary: 'Fähren ab dem Rassada-Pier wegen Sturm eingestellt.', url: 'https://news.example/1', publishedAt: now },
+          { id: 'n2', destinationId: lanta.id, source: 'The Thaiger', kind: 'festival', severity: 'info', title: 'Lanta Lanta festival', summary: 'Laternenfest auf Koh Lanta am Wochenende.', url: 'https://news.example/2', publishedAt: now },
+        ],
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByText('Fähren ab dem Rassada-Pier wegen Sturm eingestellt.').first().click();
+  const sheet = page.getByRole('dialog', { name: 'Lage vor Ort' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText('Dringend · Phuket')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Alle Stationen zeigen' }).click();
+  await expect(sheet.getByText('Laternenfest auf Koh Lanta am Wochenende.')).toBeVisible();
+});

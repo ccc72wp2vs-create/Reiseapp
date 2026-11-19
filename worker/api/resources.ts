@@ -63,6 +63,7 @@ import { attachTravelersOne, setBookingTravelers } from '../services/bookings';
 import { audit } from '../services/trips';
 import * as wallet from '../services/wallet';
 import * as fx from '../services/fx';
+import * as news from '../services/news';
 import { notifyExpense } from '../services/push';
 import * as assistant from '../services/assistant';
 import * as google from '../services/google';
@@ -638,6 +639,12 @@ r.post('/:tripId/exchange-rates', async (c) => {
   const t = c.get('trip');
   const rate = await wallet.createExchangeRate(c.env.DB, t.tripId, t.baseCurrency, currentUser(c).id, await parseJson(c, exchangeRateCreateSchema));
   return c.json({ exchangeRate: rate }, 201);
+});
+
+/** "Lage vor Ort": travel-relevant news and alerts for this trip (last 10 days). */
+r.get('/:tripId/news', async (c) => {
+  c.header('Cache-Control', 'private, max-age=300');
+  return c.json({ items: await news.listNews(c.env.DB, c.get('trip').tripId) });
 });
 
 /** Loads missing ECB reference rates for this trip (also runs daily via cron). */

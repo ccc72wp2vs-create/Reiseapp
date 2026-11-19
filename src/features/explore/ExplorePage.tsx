@@ -19,6 +19,7 @@ import { errorMessage } from '../../lib/api';
 import { formatDistance, formatDuration, googleMapsSearchUrl, GOOGLE_CATEGORIES } from '../../../shared/google';
 import { GooglePlace } from './google/GooglePlace';
 import { Nearby } from './google/Nearby';
+import { NewsIdeas, useNews } from '../news/News';
 
 const PlaceSheet = lazy(() => import('./PlaceSheet'));
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
@@ -69,6 +70,7 @@ function Explore({ snap, initialSource }: { snap: TripSnapshot; initialSource?: 
   const google = useGoogleConfig(snap.trip.id);
   const [source, setSource] = useState<'mine' | 'nearby'>(initialSource ?? 'mine');
   const [onlyOpen, setOnlyOpen] = useState(false);
+  const news = useNews(snap.trip.id);
   const [view, setView] = useState<'list' | 'map'>('list');
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<PlaceCategory | 'all' | 'fav'>('all');
@@ -198,6 +200,7 @@ function Explore({ snap, initialSource }: { snap: TripSnapshot; initialSource?: 
           </div>
 
           <div className="px-safe pt-4">
+            <NewsIdeas snap={snap} items={news} destinationId={route.some((d) => d.id === stop) ? stop : null} canEdit={canEdit} />
             {canEdit && google?.provider === 'geoapify' && filtered.some((p) => p.lat == null) && (
               <button
                 type="button"

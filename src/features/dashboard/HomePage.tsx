@@ -14,7 +14,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { costBucketItems, personCostOverview, remainingMinor, tripCostOverview, type CostBucket } from '../../../shared/costs';
 import {
   addDaysToDate,
@@ -51,6 +51,7 @@ import { MissingWalletHint } from '../bookings/MissingWalletHint';
 import { staysAt, stopOverview } from '../../../shared/stop';
 import { BookingRow, StayCard, StopView } from './StopView';
 import { TravelDayCard } from './TravelDayCard';
+import { NewsBriefing, NewsHint, NewsSheet, useNews } from '../news/News';
 import { travelDay } from '../../../shared/travelday';
 import { bookingsToClarify } from '../../../shared/clarify';
 
@@ -118,6 +119,15 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
   const online = useOnline();
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [activityDate, setActivityDate] = useState<string | null>(null);
+  const news = useNews(snap.trip.id);
+  const [newsParams, setNewsParams] = useSearchParams();
+  const [newsOpen, setNewsOpen] = useState(false);
+  useEffect(() => {
+    if (newsParams.get('meldungen')) {
+      setNewsOpen(true);
+      setNewsParams({}, { replace: true });
+    }
+  }, [newsParams, setNewsParams]);
   const { trip, destinations, bookings, activities } = snap;
 
   // "Today" is evaluated in the time zone of where the travelers currently are.
@@ -144,6 +154,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
     const next = stops[Math.min(Math.max((i < 0 ? 0 : i) + dir, 0), stops.length - 1)];
     setViewId(next.id === homeDest?.id ? null : next.id);
   }
+  const newsStop = (browsing ? viewed : (where.current ?? where.next)) ?? null;
   const stopData = useMemo(() => (browsing && viewed ? stopOverview(snap, viewed.id, today) : null), [browsing, viewed, snap, today]);
   // Sticky "Vorschau" bar once the hero has scrolled away.
   const heroRef = useRef<HTMLElement | null>(null);
@@ -329,7 +340,9 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
 
       <div className="px-safe">
         {phase.phase !== 'after' && <CheckinReminders snap={snap} canEdit={canEdit} />}
+        {phase.phase !== 'after' && <NewsHint items={news} destinationId={newsStop?.id ?? null} onOpen={() => setNewsOpen(true)} />}
         {tday && <TravelDayCard day={tday} />}
+        {phase.phase === 'during' && newsStop && <NewsBriefing items={news} destinationId={newsStop.id} stopName={newsStop.name} onOpen={() => setNewsOpen(true)} />}
         <MissingWalletHint snap={snap} />
         {bookings
           .filter((b) => !viewerTravelerId || !b.travelerIds.length || b.travelerIds.includes(viewerTravelerId))
@@ -415,7 +428,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         )}
 
 
-        {stopData && <StopView o={stopData} canEdit={canEdit} onAddActivity={openActivity} travelers={snap.travelers} viewerTravelerId={viewerTravelerId} />}
+        {stopData && <StopView o={stopData} canEdit={canEdit} onAddActivity={openActivity} travelers={snap.travelers} viewerTravelerId={viewerTravelerId} news={news} onOpenNews={() => setNewsOpen(true)} />}
 
         {!stopData && (
           <>
@@ -568,6 +581,7 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         </div>
       </div>
 
+      {newsOpen && <NewsSheet snap={snap} items={news} destinationId={newsStop?.id ?? null} canEdit={canEdit} onClose={() => setNewsOpen(false)} />}
       <Suspense fallback={null}>
         {sheet === 'activity' && (
           <ActivitySheet

@@ -10,8 +10,8 @@ import { Button, Card, Toggle } from '../../components/ui';
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 
-type Kind = 'checkin' | 'travelday' | 'payment' | 'expense';
-const KINDS: Kind[] = ['checkin', 'travelday', 'payment', 'expense'];
+type Kind = 'checkin' | 'travelday' | 'payment' | 'expense' | 'news';
+const KINDS: Kind[] = ['checkin', 'travelday', 'payment', 'expense', 'news'];
 
 const b64ToBytes = (b64: string) => {
   const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (b64.length % 4)) % 4));
@@ -25,7 +25,7 @@ const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 export function PushSettings() {
   const [cfg, setCfg] = useState<{ publicKey: string | null; enabled: boolean } | null>(null);
   const [sub, setSub] = useState<PushSubscription | null>(null);
-  const [prefs, setPrefs] = useState<Record<Kind, boolean>>({ checkin: true, travelday: true, payment: true, expense: true });
+  const [prefs, setPrefs] = useState<Record<Kind, boolean>>({ checkin: true, travelday: true, payment: true, expense: true, news: true });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {

@@ -10,6 +10,8 @@ import { splitStays, type StopOverview } from '../../../shared/stop';
 import { diffDays, type RouteLeg } from '../../../shared/trip';
 import type { BookingDto, DestinationDto, TravelerDto } from '../../../shared/types';
 import { PersonFilter, usePersonSelection } from '../../components/PersonFilter';
+import { StopNews } from '../news/News';
+import type { NewsItemDto } from '../../../shared/news';
 import { BookingBadges, BookingIcon, CategoryIcon, IconTile, ModeIcon } from '../../components/status';
 import { Badge, Button, Card, SectionTitle, cx } from '../../components/ui';
 import { t } from '../../i18n';
@@ -166,12 +168,16 @@ export function StopView({
   onAddActivity,
   travelers,
   viewerTravelerId,
+  news,
+  onOpenNews,
 }: {
   o: StopOverview;
   canEdit: boolean;
   onAddActivity: (date: string) => void;
   travelers: TravelerDto[];
   viewerTravelerId: string | null;
+  news: NewsItemDto[];
+  onOpenNews: () => void;
 }) {
   const { stop, when } = o;
   const selection = usePersonSelection(travelers);
@@ -308,6 +314,14 @@ export function StopView({
               </Link>
             )}
           </Card>
+        </>
+      )}
+
+      {/* ------------------------------------------------------ Local news */}
+      {when !== 'past' && (
+        <>
+          <SectionTitle>{t.news.stopSection}</SectionTitle>
+          <StopNews items={news} destinationId={stop.id} onOpen={onOpenNews} />
         </>
       )}
 

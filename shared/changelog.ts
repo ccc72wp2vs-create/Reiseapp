@@ -20,6 +20,17 @@ export interface ChangeEntry {
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '2.16.0',
+    date: '2026-11-19',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Lage vor Ort',
+        text: 'Wichtige Meldungen für eure Stationen – Unwetter, Fährausfälle, Reisehinweise des Auswärtigen Amts, Feste – kurz auf Deutsch. Dringendes auch als Push.',
+      },
+    ],
+  },
+  {
     version: '2.13.0',
     date: '2026-11-18',
     items: [

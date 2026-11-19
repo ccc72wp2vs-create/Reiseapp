@@ -15,8 +15,8 @@ import type { Env } from '../env';
 import { nowIso, uuid } from '../lib/util';
 import { buildSnapshot } from './trips';
 
-export type PushKind = 'checkin' | 'travelday' | 'payment' | 'expense';
-export const PUSH_KINDS: PushKind[] = ['checkin', 'travelday', 'payment', 'expense'];
+export type PushKind = 'checkin' | 'travelday' | 'payment' | 'expense' | 'news';
+export const PUSH_KINDS: PushKind[] = ['checkin', 'travelday', 'payment', 'expense', 'news'];
 
 export function pushConfig(env: Env) {
   const publicKey = env.VAPID_PUBLIC_KEY?.trim() || null;
