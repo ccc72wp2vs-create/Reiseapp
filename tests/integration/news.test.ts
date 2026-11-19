@@ -63,3 +63,18 @@ describe('Lage vor Ort', () => {
     expect((await owner.get(`/trips/${tripId}/news`)).body.items).toEqual([]);
   });
 });
+
+describe('AI relevance check', () => {
+  it('hides items the model calls irrelevant and does not offer them again', async () => {
+    const owner = await setupOwner(t);
+    const tripId = (await owner.post('/imports/thailand-2026')).body.tripId;
+    mockSources();
+    t.env.AI = { run: async (_m: string, input: { messages: { content: string }[] }) => ({ response: input.messages[1].content.includes('Ferry') ? 'Fähren ab Ao Nang wegen Sturm eingestellt.' : 'IRRELEVANT' }) } as unknown as Ai;
+    await refreshNews(t.env, now);
+    const items = (await owner.get(`/trips/${tripId}/news`)).body.items as { title: string; summary: string | null }[];
+    expect(items.map((i) => i.title)).toContain('Ferry services from Ao Nang suspended due to storm');
+    expect(items.find((i) => i.title.startsWith('Ferry'))?.summary).toBe('Fähren ab Ao Nang wegen Sturm eingestellt.');
+    expect(items.some((i) => i.title.startsWith('Yi Peng'))).toBe(false);
+    expect(await refreshNews(t.env, now)).toBe(0);
+  });
+});

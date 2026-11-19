@@ -100,7 +100,9 @@ const TOPICS: [NewsKind, RegExp][] = [
   ['safety', /\b(scam|robbery|robbed|stabbing|shooting|police warn|tourists? (warned|injured|killed|attacked)|drown|drowning|rip current|jellyfish|dengue|outbreak|protest|curfew|crackdown|warning to tourists)\b/i],
   ['festival', /\b(festival|loy krathong|yi peng|lantern|songkran|night market|fair|celebration|parade|fireworks|concert)\b/i],
 ];
-const NOISE = /\b(election|parliament|prime minister|minister|cabinet|court|verdict|celebrity|stock|shares|economy|gdp|investment|investor|football|boxing|muay thai fight|lottery|crypto|property market)\b/i;
+const NOISE = /\b(election|parliament|prime minister|minister|cabinet|court|verdict|trial|jailed|sentenced|charged|lawsuit|arrested|celebrity|stock|shares|economy|gdp|investment|investor|profit|revenue|cargo|backlog|dispute|football|boxing|muay thai fight|lottery|crypto|property market)\b/i;
+/** Natural hazards stay relevant even in otherwise "noisy" headlines. */
+const HAZARD = /\b(storm|flood|flooding|tsunami|earthquake|landslide|typhoon)\b/i;
 const URGENT = /\b(cancel(l)?ed|cancel(l)?ation|suspend(ed)?|halt(ed)?|closed|closure|evacuat|warning|tsunami|flood|storm|landslide|earthquake|curfew)\b/i;
 
 export interface Classified {
@@ -108,11 +110,11 @@ export interface Classified {
   severity: NewsSeverity;
 }
 
-/** Topic and importance of a news headline; null when not travel-relevant. */
+/** Topic and importance of a news headline; null when not travel-relevant. Pass the HEADLINE. */
 export function classifyNews(text: string): Classified | null {
   const topic = TOPICS.find(([, re]) => re.test(text))?.[0];
   if (!topic) return null;
-  if (NOISE.test(text) && topic !== 'weather' && topic !== 'traffic') return null;
+  if (NOISE.test(text) && !HAZARD.test(text)) return null;
   if (topic === 'festival') return { kind: 'festival', severity: 'info' };
   if ((topic === 'weather' || topic === 'traffic') && URGENT.test(text)) return { kind: topic, severity: 'urgent' };
   return { kind: topic, severity: topic === 'safety' || topic === 'weather' ? 'important' : 'info' };

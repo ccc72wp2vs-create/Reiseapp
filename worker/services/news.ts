@@ -173,12 +173,15 @@ export function newsCandidates(source: string, items: RssItem[], stops: Stop[], 
     const text = `${it.title}. ${it.description}`;
     const stop = matchStop(text, stops);
     if (!stop) continue;
-    const c = classifyNews(text);
+    // The topic must be in the headline – a keyword deep in the teaser is not enough.
+    const c = classifyNews(it.title);
     if (!c) continue;
     out.push({ source, externalId: it.guid, ...c, title: it.title, text, url: it.link, publishedAt: published, destinationId: stop.id, needsSummary: true });
   }
   return out;
 }
+
+const IRRELEVANT = '\u0000irrelevant';
 
 async function summarize(env: Env, text: string): Promise<string | null> {
   if (!env.AI) return null;
@@ -188,13 +191,14 @@ async function summarize(env: Env, text: string): Promise<string | null> {
         {
           role: 'system',
           content:
-            'Du fasst eine englische Nachricht für deutsche Urlauber in Thailand zusammen: 1–2 kurze, sachliche Sätze auf Deutsch, nur was für Reisende wichtig ist (Ort, was passiert, Folgen). Keine Einleitung, nichts erfinden.',
+            'Du fasst eine englische Nachricht für deutsche Urlauber vor Ort zusammen: 1–2 kurze, sachliche Sätze auf Deutsch, nur was für Reisende wichtig ist (Ort, was passiert, Folgen). Keine Einleitung, nichts erfinden. Hat die Meldung für Urlauber vor Ort KEINE praktische Bedeutung (z. B. Gerichtsverfahren, Politik, Wirtschaft, Firmen, Kriminalfälle ohne Gefahr für Touristen), antworte nur mit dem Wort IRRELEVANT.',
         },
         { role: 'user', content: text.slice(0, 900) },
       ],
       max_tokens: 140,
     } as never)) as { response?: string };
     const s = (out.response ?? '').trim().replace(/^["„]|["“]$/g, '');
+    if (/^irrelevant\b/i.test(s)) return IRRELEVANT;
     return s ? s.slice(0, 400) : null;
   } catch {
     return null;
@@ -264,6 +268,16 @@ export async function refreshNews(env: Env, now = new Date()): Promise<number> {
       if (c.needsSummary && summaries < MAX_SUMMARIES_PER_RUN) {
         summary = await summarize(env, c.text);
         summaries++;
+        // The model judged it useless for travellers: remember it as seen, but never show it.
+        if (summary === IRRELEVANT) {
+          await env.DB.prepare(
+            `INSERT OR IGNORE INTO news_items (id, trip_id, destination_id, source, external_id, kind, severity, title, summary, url, published_at, created_at)
+             VALUES (?, ?, NULL, ?, ?, 'hidden', 'info', ?, NULL, NULL, ?, ?)`,
+          )
+            .bind(uuid(), tripId, c.source, c.externalId, c.title.slice(0, 300), c.publishedAt, nowIso())
+            .run();
+          continue;
+        }
       }
       const id = uuid();
       const r = await env.DB.prepare(
@@ -295,7 +309,7 @@ export async function refreshNews(env: Env, now = new Date()): Promise<number> {
 export async function listNews(db: D1Database, tripId: string): Promise<NewsItemDto[]> {
   const since = new Date(Date.now() - 10 * 86400_000).toISOString();
   const { results } = await db
-    .prepare('SELECT id, destination_id, source, kind, severity, title, summary, url, published_at FROM news_items WHERE trip_id = ? AND published_at >= ? ORDER BY published_at DESC LIMIT 60')
+    .prepare("SELECT id, destination_id, source, kind, severity, title, summary, url, published_at FROM news_items WHERE trip_id = ? AND published_at >= ? AND kind != 'hidden' ORDER BY published_at DESC LIMIT 60")
     .bind(tripId, since)
     .all<Record<string, string | null>>();
   return results.map((r) => ({

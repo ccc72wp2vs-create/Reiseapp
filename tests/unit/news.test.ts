@@ -69,3 +69,13 @@ describe('other destinations', () => {
     expect(aaCandidates(json, 'TH', 1_795_000_000_000 + 30 * 86400_000)).toEqual([]);
   });
 });
+
+describe('stricter relevance', () => {
+  it('drops court, business and cargo headlines even with travel words', () => {
+    expect(classifyNews('Chinese director, Thai nominees jailed in SAO building collapse case')).toBeNull();
+    expect(classifyNews('Customers dispute Thai Airways claim of cargo backlog clearance')).toBeNull();
+    expect(classifyNews('Airline posts record profit as flights rebound')).toBeNull();
+    // Hazards always pass.
+    expect(classifyNews('Court orders evacuation as flood hits Chiang Mai')).toEqual({ kind: 'weather', severity: 'urgent' });
+  });
+});
