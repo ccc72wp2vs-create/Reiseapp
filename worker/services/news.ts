@@ -186,6 +186,16 @@ export async function refreshNews(env: Env, now = new Date()): Promise<number> {
   })();
   const gdacs = gdacsText ? parseRss(gdacsText, 120) : [];
   const feeds = NEWS_FEEDS.map((f, i) => ({ source: f.source, items: feedTexts[i] ? parseRss(feedTexts[i]!) : [] }));
+  // One line per run: how much each source delivered (helps spot blocked feeds).
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      msg: 'news sources',
+      aa: aaJson ? 'ok' : aaText === null ? 'failed' : 'unparsable',
+      gdacs: gdacs.length,
+      feeds: feeds.map((f, i) => ({ source: f.source, items: f.items.length, ...(f.items.length ? {} : { start: (feedTexts[i] ?? 'null').slice(0, 80) }) })),
+    }),
+  );
 
   let added = 0;
   let summaries = 0;
