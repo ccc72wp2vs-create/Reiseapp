@@ -240,6 +240,7 @@ function Travelers({ snap }: { snap: TripSnapshot }) {
           <Users size={14} /> {t.travelers.title} ({snap.travelers.length})
         </span>
       </SectionTitle>
+      {canEdit && <PartnerSuggestion snap={snap} />}
       <Card className="divide-y divide-line">
         {snap.travelers.map((x) => (
           <div key={x.id} className="flex items-center gap-3 p-4">
@@ -600,5 +601,53 @@ function InviteSheet({
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** "Paare wie bei ‹Reise› übernehmen?" – couples from an earlier trip, one tap. */
+function PartnerSuggestion({ snap }: { snap: TripSnapshot }) {
+  const online = useOnline();
+  const tripId = snap.trip.id;
+  const hasCouples = snap.travelers.some((x) => x.partnerId);
+  const [s, setS] = useState<{ fromTrip: { id: string; name: string }; pairs: { a: string; b: string }[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (hasCouples || !online || snap.travelers.length < 2) return;
+    let off = false;
+    http
+      .get<{ suggestion: typeof s }>(`/trips/${tripId}/travelers/partner-suggestion`)
+      .then((r) => !off && setS(r.suggestion))
+      .catch(() => undefined);
+    return () => {
+      off = true;
+    };
+  }, [tripId, hasCouples, online, snap.travelers.length]);
+  if (!s || hasCouples) return null;
+  const name = (id: string) => snap.travelers.find((x) => x.id === id)?.name ?? '?';
+  return (
+    <div className="mb-3 rounded-[1.25rem] border border-accent/30 bg-accent-soft p-4">
+      <p className="text-[14px] font-semibold">{t.travelers.copyPartners(s.fromTrip.name)}</p>
+      <p className="mt-0.5 text-[13px] text-text-2">{s.pairs.map((p) => `${name(p.a)} & ${name(p.b)}`).join(' · ')}</p>
+      <Button
+        className="mt-3"
+        size="sm"
+        loading={busy}
+        disabled={!online}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await tripStore.mutate(() => http.post(`/trips/${tripId}/travelers/partner-suggestion`));
+            toast(t.success.saved);
+            setS(null);
+          } catch (e) {
+            toast.error(e);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {t.travelers.copyPartnersGo}
+      </Button>
+    </div>
   );
 }

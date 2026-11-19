@@ -54,3 +54,18 @@ describe('local news', () => {
     expect(list.map((n) => n.id)).toEqual(['z', 'aa', 'y']);
   });
 });
+
+describe('other destinations', () => {
+  it('maps countries to ISO codes and picks the right travel advice', async () => {
+    const { countryIso } = await import('../../shared/countries');
+    const { aaCandidates } = await import('../../worker/services/news');
+    expect(countryIso('Spanien')).toBe('ES');
+    expect(countryIso('Bali')).toBe('ID');
+    expect(countryIso('jp')).toBe('JP');
+    expect(countryIso('Atlantis')).toBeNull();
+    const json = { response: { '1': { countryCode: 'TH', countryName: 'Thailand', lastModified: 1_795_000_000 }, '2': { countryCode: 'ES', countryName: 'Spanien', lastModified: 1_795_000_000, partialWarning: true } } };
+    const es = aaCandidates(json, 'ES', 1_795_000_000_000 + 3600_000);
+    expect(es).toEqual([expect.objectContaining({ title: 'Reisewarnung für Spanien (Auswärtiges Amt)', severity: 'urgent' })]);
+    expect(aaCandidates(json, 'TH', 1_795_000_000_000 + 30 * 86400_000)).toEqual([]);
+  });
+});

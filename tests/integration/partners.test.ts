@@ -29,3 +29,29 @@ describe('traveler partners', () => {
     expect((await owner.put(`/trips/${tripId}/travelers/${a}/partner`, { partnerId: '00000000-0000-4000-8000-000000000000' })).status).toBe(404);
   });
 });
+
+describe('couples from an earlier trip', () => {
+  it('suggests and applies the same couples by name in a new trip', async () => {
+    const owner = await setupOwner(t);
+    const mk = async (name: string, start: string) => (await owner.post('/trips', { name, startDate: start, endDate: start, baseCurrency: 'EUR' })).body.trip.id as string;
+    const old = await mk('Thailand 2026', '2026-11-06');
+    const add = async (trip: string, name: string) => (await owner.post(`/trips/${trip}/travelers`, { name })).body.traveler.id as string;
+    const meOld = (await owner.get(`/trips/${old}/snapshot`)).body.travelers[0].id;
+    const [lilli, tim, annika] = [await add(old, 'Lilli'), await add(old, 'Tim'), await add(old, 'Annika')];
+    await owner.put(`/trips/${old}/travelers/${meOld}/partner`, { partnerId: lilli });
+    await owner.put(`/trips/${old}/travelers/${tim}/partner`, { partnerId: annika });
+
+    const neu = await mk('Mallorca 2027', '2027-06-01');
+    for (const n of ['Lilli', 'tim', 'Annika']) await add(neu, n);
+    const sug = (await owner.get(`/trips/${neu}/travelers/partner-suggestion`)).body.suggestion;
+    expect(sug.fromTrip.name).toBe('Thailand 2026');
+    expect(sug.pairs).toHaveLength(2);
+    expect((await owner.post(`/trips/${neu}/travelers/partner-suggestion`, {})).body.applied).toBe(2);
+    const tr = (await owner.get(`/trips/${neu}/snapshot`)).body.travelers as { id: string; name: string; partnerId: string | null }[];
+    const by = (n: string) => tr.find((x) => x.name.toLowerCase() === n.toLowerCase())!;
+    expect(by('Lilli').partnerId).toBe(tr[0].id);
+    expect(by('tim').partnerId).toBe(by('Annika').id);
+    // Once couples exist, nothing more is suggested.
+    expect((await owner.get(`/trips/${neu}/travelers/partner-suggestion`)).body.suggestion).toBeNull();
+  });
+});

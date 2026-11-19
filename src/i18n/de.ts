@@ -304,6 +304,8 @@ export const de = {
     noPartner: 'Keine:r',
     partnerHint: 'Für die Paar-Ansicht in den Salden. Wird automatisch bei beiden Personen eingetragen.',
     partnerOf: (n: string) => `Partner:in: ${n}`,
+    copyPartners: (trip: string) => `Paare wie bei „${trip}“ übernehmen?`,
+    copyPartnersGo: 'Übernehmen',
   },
   members: {
     title: 'Zugriff & Einladungen',
@@ -893,7 +895,7 @@ export const de = {
   news: {
     title: 'Lage vor Ort',
     severity: { urgent: 'Dringend', important: 'Wichtig', info: 'Interessant' },
-    countryWide: 'Ganz Thailand',
+    countryWide: 'Ganzes Land',
     allStops: 'Alle Stationen',
     showAll: 'Alle Stationen zeigen',
     onlyHere: 'Nur diese Station',
@@ -912,7 +914,7 @@ export const de = {
     justNow: 'gerade eben',
     hoursAgo: (h: number) => `vor ${h} Std.`,
     daysAgo: (d: number) => (d === 1 ? 'gestern' : `vor ${d} Tagen`),
-    sources: 'Quellen: Auswärtiges Amt, GDACS (UN), Bangkok Post, The Thaiger, Khaosod English. Gefiltert auf eure Orte und Reise-Themen; Kurzfassungen automatisch übersetzt – im Zweifel die Quelle lesen.',
+    sources: 'Quellen: Auswärtiges Amt, GDACS (UN) und englischsprachige Nachrichten aus dem Reiseland. Gefiltert auf eure Orte und Reise-Themen; Kurzfassungen automatisch übersetzt – im Zweifel die Quelle lesen.',
   },
   whatsNew: {
     title: 'Neu in TRAVIO',

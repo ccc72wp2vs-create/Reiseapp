@@ -38,3 +38,30 @@ export function countryInfo(country: string | null | undefined): CountryInfo {
   const k = country.trim().toLowerCase();
   return COUNTRIES[k] ?? C(null, null);
 }
+
+/** ISO 3166-1 alpha-2 code for a trip's free-text country (German/English name or code). */
+const ISO: Record<string, string> = {
+  thailand: 'TH', spanien: 'ES', spain: 'ES', españa: 'ES', mallorca: 'ES', 'kanarische inseln': 'ES', teneriffa: 'ES',
+  italien: 'IT', italy: 'IT', italia: 'IT', sizilien: 'IT', sardinien: 'IT', frankreich: 'FR', france: 'FR', korsika: 'FR',
+  portugal: 'PT', madeira: 'PT', azoren: 'PT', griechenland: 'GR', greece: 'GR', kreta: 'GR', zypern: 'CY', cyprus: 'CY',
+  türkei: 'TR', tuerkei: 'TR', turkey: 'TR', türkiye: 'TR', kroatien: 'HR', croatia: 'HR', österreich: 'AT', oesterreich: 'AT', austria: 'AT',
+  schweiz: 'CH', switzerland: 'CH', niederlande: 'NL', netherlands: 'NL', belgien: 'BE', belgium: 'BE', dänemark: 'DK', denmark: 'DK',
+  schweden: 'SE', sweden: 'SE', norwegen: 'NO', norway: 'NO', finnland: 'FI', finland: 'FI', island: 'IS', iceland: 'IS',
+  irland: 'IE', ireland: 'IE', 'großbritannien': 'GB', grossbritannien: 'GB', england: 'GB', schottland: 'GB', uk: 'GB', 'vereinigtes königreich': 'GB', 'united kingdom': 'GB',
+  polen: 'PL', poland: 'PL', tschechien: 'CZ', czechia: 'CZ', ungarn: 'HU', hungary: 'HU', malta: 'MT', slowenien: 'SI', slovenia: 'SI', montenegro: 'ME', albanien: 'AL', albania: 'AL',
+  vietnam: 'VN', kambodscha: 'KH', cambodia: 'KH', laos: 'LA', malaysia: 'MY', singapur: 'SG', singapore: 'SG', indonesien: 'ID', indonesia: 'ID', bali: 'ID',
+  philippinen: 'PH', philippines: 'PH', japan: 'JP', südkorea: 'KR', suedkorea: 'KR', 'south korea': 'KR', china: 'CN', indien: 'IN', india: 'IN', 'sri lanka': 'LK', malediven: 'MV', maldives: 'MV', nepal: 'NP',
+  'vereinigte arabische emirate': 'AE', vae: 'AE', uae: 'AE', dubai: 'AE', oman: 'OM', jordanien: 'JO', jordan: 'JO', israel: 'IL',
+  ägypten: 'EG', aegypten: 'EG', egypt: 'EG', marokko: 'MA', morocco: 'MA', tunesien: 'TN', tunisia: 'TN', südafrika: 'ZA', suedafrika: 'ZA', 'south africa': 'ZA',
+  kenia: 'KE', kenya: 'KE', tansania: 'TZ', tanzania: 'TZ', sansibar: 'TZ', zanzibar: 'TZ', mauritius: 'MU', seychellen: 'SC', seychelles: 'SC', namibia: 'NA',
+  usa: 'US', 'vereinigte staaten': 'US', 'united states': 'US', kanada: 'CA', canada: 'CA', mexiko: 'MX', mexico: 'MX', kuba: 'CU', cuba: 'CU',
+  'dominikanische republik': 'DO', 'dominican republic': 'DO', 'costa rica': 'CR', brasilien: 'BR', brazil: 'BR', argentinien: 'AR', argentina: 'AR', peru: 'PE', chile: 'CL', kolumbien: 'CO', colombia: 'CO',
+  australien: 'AU', australia: 'AU', neuseeland: 'NZ', 'new zealand': 'NZ', deutschland: 'DE', germany: 'DE',
+};
+
+export function countryIso(country: string | null | undefined): string | null {
+  if (!country) return null;
+  const k = country.trim().toLowerCase();
+  if (/^[a-z]{2}$/.test(k)) return k.toUpperCase();
+  return ISO[k] ?? null;
+}

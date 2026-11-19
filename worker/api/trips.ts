@@ -316,6 +316,57 @@ trips.put('/:tripId/travelers/:id/partner', async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Couples from an earlier trip: matches its partners to this trip's travelers
+ * (same account, otherwise same name) – only pairs where both are still single here.
+ */
+async function partnerSuggestion(db: D1Database, tripId: string, userId: string) {
+  const current = (await db.prepare('SELECT id, name, user_id, partner_id FROM travelers WHERE trip_id = ?').bind(tripId).all<{ id: string; name: string; user_id: string | null; partner_id: string | null }>()).results;
+  if (current.length < 2 || current.some((x) => x.partner_id)) return null;
+  const { results: others } = await db
+    .prepare(
+      `SELECT t.id, t.name FROM trips t JOIN trip_members m ON m.trip_id = t.id
+       WHERE m.user_id = ? AND t.id != ? AND EXISTS (SELECT 1 FROM travelers x WHERE x.trip_id = t.id AND x.partner_id IS NOT NULL)
+       ORDER BY t.start_date DESC LIMIT 5`,
+    )
+    .bind(userId, tripId)
+    .all<{ id: string; name: string }>();
+  const norm = (s: string) => s.trim().toLowerCase();
+  for (const other of others) {
+    const prev = (await db.prepare('SELECT id, name, user_id, partner_id FROM travelers WHERE trip_id = ?').bind(other.id).all<{ id: string; name: string; user_id: string | null; partner_id: string | null }>()).results;
+    const find = (p: { name: string; user_id: string | null }) => current.find((x) => (p.user_id && x.user_id === p.user_id) || norm(x.name) === norm(p.name));
+    const pairs: { a: string; b: string }[] = [];
+    for (const p of prev) {
+      if (!p.partner_id || p.id > p.partner_id) continue;
+      const q = prev.find((x) => x.id === p.partner_id && x.partner_id === p.id);
+      const a = q && find(p);
+      const b = q && find(q);
+      if (a && b && a.id !== b.id) pairs.push({ a: a.id, b: b.id });
+    }
+    if (pairs.length) return { fromTrip: { id: other.id, name: other.name }, pairs };
+  }
+  return null;
+}
+
+trips.get('/:tripId/travelers/partner-suggestion', async (c) => {
+  return c.json({ suggestion: await partnerSuggestion(c.env.DB, c.get('trip').tripId, currentUser(c).id) });
+});
+
+trips.post('/:tripId/travelers/partner-suggestion', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const s = await partnerSuggestion(c.env.DB, t.tripId, currentUser(c).id);
+  if (!s) throw new ApiError('not_found', 'Keine Paare zum Übernehmen gefunden');
+  const now = nowIso();
+  await c.env.DB.batch(
+    s.pairs.flatMap((p) => [
+      c.env.DB.prepare('UPDATE travelers SET partner_id = ?, version = version + 1, updated_at = ? WHERE trip_id = ? AND id = ?').bind(p.b, now, t.tripId, p.a),
+      c.env.DB.prepare('UPDATE travelers SET partner_id = ?, version = version + 1, updated_at = ? WHERE trip_id = ? AND id = ?').bind(p.a, now, t.tripId, p.b),
+    ]),
+  );
+  return c.json({ applied: s.pairs.length });
+});
+
 trips.delete('/:tripId/travelers/:id', async (c) => {
   requireRole(c, 'editor');
   const t = c.get('trip');
