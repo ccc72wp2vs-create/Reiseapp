@@ -1,5 +1,5 @@
 import { TRAVELER_COLORS, type Role } from '../../shared/constants';
-import type { MemberDto, TripDto, TripSnapshot, TripSummaryDto } from '../../shared/types';
+import type { CommentDto, MemberDto, TodoDto, TripDto, TripSnapshot, TripSummaryDto } from '../../shared/types';
 import {
   activitySpec,
   bookingSpec,
@@ -7,6 +7,7 @@ import {
   listEntities,
   placeSpec,
   travelerSpec,
+  todoSpec,
 } from '../db/entity';
 import { nowIso, uuid } from '../lib/util';
 import { listExchangeRates, listExpenses, listSettlements } from './wallet';
@@ -201,6 +202,7 @@ export async function buildSnapshot(
       listDocuments(db, tripId),
       listVisiblePacking(db, tripId, userId),
     ]);
+  const [todos, comments] = await Promise.all([listEntities<TodoDto>(db, todoSpec, tripId), listComments(db, tripId)]);
   return {
     trip,
     members,
@@ -216,6 +218,8 @@ export async function buildSnapshot(
     exchangeRates,
     packingLists: packing.lists,
     packingItems: packing.items,
+    todos,
+    comments,
     syncedAt: nowIso(),
   };
 }
@@ -230,4 +234,23 @@ export async function audit(
     )
     .bind(uuid(), entry.tripId, entry.userId, entry.entity, entry.entityId, entry.action, entry.summary ?? null, nowIso())
     .run();
+}
+
+export async function listComments(db: D1Database, tripId: string): Promise<CommentDto[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT c.id, c.entity_type, c.entity_id, c.user_id, c.text, c.created_at, u.display_name AS author
+       FROM comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.trip_id = ? ORDER BY c.created_at`,
+    )
+    .bind(tripId)
+    .all<Record<string, string | null>>();
+  return results.map((r) => ({
+    id: r.id!,
+    entityType: r.entity_type as CommentDto['entityType'],
+    entityId: r.entity_id!,
+    userId: r.user_id,
+    authorName: r.author,
+    text: r.text!,
+    createdAt: r.created_at!,
+  }));
 }

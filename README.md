@@ -59,6 +59,12 @@ scripts/        Icon-Generator, E2E-Server
 
 - **Reisen:** anlegen, bearbeiten, archivieren, löschen (mit Bestätigung), wechseln, Export als JSON.
 - **Reiseziele:** Ankunft/Abreise, Zeitzone, Unterkunft, Koordinaten, Notizen, Titelbild; Reihenfolge per Drag & Drop oder Pfeiltasten; Hinweise auf Überschneidungen, Lücken und unpassende Hotelbuchungen (es wird nie automatisch etwas verschoben).
+- **To-dos für die Gruppe** (`/todos`): Aufgabe, zuständige Person, Fälligkeit, abhaken; auch über das zentrale „+“.
+- **Kommentare** an Buchungen, Orten, Aktivitäten und Ausgaben (eigene löschbar, Owner darf alle löschen); Anzahl auf den Buchungskarten.
+- **Suche über alles** (`/suche`, Lupe auf der Startseite): Buchungen inkl. Buchungsnummer/Notizen, Ausgaben, Orte, Tagesplan, Stationen, To-dos, Kommentare – rein clientseitig, offline nutzbar.
+- **Datenpflege** (`/datenpflege`): mögliche Doppel-Ausgaben, Buchungen ohne Reisende/Station, Orte ohne Station/Kartenpunkt, „Sonstiges“-Ausgaben mit Kategorievorschlag; eindeutige Zuordnungen per Tipp.
+- **Heimreise-Check** in den letzten zwei Reisetagen: Rückflug-Check-in, offene Zahlungen, fehlende Kassen-Einträge, Kautionen, Salden, To-dos, Packliste – danach „Endabrechnung teilen“.
+- **Rückblick in Zahlen:** Kosten pro Paar, Ø pro Person und Tag, teuerste/günstigste Station pro Nacht, größter Kostenblock, größte Einzelausgabe.
 - **Startseite:** aktuelles Ziel, Reisetag, verbleibende Tage, heutige Aktivitäten & Buchungen, aktuelle Unterkunft, nächster Ortswechsel/Transport, offene Punkte, Reisekasse, Buchungskosten, Schnellaktionen. **Gut sichtbare Erinnerung**, wenn ein Transfer nicht bestätigt ist (z. B. „Transfer Phuket → Koh Lanta noch nicht bestätigt.“).
 - **Reiseroute:** Karte mit Markierungen, chronologische Verbindungslinien (Flug, Boot, Landweg, offen), Detailkarte je Ziel (Unterkunft, Aufenthaltsdauer, Aktivitäten) und Timeline.
 - **Tagesplan:** Tagesleiste, Aktivitäten anlegen/bearbeiten/löschen/duplizieren/erledigen, Drag & Drop (Touch) + „Nach oben/unten“, Tag ändern, Verknüpfung mit gespeicherten Orten, Apple Karten / Google Maps, Zeitkonflikte, Buchungen des Tages.

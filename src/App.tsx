@@ -26,6 +26,9 @@ const NotFoundPage = lazy(() => import('./features/more/NotFoundPage'));
 const EmergencyPage = lazy(() => import('./features/more/EmergencyPage'));
 const RecapPage = lazy(() => import('./features/trips/RecapPage'));
 const SettlementReportPage = lazy(() => import('./features/wallet/SettlementReportPage'));
+const TodosPage = lazy(() => import('./features/todos/TodosPage'));
+const SearchPage = lazy(() => import('./features/search/SearchPage'));
+const DataCarePage = lazy(() => import('./features/datacare/DataCarePage'));
 const PhrasebookPage = lazy(() => import('./features/phrasebook/PhrasebookPage'));
 
 function PageFallback() {
@@ -123,6 +126,9 @@ const router = createBrowserRouter([
           { path: 'notfall', element: <EmergencyPage /> },
           { path: 'rueckblick', element: <RecapPage /> },
           { path: 'abrechnung', element: <SettlementReportPage /> },
+          { path: 'todos', element: <TodosPage /> },
+          { path: 'suche', element: <SearchPage /> },
+          { path: 'datenpflege', element: <DataCarePage /> },
           { path: 'sprache', element: <PhrasebookPage /> },
           { path: 'thai', element: <Navigate to="/sprache" replace /> },
           { path: '*', element: <NotFoundPage /> },

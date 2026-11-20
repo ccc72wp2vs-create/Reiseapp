@@ -20,6 +20,16 @@ export interface ChangeEntry {
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '2.18.0',
+    date: '2026-11-20',
+    items: [
+      { icon: 'plus', title: 'To-dos für die Gruppe', text: 'Wer erledigt was bis wann – z. B. „Fähre bestätigen“. Auch über das + anlegbar.', to: '/todos' },
+      { icon: 'sparkles', title: 'Kommentare', text: 'Hinweise für alle direkt an Buchungen, Orten, Aktivitäten und Ausgaben.' },
+      { icon: 'lightbulb', title: 'Suche über alles', text: 'Lupe oben auf der Startseite: findet Buchungsnummern, Notizen, Orte, Ausgaben und Kommentare – auch offline.', to: '/suche' },
+      { icon: 'route', title: 'Heimreise-Check', text: 'In den letzten zwei Tagen zeigt die Startseite, was vor dem Heimflug noch offen ist.' },
+    ],
+  },
+  {
     version: '2.16.0',
     date: '2026-11-19',
     items: [

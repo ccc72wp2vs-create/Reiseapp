@@ -328,6 +328,19 @@ export const bookingDepositSchema = z.object({
   date: dateStr,
   fxRate: z.string().max(40).optional(),
 });
+export const todoCreateSchema = z.object({
+  title: reqText(200),
+  notes: optText(1000),
+  assigneeTravelerId: id.nullable().optional(),
+  dueDate: optDate,
+  done: z.boolean().optional(),
+});
+export const todoUpdateSchema = todoCreateSchema.partial().extend({ version });
+export const commentCreateSchema = z.object({
+  entityType: z.enum(['booking', 'place', 'activity', 'expense']),
+  entityId: id,
+  text: reqText(1000),
+});
 export const bookingSyncExpenseSchema = z.object({ fxRate: z.string().max(40).optional() });
 
 // ---------------------------------------------------------------------------

@@ -256,6 +256,22 @@ export const destinationSpec: EntitySpec = {
   readonly: { sortOrder: f('sort_order', 'int') },
 };
 
+export const todoSpec: EntitySpec = {
+  name: 'todo',
+  label: 'To-do',
+  table: 'todos',
+  orderBy: "done, COALESCE(due_date, '9999-12-31'), created_at",
+  fields: {
+    title: f('title'),
+    notes: f('notes'),
+    assigneeTravelerId: f('assignee_traveler_id'),
+    dueDate: f('due_date'),
+    done: f('done', 'bool'),
+  },
+  readonly: { createdBy: f('created_by') },
+  refs: { assigneeTravelerId: 'travelers' },
+};
+
 export const placeSpec: EntitySpec = {
   name: 'place',
   label: 'Ort',

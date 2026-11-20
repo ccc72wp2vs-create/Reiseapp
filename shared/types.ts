@@ -365,6 +365,28 @@ export interface DocumentDto {
   updatedAt: string;
 }
 
+export interface TodoDto extends Versioned {
+  tripId: string;
+  title: string;
+  notes: string | null;
+  assigneeTravelerId: string | null;
+  dueDate: string | null;
+  done: boolean;
+  createdBy: string | null;
+}
+
+export type CommentEntity = 'booking' | 'place' | 'activity' | 'expense';
+
+export interface CommentDto {
+  id: string;
+  entityType: CommentEntity;
+  entityId: string;
+  userId: string | null;
+  authorName: string | null;
+  text: string;
+  createdAt: string;
+}
+
 export interface TripSnapshot {
   trip: TripDto;
   members: MemberDto[];
@@ -381,6 +403,8 @@ export interface TripSnapshot {
   exchangeRates: ExchangeRateDto[];
   packingLists: PackingListDto[];
   packingItems: PackingItemDto[];
+  todos?: TodoDto[];
+  comments?: CommentDto[];
   /** Server time of the snapshot (ISO). */
   syncedAt: string;
 }

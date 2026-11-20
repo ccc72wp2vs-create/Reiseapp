@@ -11,6 +11,7 @@ import {
   Route,
   Sparkles,
   Languages,
+  Search,
   Lock,
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -54,6 +55,7 @@ import { TravelDayCard } from './TravelDayCard';
 import { NewsBriefing, NewsHint, NewsSheet, useNews } from '../news/News';
 import { travelDay } from '../../../shared/travelday';
 import { bookingsToClarify } from '../../../shared/clarify';
+import HomewardCard from './HomewardCard';
 
 const ActivitySheet = lazy(() => import('../itinerary/ActivitySheet'));
 const ExpenseSheet = lazy(() => import('../wallet/ExpenseSheet'));
@@ -254,6 +256,9 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
         />
         <div className="absolute inset-x-0 top-0 z-10 px-safe pt-safe">
           <div className="flex items-center justify-end gap-2 pt-2 text-sand">
+            <Link to="/suche" aria-label={t.search.open} className="glass grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/15 text-text">
+              <Search size={17} />
+            </Link>
             {phraseLang && (
               <Link
                 to="/sprache"
@@ -354,7 +359,8 @@ function Dashboard({ snap }: { snap: TripSnapshot }) {
               <ArrowRight size={18} className="shrink-0 text-warn" />
             </Link>
           ))}
-        {((phase.phase === 'during' && phase.daysRemaining <= 3) || phase.phase === 'after') && snap.expenses.length > 0 && (
+        {phase.phase === 'during' && phase.daysRemaining <= 2 && <HomewardCard snap={snap} viewerTravelerId={viewerTravelerId} />}
+        {((phase.phase === 'during' && phase.daysRemaining === 3) || phase.phase === 'after') && snap.expenses.length > 0 && (
           <Link to="/abrechnung" className="mt-3 flex items-center gap-3 rounded-[1.25rem] border border-accent/30 bg-accent-soft p-4">
             <Receipt size={20} className="shrink-0 text-accent" />
             <span className="flex-1 text-[14px] font-semibold">{t.report.endHint}</span>

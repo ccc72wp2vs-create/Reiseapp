@@ -20,6 +20,7 @@ import { tripStore, useOnline } from '../../lib/store';
 
 export { storedRateFor, suggestedRate, type SuggestedRate } from '../../lib/rates';
 import { storedRateFor, suggestedRate } from '../../lib/rates';
+import Comments from '../comments/Comments';
 
 export interface SplitPreset {
   key: string;
@@ -565,6 +566,7 @@ export default function ExpenseSheet({
           </>
           )}
           {expense && <LegacyDocuments snap={snap!} expenseId={expense.id} bookingId={expense.bookingId ?? undefined} canEdit />}
+          {expense && snap && <Comments snap={snap} type="expense" id={expense.id} />}
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
               {error}

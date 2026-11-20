@@ -23,6 +23,7 @@ const BookingSheet = lazy(() => import('./BookingSheet'));
 const ClarifySheet = lazy(() => import('./ClarifySheet'));
 const BookingDepositSheet = lazy(() => import('./BookingDepositSheet'));
 import { DepositLine } from './BookingDepositSheet';
+import { CommentCount } from '../comments/Comments';
 const DocumentImportSheet = lazy(() => import('../documents/DocumentImportSheet').then((m) => ({ default: m.DocumentImportSheet })));
 
 export default function BookingsPage() {
@@ -270,6 +271,7 @@ function Timeline({
                       {t.bookings.forWhom}: {b.travelerIds.map((id) => travelerName(id)).filter(Boolean).join(', ')}
                     </span>
                   )}
+                  <CommentCount snap={snap} type="booking" id={b.id} />
                 </span>
               </button>
               <div className="mt-3">

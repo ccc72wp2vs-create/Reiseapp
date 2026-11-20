@@ -13,6 +13,7 @@ import { t } from '../../i18n';
 import { formatWeekdayShort } from '../../lib/format';
 import { isOnline, tripStore } from '../../lib/store';
 import { deletedActivity } from '../../lib/undo';
+import Comments from '../comments/Comments';
 
 export interface ActivityDefaults {
   date?: string;
@@ -238,6 +239,7 @@ export default function ActivitySheet({
           <TextAreaField label={t.plan.description} optional value={form.description} onChange={(e) => set('description', e.target.value)} />
           <TextAreaField label={t.common.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           <Toggle label={t.plan.completed} checked={form.completed} onChange={(v) => set('completed', v)} />
+          {activity && snap && <Comments snap={snap} type="activity" id={activity.id} />}
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
               {error}

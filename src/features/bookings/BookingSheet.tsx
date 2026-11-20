@@ -29,6 +29,7 @@ import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { tripStore, useOnline } from '../../lib/store';
 import { deletedBooking } from '../../lib/undo';
+import Comments from '../comments/Comments';
 
 export interface BookingPrefill {
   title?: string | null;
@@ -532,6 +533,7 @@ export default function BookingSheet({
           <TextAreaField label={t.bookings.clarification} optional placeholder={t.bookings.clarificationHint} value={form.clarificationNote} onChange={(e) => set('clarificationNote', e.target.value)} />
           <TextAreaField label={t.bookings.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           {b && <LegacyDocuments snap={snap!} bookingId={b.id} expenseId={b.expenseId ?? undefined} canEdit />}
+          {b && <Comments snap={snap!} type="booking" id={b.id} />}
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
               {error}

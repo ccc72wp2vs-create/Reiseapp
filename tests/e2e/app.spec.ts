@@ -459,3 +459,26 @@ test('Lage vor Ort: hint, list and festival idea from the news', async ({ page }
   await sheet.getByRole('button', { name: 'Alle Stationen zeigen' }).click();
   await expect(sheet.getByText('Laternenfest auf Koh Lanta am Wochenende.')).toBeVisible();
 });
+
+test('to-do, comment on a booking and search finds both', async ({ page }) => {
+  await page.goto('/todos');
+  await page.getByLabel('Neues To-do').fill('SIM-Karte verlängern');
+  await page.getByRole('button', { name: 'To-do hinzufügen' }).click();
+  await expect(page.getByText('SIM-Karte verlängern')).toBeVisible();
+  await page.getByRole('button', { name: 'Erledigt' }).first().click();
+  await expect(page.getByText(/^Erledigt \(\d+\)$/)).toBeVisible();
+
+  await page.goto('/buchungen');
+  await page.getByRole('button', { name: /^Unterkünfte/ }).click();
+  await page.getByText('Unterkunft Krabi', { exact: true }).click();
+  const sheet = page.getByRole('dialog').first();
+  await sheet.getByLabel('Neuer Kommentar').fill('Gepäck vorher abgeben möglich');
+  await sheet.getByRole('button', { name: 'Kommentar senden' }).click();
+  await expect(sheet.getByText('Gepäck vorher abgeben möglich')).toBeVisible();
+
+  await page.goto('/suche');
+  await page.getByLabel('Suche', { exact: true }).fill('gepack');
+  await expect(page.getByText('Kommentar', { exact: false }).first()).toBeVisible();
+  await page.getByLabel('Suche', { exact: true }).fill('sim karte');
+  await expect(page.getByRole('button', { name: /SIM-Karte verlängern/ }).first()).toBeVisible();
+});

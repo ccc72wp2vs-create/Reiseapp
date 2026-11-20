@@ -28,6 +28,12 @@ export interface Recap {
   totalMinor: number;
   /** Places with most 👍, then favourites. */
   topPlaces: { id: string; name: string; votes: number; favorite: boolean }[];
+  expenseCount: number;
+  /** Average spend per person and travel day (base currency). */
+  perPersonDayMinor: number;
+  biggestExpense: { title: string; minor: number } | null;
+  /** Spend per couple (sum of both partners' shares); empty when nobody has a partner. */
+  costPerCouple: { travelerIds: string[]; amountMinor: number }[];
 }
 
 export function buildRecap(snap: Pick<TripSnapshot, 'trip' | 'destinations' | 'bookings' | 'activities' | 'places' | 'expenses' | 'travelers'>, today: string): Recap {
@@ -49,6 +55,16 @@ export function buildRecap(snap: Pick<TripSnapshot, 'trip' | 'destinations' | 'b
     .filter((p) => p.votes > 0 || p.favorite)
     .sort((a, b) => b.votes - a.votes || Number(b.favorite) - Number(a.favorite) || a.name.localeCompare(b.name))
     .slice(0, 5);
+  const costPerTraveler = snap.travelers.map((x) => ({ travelerId: x.id, amountMinor: shares.get(x.id) ?? 0 }));
+  const totalMinor = snap.expenses.reduce((a, e) => a + e.baseAmountMinor, 0);
+  const biggest = [...snap.expenses].sort((a, b) => b.baseAmountMinor - a.baseAmountMinor)[0];
+  const seen = new Set<string>();
+  const costPerCouple: Recap['costPerCouple'] = [];
+  for (const x of snap.travelers) {
+    if (!x.partnerId || seen.has(x.id) || !snap.travelers.some((y) => y.id === x.partnerId)) continue;
+    seen.add(x.id).add(x.partnerId);
+    costPerCouple.push({ travelerIds: [x.id, x.partnerId], amountMinor: (shares.get(x.id) ?? 0) + (shares.get(x.partnerId) ?? 0) });
+  }
   return {
     days,
     totalDays,
@@ -58,8 +74,12 @@ export function buildRecap(snap: Pick<TripSnapshot, 'trip' | 'destinations' | 'b
     transports: snap.bookings.filter((b) => isTransport(b) && b.bookingStatus !== 'cancelled').length,
     activitiesDone: snap.activities.filter((a) => a.completed).length,
     placesSaved: snap.places.length,
-    costPerTraveler: snap.travelers.map((x) => ({ travelerId: x.id, amountMinor: shares.get(x.id) ?? 0 })),
-    totalMinor: snap.expenses.reduce((a, e) => a + e.baseAmountMinor, 0),
+    costPerTraveler,
+    totalMinor,
     topPlaces,
+    expenseCount: snap.expenses.length,
+    perPersonDayMinor: days && snap.travelers.length ? Math.round(totalMinor / snap.travelers.length / days) : 0,
+    biggestExpense: biggest ? { title: biggest.title, minor: biggest.baseAmountMinor } : null,
+    costPerCouple,
   };
 }

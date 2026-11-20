@@ -9,6 +9,7 @@ import { Button, ConfirmDialog, SelectField, Sheet, TextAreaField, TextField, To
 import { t } from '../../i18n';
 import { isOnline, tripStore } from '../../lib/store';
 import { deletedPlace } from '../../lib/undo';
+import Comments from '../comments/Comments';
 
 export default function PlaceSheet({
   open,
@@ -127,6 +128,7 @@ export default function PlaceSheet({
           <TextAreaField label={t.plan.description} optional value={form.description} onChange={(e) => set('description', e.target.value)} />
           <TextAreaField label={t.common.notes} optional value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           <Toggle label={t.explore.favorite} checked={form.favorite} onChange={(v) => set('favorite', v)} />
+          {place && snap && <Comments snap={snap} type="place" id={place.id} />}
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
               {error}

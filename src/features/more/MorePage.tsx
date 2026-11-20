@@ -1,4 +1,4 @@
-import { Briefcase, ChevronRight, CloudOff, Download, FlaskConical, Languages, Lightbulb, Luggage, Map, Settings, Siren, Receipt, Smartphone, Sparkles, Ticket, Trash2, Users } from 'lucide-react';
+import { Briefcase, ChevronRight, CloudOff, Download, FlaskConical, Languages, Lightbulb, ListTodo, Luggage, Search, Wand2, Map, Settings, Siren, Receipt, Smartphone, Sparkles, Ticket, Trash2, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { WhatsNewSheet } from '../../components/WhatsNew';
@@ -10,6 +10,7 @@ import { t } from '../../i18n';
 import { http } from '../../lib/api';
 import { tripsList, tripStore, useOnline, useTrips } from '../../lib/store';
 import { LANG_NAMES, phraseLangFor } from '../../lib/phrasebook';
+import { hygieneIssues } from '../../../shared/hygiene';
 
 function Row({ to, icon, label, hint, onClick }: { to?: string; icon: ReactNode; label: string; hint?: ReactNode; onClick?: () => void }) {
   const inner = (
@@ -61,11 +62,14 @@ export default function MorePage() {
           <Row to="/reisen" icon={<Briefcase size={19} />} label={t.trips.title} hint={snap?.trip.name} />
           <Row to="/reise" icon={<Users size={19} />} label={t.trips.overview} hint={`${t.destinations.title} · ${t.travelers.title}`} />
           <Row to="/route" icon={<Map size={19} />} label={t.trips.route} />
+          <Row to="/todos" icon={<ListTodo size={19} />} label={t.todos.title} hint={snap?.todos?.length ? t.todos.hint((snap.todos ?? []).filter((x) => !x.done).length, 0) : t.todos.quickHint} />
           <Row to="/plan?ansicht=ideen" icon={<Lightbulb size={19} />} label={t.ideas.moreRow} hint={t.ideas.moreHint} />
           <Row to="/buchungen" icon={<Ticket size={19} />} label={t.bookings.title} hint={snap ? `${snap.bookings.length}` : undefined} />
           <Row to="/rueckblick" icon={<Sparkles size={19} />} label={t.recap.title} hint={t.recap.share} />
           <Row to="/abrechnung" icon={<Receipt size={19} />} label={t.report.title} hint={t.report.hintRow} />
           {phraseLang && <Row to="/sprache" icon={<Languages size={19} />} label={`${t.phrasebook.titleGeneric}: ${LANG_NAMES[phraseLang]}`} hint={t.phrasebook.eyebrow} />}
+          <Row to="/suche" icon={<Search size={19} />} label={t.search.title} hint={t.search.open} />
+          {snap && <Row to="/datenpflege" icon={<Wand2 size={19} />} label={t.dataCare.title} hint={hygieneIssues(snap).length ? t.dataCare.rowCount(hygieneIssues(snap).length) : t.dataCare.row} />}
           <Row to="/notfall" icon={<Siren size={19} />} label={t.emergency.title} hint={t.emergency.eyebrow} />
           <Row to="/packliste" icon={<Luggage size={19} />} label={t.packing.title} hint={items.length ? t.packing.progress(items.filter((i) => i.packed).length, items.length) : undefined} />
         </ul>

@@ -3,7 +3,7 @@
  * that fits the current page is shown first and large; recent expenses can be
  * repeated with one tap.
  */
-import { ArrowRight, CalendarPlus, MapPin, Plus, Receipt, ScanLine, Ticket } from 'lucide-react';
+import { ArrowRight, CalendarPlus, ListTodo, MapPin, Plus, Receipt, ScanLine, Ticket } from 'lucide-react';
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { recentTemplates, type ExpenseTemplate } from '../../shared/quickfill';
@@ -20,8 +20,9 @@ const ReceiptSplitSheet = lazy(() => import('../features/wallet/ReceiptSplitShee
 const BookingSheet = lazy(() => import('../features/bookings/BookingSheet'));
 const ActivitySheet = lazy(() => import('../features/itinerary/ActivitySheet'));
 const PlaceSheet = lazy(() => import('../features/explore/PlaceSheet'));
+const TodoSheet = lazy(() => import('../features/todos/TodosPage').then((m) => ({ default: m.TodoSheet })));
 
-type Kind = 'expense' | 'receipt' | 'booking' | 'activity' | 'place';
+type Kind = 'expense' | 'receipt' | 'booking' | 'activity' | 'place' | 'todo';
 
 export function QuickAddButton() {
   const { snap, canEdit, user } = useTrip();
@@ -39,7 +40,9 @@ export function QuickAddButton() {
       : 'activity'
     : location.pathname.startsWith('/buchungen')
       ? 'booking'
-      : 'expense';
+      : location.pathname.startsWith('/todos')
+        ? 'todo'
+        : 'expense';
   const today = todayIn(snap.destinations[0]?.timezone ?? snap.trip.homeTimezone);
   const planDay = location.pathname.startsWith('/plan') ? params.get('tag') : null;
   const where = destinationOn(snap.destinations, today);
@@ -52,6 +55,7 @@ export function QuickAddButton() {
     { kind: 'booking', label: t.bookings.add, hint: t.quickAdd.bookingHint, icon: <Ticket size={20} /> },
     { kind: 'activity', label: t.plan.addActivity, hint: t.quickAdd.activityHint, icon: <CalendarPlus size={20} /> },
     { kind: 'place', label: t.quickAdd.place, hint: t.quickAdd.placeHint, icon: <MapPin size={20} /> },
+    { kind: 'todo', label: t.todos.hint1, hint: t.todos.quickHint, icon: <ListTodo size={20} /> },
   ];
   const first = options.find((o) => o.kind === primary)!;
   const rest = options.filter((o) => o.kind !== primary && (o.kind !== 'receipt' || snap.travelers.length > 1));
@@ -154,6 +158,7 @@ export function QuickAddButton() {
         {kind === 'receipt' && <ReceiptSplitSheet snap={snap} onClose={() => setKind(null)} />}
         {kind === 'booking' && <BookingSheet open onClose={() => setKind(null)} />}
         {kind === 'activity' && <ActivitySheet open onClose={() => setKind(null)} defaults={{ date: planDay ?? (today >= snap.trip.startDate && today <= snap.trip.endDate ? today : snap.trip.startDate) }} />}
+        {kind === 'todo' && <TodoSheet snap={snap} onClose={() => setKind(null)} />}
         {kind === 'place' && <PlaceSheet open onClose={() => setKind(null)} defaultDestinationId={stopId} />}
       </Suspense>
     </>

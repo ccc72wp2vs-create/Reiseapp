@@ -10,6 +10,9 @@ import {
   bookingCreateSchema,
   bookingToExpenseSchema,
   bookingDepositSchema,
+  commentCreateSchema,
+  todoCreateSchema,
+  todoUpdateSchema,
   bookingSyncExpenseSchema,
   bookingUpdateSchema,
   depositCreateSchema,
@@ -37,7 +40,7 @@ import { computeBalances, suggestSettlements } from '../../shared/finance';
 import { allocate } from '../../shared/money';
 import { remainingMinor } from '../../shared/costs';
 import type { ExpenseCategory } from '../../shared/constants';
-import type { ActivityDto, BookingDto } from '../../shared/types';
+import type { ActivityDto, BookingDto, TodoDto } from '../../shared/types';
 import {
   activitySpec,
   bookingSpec,
@@ -45,13 +48,14 @@ import {
   deleteEntity,
   getEntity,
   insertEntity,
+  todoSpec,
   unwrapUpdate,
   updateEntity,
   type DeleteResult,
   type UpdateResult,
 } from '../db/entity';
 import { ApiError } from '../lib/errors';
-import { nowIso } from '../lib/util';
+import { nowIso, uuid } from '../lib/util';
 import { currentUser, loadTripAccess, parseJson, requireRole } from '../middleware/core';
 import * as packing from '../services/packing';
 import * as plan from '../services/plan';
@@ -121,6 +125,61 @@ r.post('/:tripId/activities/:id/duplicate', async (c) => {
   const { id: _id, version: _v, createdAt: _c, updatedAt: _u, tripId: _t, sortOrder: _s, createdBy: _cb, updatedBy: _ub, ...rest } = src;
   const activity = await plan.createActivity(c.env.DB, t.tripId, currentUser(c).id, { ...rest, completed: false });
   return c.json({ activity }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// To-dos (group list with who is responsible)
+// ---------------------------------------------------------------------------
+
+r.post('/:tripId/todos', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const todo = await insertEntity<TodoDto>(c.env.DB, todoSpec, t.tripId, await parseJson(c, todoCreateSchema), { created_by: currentUser(c).id });
+  return c.json({ todo }, 201);
+});
+
+r.patch('/:tripId/todos/:id', async (c) => {
+  requireRole(c, 'editor');
+  const { version, ...patch } = await parseJson(c, todoUpdateSchema);
+  const res = await updateEntity<TodoDto>(c.env.DB, todoSpec, c.get('trip').tripId, c.req.param('id'), version, patch);
+  return c.json({ todo: unwrapUpdate(res, 'To-do') });
+});
+
+r.delete('/:tripId/todos/:id', async (c) => {
+  requireRole(c, 'editor');
+  const res = await deleteEntity(c.env.DB, todoSpec, c.get('trip').tripId, c.req.param('id'));
+  if (res.status === 'not_found') throw new ApiError('not_found', 'To-do nicht gefunden');
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Comments on bookings, places, activities and expenses
+// ---------------------------------------------------------------------------
+
+const COMMENT_TABLES = { booking: 'bookings', place: 'saved_places', activity: 'activities', expense: 'expenses' } as const;
+
+r.post('/:tripId/comments', async (c) => {
+  requireRole(c, 'editor');
+  const t = c.get('trip');
+  const input = await parseJson(c, commentCreateSchema);
+  const exists = await c.env.DB.prepare(`SELECT 1 FROM ${COMMENT_TABLES[input.entityType as keyof typeof COMMENT_TABLES]} WHERE id = ? AND trip_id = ?`).bind(input.entityId, t.tripId).first();
+  if (!exists) throw new ApiError('not_found', 'Eintrag nicht gefunden');
+  const id = uuid();
+  const now = nowIso();
+  await c.env.DB.prepare('INSERT INTO comments (id, trip_id, entity_type, entity_id, user_id, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, t.tripId, input.entityType, input.entityId, currentUser(c).id, input.text, now)
+    .run();
+  return c.json({ comment: { id, ...input, userId: currentUser(c).id, authorName: currentUser(c).displayName, createdAt: now } }, 201);
+});
+
+/** Own comments only (owners may remove any). */
+r.delete('/:tripId/comments/:id', async (c) => {
+  const t = c.get('trip');
+  const res = await c.env.DB.prepare(`DELETE FROM comments WHERE id = ? AND trip_id = ? AND (user_id = ? OR ? = 'owner')`)
+    .bind(c.req.param('id'), t.tripId, currentUser(c).id, t.role)
+    .run();
+  if (!res.meta.changes) throw new ApiError('not_found', 'Kommentar nicht gefunden');
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

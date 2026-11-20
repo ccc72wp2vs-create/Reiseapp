@@ -1,6 +1,7 @@
 import { CalendarDays, CheckCircle2, Compass, MapPin, Plane, Route as RouteIcon, Share2, Star, ThumbsUp, Wallet } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { buildRecap } from '../../../shared/recap';
+import { buildReport } from '../../../shared/report';
 import { buildRoute, destinationOn, sortDestinations, todayIn } from '../../../shared/trip';
 import type { TripSnapshot } from '../../../shared/types';
 import { PageHeader, useTrip } from '../../components/AppShell';
@@ -24,6 +25,15 @@ export default function RecapPage() {
   return <Recap snap={snap} />;
 }
 
+function NumRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 p-4">
+      <span className="shrink-0 text-[14px] text-text-2">{label}</span>
+      <span className="min-w-0 truncate text-right font-semibold tabular">{value}</span>
+    </div>
+  );
+}
+
 function Stat({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
   return (
     <div className="rounded-[1.25rem] border border-line bg-surface p-4">
@@ -40,6 +50,10 @@ function Recap({ snap }: { snap: TripSnapshot }) {
   const probe = destinationOn(destinations, todayIn(trip.homeTimezone)).current ?? destinations[0];
   const today = todayIn(probe?.timezone ?? trip.homeTimezone);
   const r = useMemo(() => buildRecap(snap, today), [snap, today]);
+  const report = useMemo(() => buildReport(snap, 'persons'), [snap]);
+  const perNight = report.byStop.filter((s) => s.destinationId && s.nights > 0 && s.minor > 0).map((s) => ({ ...s, perNight: Math.round(s.minor / s.nights) }));
+  perNight.sort((a, b) => b.perNight - a.perNight);
+  const topCat = report.byCategory[0];
   const route = useMemo(() => buildRoute(trip, destinations, bookings), [trip, destinations, bookings]);
   const stops = sortDestinations(destinations);
   const name = (id: string) => travelers.find((x) => x.id === id)?.name ?? '?';
@@ -119,6 +133,37 @@ function Recap({ snap }: { snap: TripSnapshot }) {
           </div>
         </Card>
         <p className="mt-2 text-[12px] text-text-3">{t.recap.costsHint}</p>
+
+        {r.costPerCouple.length > 1 && (
+          <>
+            <SectionTitle>{t.recap.couples}</SectionTitle>
+            <Card className="divide-y divide-line">
+              {r.costPerCouple.map((c) => (
+                <div key={c.travelerIds.join()} className="flex items-center gap-3 p-4">
+                  <span className="min-w-0 flex-1 truncate font-medium">{c.travelerIds.map(name).join(' & ')}</span>
+                  <span className="font-semibold tabular">{money(c.amountMinor, base)}</span>
+                </div>
+              ))}
+            </Card>
+          </>
+        )}
+
+        {r.expenseCount > 0 && (
+          <>
+            <SectionTitle>{t.recap.numbers}</SectionTitle>
+            <Card className="divide-y divide-line">
+              {r.perPersonDayMinor > 0 && <NumRow label={t.recap.perDay} value={money(r.perPersonDayMinor, base)} />}
+              {perNight.length > 1 && <NumRow label={t.recap.priciest} value={`${perNight[0].name} · ${money(perNight[0].perNight, base)}`} />}
+              {perNight.length > 1 && <NumRow label={t.recap.cheapest} value={`${perNight.at(-1)!.name} · ${money(perNight.at(-1)!.perNight, base)}`} />}
+              {topCat && report.totalMinor > 0 && (
+                <NumRow label={t.recap.topCategory} value={`${t.expenseCategories[topCat.category]} · ${Math.round((topCat.minor / report.totalMinor) * 100)} %`} />
+              )}
+              {r.biggestExpense && <NumRow label={t.recap.biggest} value={`${r.biggestExpense.title} · ${money(r.biggestExpense.minor, base)}`} />}
+              <NumRow label={t.recap.expenseCount} value={nf.format(r.expenseCount)} />
+            </Card>
+            {perNight.length > 1 && <p className="mt-2 text-[12px] text-text-3">{t.recap.perNightHint}</p>}
+          </>
+        )}
 
         {r.topPlaces.length > 0 && (
           <>
