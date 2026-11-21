@@ -413,7 +413,8 @@ export interface TripSnapshot {
 // Sync protocol
 // ---------------------------------------------------------------------------
 
-export type SyncEntity = 'activity' | 'place' | 'packing_list' | 'packing_item';
+/** 'expense' supports create only (editing money offline stays off). */
+export type SyncEntity = 'activity' | 'place' | 'packing_list' | 'packing_item' | 'expense';
 export type SyncAction = 'create' | 'update' | 'delete' | 'reorder';
 
 export interface SyncOperation {

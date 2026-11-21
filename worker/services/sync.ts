@@ -17,6 +17,7 @@ import {
   activityCreateSchema,
   activityReorderSchema,
   activityUpdateSchema,
+  expenseCreateSchema,
   packingItemCreateSchema,
   packingItemUpdateSchema,
   packingListCreateSchema,
@@ -29,12 +30,14 @@ import { ApiError, fromZod } from '../lib/errors';
 import { nowIso } from '../lib/util';
 import * as packing from './packing';
 import * as plan from './plan';
+import * as wallet from './wallet';
 
 interface Ctx {
   db: D1Database;
   tripId: string;
   userId: string;
   role: Role;
+  baseCurrency: string;
 }
 
 function parse<T>(schema: { safeParse(d: unknown): { success: true; data: T } | { success: false; error: import('zod').ZodError } }, data: unknown): T {
@@ -68,7 +71,7 @@ function toResult(opId: string, action: SyncOperation['action'], w: WriteOutcome
 }
 
 async function applyOp(ctx: Ctx, op: SyncOperation): Promise<SyncResult> {
-  const { db, tripId, userId, role } = ctx;
+  const { db, tripId, userId, role, baseCurrency } = ctx;
   const needVersion = () => {
     if (!op.baseVersion) throw new ApiError('validation_failed', 'baseVersion fehlt');
     return op.baseVersion;
@@ -102,6 +105,14 @@ async function applyOp(ctx: Ctx, op: SyncOperation): Promise<SyncResult> {
       }
       if (op.action === 'delete') return toResult(op.opId, op.action, await plan.deletePlace(db, tripId, op.id, op.baseVersion));
       break;
+    }
+    case 'expense': {
+      // Only new expenses can be queued offline; the rate travels with the op
+      // and is stored as-is, exactly like an online entry.
+      requireEditor(role);
+      if (op.action !== 'create') break;
+      const input = parse(expenseCreateSchema, { ...op.data, id: op.id });
+      return toResult(op.opId, op.action, { status: 'ok', entity: await wallet.createExpense(db, tripId, baseCurrency, userId, input) });
     }
     case 'packing_list': {
       if (op.action === 'create') {

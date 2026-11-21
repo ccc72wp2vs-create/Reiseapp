@@ -219,9 +219,9 @@ Reisekasse: Originalbetrag + Originalwährung werden gespeichert, ebenso der ver
 
 - Der Service Worker cached die App-Shell und alle Build-Dateien; die App startet offline.
 - Reisedaten liegen als Snapshot in **IndexedDB** (zuletzt synchronisierter Stand).
-- **Offline bearbeitbar:** Tagesplan, gespeicherte Orte, Packlisten. Änderungen landen in einer Warteschlange mit stabilen Operations-IDs und werden bei Verbindung an `POST /api/v1/trips/:id/sync` gesendet. Der Server verarbeitet jede Operation **idempotent**.
+- **Offline bearbeitbar:** Tagesplan, gespeicherte Orte, Packlisten – und **neue Ausgaben** (nur anlegen). Eine offline erfasste Ausgabe wird lokal mit denselben Rundungsregeln wie auf dem Server berechnet (`shared/offlineExpense.ts`), erscheint sofort in Kasse und Salden („Wartet auf Sync“) und behält den beim Erfassen gewählten Kurs. Mögliche Doppel-Einträge zeigen Kassen-Verlauf und Datenpflege an. Änderungen landen in einer Warteschlange mit stabilen Operations-IDs und werden bei Verbindung an `POST /api/v1/trips/:id/sync` gesendet. Der Server verarbeitet jede Operation **idempotent**.
 - **Konflikte:** jede Änderung trägt die Basisversion. Hat jemand anderes den Eintrag inzwischen geändert, wird nichts überschrieben – die App zeigt beide Versionen und du entscheidest.
-- **Nur online:** Ausgaben, Buchungen, Reiseziele, Reisen, Anmeldung, Einladungen, Karten (Kacheln aus dem Internet) und externe Navigation. Die App zeigt das jeweils deutlich an.
+- **Nur online:** Ausgaben bearbeiten/löschen, Beleg-Foto, Buchungen, Reiseziele, Reisen, Anmeldung, Einladungen, Karten (Kacheln aus dem Internet) und externe Navigation. Die App zeigt das jeweils deutlich an.
 
 ## Ortssuche & Fahrzeiten ohne Kreditkarte: Geoapify (OpenStreetMap)
 

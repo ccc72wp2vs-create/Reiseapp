@@ -285,7 +285,7 @@ function Wallet({ snap }: { snap: TripSnapshot }) {
                   {t.home.recentExpenses}
                 </SectionTitle>
                 <ExpenseList
-                  expenses={[...(sel ? expenses.filter((e) => amountOf(e) > 0) : expenses)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5)}
+                  expenses={[...(sel ? expenses.filter((e) => amountOf(e) > 0) : expenses)].sort((a, b) => Number(b.version === 0) - Number(a.version === 0) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5)}
                   snap={snap}
                   shareOf={sel ? selection.selected : undefined}
                   onOpen={(e) => canEdit && setSheet({ kind: 'expense', expense: e })}
@@ -440,13 +440,14 @@ function ExpenseList({ expenses, snap, onOpen, shareOf, dupes }: { expenses: Exp
     <ul className="space-y-2">
       {expenses.map((e) => (
         <li key={e.id}>
-          <button type="button" onClick={() => onOpen(e)} className="flex w-full items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4 text-left">
+          <button type="button" onClick={() => (e.version === 0 ? toast(t.wallet.pendingOpen) : onOpen(e))} className="flex w-full items-center gap-3 rounded-[1.25rem] border border-line bg-surface p-4 text-left">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-surface-2 text-text-2">
               <ExpenseIcon category={e.category} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold">{e.title}</span>
               {dupes?.has(e.id) && <span className="mb-0.5 inline-block rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn">{t.history.maybeDuplicate}</span>}
+              {e.version === 0 && <span className="mb-0.5 inline-block rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-text-2">{t.wallet.pendingSync}</span>}
               <span className="block truncate text-[13px] text-text-3">
                 {formatDateShort(e.date)} · {e.payers.map((p) => name(p.travelerId)).join(' & ')} · {t.wallet.split[e.splitMethod]} ({e.shares.length})
               </span>

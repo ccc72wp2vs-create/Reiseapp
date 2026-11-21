@@ -40,7 +40,7 @@ import { computeBalances, suggestSettlements } from '../../shared/finance';
 import { allocate } from '../../shared/money';
 import { remainingMinor } from '../../shared/costs';
 import type { ExpenseCategory } from '../../shared/constants';
-import type { ActivityDto, BookingDto, TodoDto } from '../../shared/types';
+import type { ActivityDto, BookingDto, ExpenseDto, TodoDto } from '../../shared/types';
 import {
   activitySpec,
   bookingSpec,
@@ -778,7 +778,16 @@ r.delete('/:tripId/packing/items/:id', async (c) => {
 r.post('/:tripId/sync', async (c) => {
   const t = c.get('trip');
   const { ops } = await parseJson(c, syncRequestSchema);
-  const results = await processSyncOps({ db: c.env.DB, tripId: t.tripId, userId: currentUser(c).id, role: t.role }, ops);
+  const userId = currentUser(c).id;
+  const results = await processSyncOps({ db: c.env.DB, tripId: t.tripId, userId, role: t.role, baseCurrency: t.baseCurrency }, ops);
+  // Expenses entered offline: same audit entry and push as an online entry.
+  for (const r of results) {
+    const op = ops.find((o) => o.opId === r.opId);
+    if (op?.entity !== 'expense' || r.status !== 'applied' || !r.entity) continue;
+    const expense = r.entity as ExpenseDto;
+    await audit(c.env.DB, { tripId: t.tripId, userId, entity: 'expense', entityId: expense.id, action: 'create' });
+    c.executionCtx?.waitUntil?.(notifyExpense(c.env, t.tripId, userId, expense).catch(() => undefined));
+  }
   return c.json({ results });
 });
 

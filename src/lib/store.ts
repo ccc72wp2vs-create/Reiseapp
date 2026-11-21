@@ -6,8 +6,8 @@
  *  view    – server state with pending mutations applied optimistically
  *
  * Activities, saved places and packing lists/items are edited through the
- * queue (works offline). Everything else uses direct API calls and is
- * disabled while offline.
+ * queue (works offline); new expenses can be queued too (create only).
+ * Everything else uses direct API calls and is disabled while offline.
  */
 import { useSyncExternalStore } from 'react';
 import type {
@@ -21,6 +21,7 @@ import type {
   TripSnapshot,
   TripSummaryDto,
 } from '../../shared/types';
+import { localExpense, type ExpenseCreateInput } from '../../shared/offlineExpense';
 import { t } from '../i18n';
 import { ApiError, errorMessage, http } from './api';
 import { idb } from './idb';
@@ -173,12 +174,13 @@ export function useSnapshot() {
 // Applying operations locally
 // ---------------------------------------------------------------------------
 
-type Collection = 'activities' | 'places' | 'packingLists' | 'packingItems';
+type Collection = 'activities' | 'places' | 'packingLists' | 'packingItems' | 'expenses';
 const COLLECTION: Record<SyncEntity, Collection> = {
   activity: 'activities',
   place: 'places',
   packing_list: 'packingLists',
   packing_item: 'packingItems',
+  expense: 'expenses',
 };
 
 const DEFAULTS: Record<SyncEntity, Record<string, unknown>> = {
@@ -214,6 +216,7 @@ const DEFAULTS: Record<SyncEntity, Record<string, unknown>> = {
   },
   packing_list: { visibility: 'private', isTemplate: false, ownerUserId: '' },
   packing_item: { category: 'other', quantity: 1, packed: false, sortOrder: 9999 },
+  expense: {},
 };
 
 function applyOps(server: TripSnapshot, ops: QueuedOp[]): TripSnapshot {
@@ -224,8 +227,20 @@ function applyOps(server: TripSnapshot, ops: QueuedOp[]): TripSnapshot {
     places: [...server.places],
     packingLists: [...server.packingLists],
     packingItems: [...server.packingItems],
+    expenses: [...server.expenses],
   };
   for (const op of ops) {
+    if (op.entity === 'expense') {
+      // Only creates are queued; built exactly like the server will store it.
+      if (op.action === 'create' && !next.expenses.some((e) => e.id === op.id)) {
+        try {
+          next.expenses.push(localExpense(op.id, server.trip.id, server.trip.baseCurrency, op.data as unknown as ExpenseCreateInput, op.createdAt));
+        } catch {
+          /* invalid input – the server will reject it and the failure is shown */
+        }
+      }
+      continue;
+    }
     const key = COLLECTION[op.entity];
     const list = next[key] as unknown as Record<string, unknown>[];
     const idx = list.findIndex((x) => x.id === op.id);
@@ -509,6 +524,17 @@ export const tripStore = {
     remove: (id: string) => queueDelete('activity', id),
     reorder(date: string, orderedIds: string[]) {
       enqueue({ entity: 'activity', action: 'reorder', id: orderedIds[0], data: { date, orderedIds } });
+    },
+  },
+  expenses: {
+    /** Queue a new expense (works offline). Throws if the input is invalid. */
+    create(data: ExpenseCreateInput) {
+      const s = store.get();
+      if (!s.server) throw new Error('no trip');
+      const id = crypto.randomUUID();
+      localExpense(id, s.server.trip.id, s.server.trip.baseCurrency, data, new Date().toISOString());
+      enqueue({ entity: 'expense', action: 'create', id, data: data as unknown as Record<string, unknown> });
+      return id;
     },
   },
   places: {

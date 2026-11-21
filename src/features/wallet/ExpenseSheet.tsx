@@ -16,7 +16,8 @@ import { Badge, Button, ConfirmDialog, Field, Input, Segmented, SelectField, She
 import { t } from '../../i18n';
 import { errorMessage, http } from '../../lib/api';
 import { formatDate, formatRate, money } from '../../lib/format';
-import { tripStore, useOnline } from '../../lib/store';
+import { isOnline, tripStore, useOnline } from '../../lib/store';
+import type { ExpenseCreateInput } from '../../../shared/offlineExpense';
 
 export { storedRateFor, suggestedRate, type SuggestedRate } from '../../lib/rates';
 import { storedRateFor, suggestedRate } from '../../lib/rates';
@@ -230,6 +231,18 @@ export default function ExpenseSheet({
       ...(needsRate ? { fxRate: rateNorm!, fxSource: form.rateSource === 'cached' ? 'cached' : 'manual', fxDate: form.rateSource === 'cached' ? form.rateDate : form.date } : {}),
       notes: form.notes.trim() || null,
     };
+    if (!expense && !isOnline()) {
+      // Offline: queue the new expense – it shows up in the wallet right away
+      // and is sent (with this rate, unchanged) as soon as there is a connection.
+      try {
+        tripStore.expenses.create(payload as ExpenseCreateInput);
+        toast(t.wallet.savedOffline);
+        onClose();
+      } catch {
+        setError(t.errors.validation);
+      }
+      return;
+    }
     setBusy(true);
     try {
       const saved = await tripStore.mutate(async () => {
@@ -275,14 +288,14 @@ export default function ExpenseSheet({
             <Button variant="secondary" block onClick={onClose}>
               {t.common.cancel}
             </Button>
-            <Button block type="submit" form="expense-form" loading={busy} disabled={!online}>
+            <Button block type="submit" form="expense-form" loading={busy} disabled={(!online && !!expense) || expense?.version === 0}>
               {t.common.save}
             </Button>
           </>
         }
       >
         <form id="expense-form" onSubmit={submit} className="space-y-4" noValidate>
-          {!online && <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[14px] text-warn">{t.errors.offlineAction}</p>}
+          {!online && <p className="rounded-2xl bg-warn-soft px-4 py-3 text-[14px] text-warn">{expense ? t.errors.offlineAction : t.wallet.offlineNew}</p>}
           {expense?.bookingId && <Badge tone="info">{t.wallet.fromBooking}</Badge>}
           {bookingMatch && (
             <div className={cx('rounded-[1.25rem] border p-4', linkTo ? 'border-accent/40 bg-accent-soft' : 'border-warn/35 bg-warn-soft')}>

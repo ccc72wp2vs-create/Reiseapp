@@ -509,7 +509,7 @@ export const packingItemUpdateSchema = z.object(packingItemFields).partial().ext
 
 export const syncOperationSchema = z.object({
   opId: id,
-  entity: z.enum(['activity', 'place', 'packing_list', 'packing_item']),
+  entity: z.enum(['activity', 'place', 'packing_list', 'packing_item', 'expense']),
   action: z.enum(['create', 'update', 'delete', 'reorder']),
   id: id,
   baseVersion: z.number().int().min(1).optional(),

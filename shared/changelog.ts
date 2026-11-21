@@ -20,6 +20,17 @@ export interface ChangeEntry {
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '2.19.0',
+    date: '2026-11-21',
+    items: [
+      {
+        icon: 'wallet',
+        title: 'Ausgaben auch offline erfassen',
+        text: 'Kein Netz auf der Fähre oder in den Bergen? Neue Ausgaben werden trotzdem gespeichert, zählen sofort in den Salden und werden automatisch gesendet, sobald wieder Netz da ist.',
+      },
+    ],
+  },
+  {
     version: '2.18.0',
     date: '2026-11-20',
     items: [

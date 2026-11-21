@@ -482,3 +482,26 @@ test('to-do, comment on a booking and search finds both', async ({ page }) => {
   await page.getByLabel('Suche', { exact: true }).fill('sim karte');
   await expect(page.getByRole('button', { name: /SIM-Karte verlängern/ }).first()).toBeVisible();
 });
+
+test('wallet: expense entered offline shows up at once and syncs later', async ({ page, context }, info) => {
+  const title = `Nachtmarkt offline ${info.project.name}`;
+  await page.goto('/kasse');
+  await page.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 30_000 });
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+  await page.getByRole('button', { name: /^Ausgabe erfassen/ }).click();
+  await expect(page.getByText('Du bist offline. Die Ausgabe wird mit diesem Kurs gespeichert')).toBeVisible();
+  await page.getByLabel('Wofür?').fill(title);
+  await page.getByLabel('Betrag').fill('12');
+  await page.getByLabel('Währung').selectOption('EUR');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  const row = page.getByRole('button', { name: new RegExp(title) });
+  await expect(row).toBeVisible();
+  await expect(row.getByText('Wartet auf Sync')).toBeVisible();
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(row.getByText('Wartet auf Sync')).toHaveCount(0, { timeout: 15_000 });
+  await page.reload();
+  await expect(page.getByText(title)).toBeVisible();
+});

@@ -662,6 +662,10 @@ export const de = {
     sheetHint: 'Gilt für alle Mitreisenden. Gebuchte Unterkünfte und Flüge zählen nicht dazu.',
   },
   wallet: {
+    savedOffline: 'Offline gespeichert – wird gesendet, sobald Netz da ist',
+    offlineNew: 'Du bist offline. Die Ausgabe wird mit diesem Kurs gespeichert und automatisch gesendet, sobald wieder Netz da ist.',
+    pendingSync: 'Wartet auf Sync',
+    pendingOpen: 'Noch nicht gesendet – bearbeiten geht, sobald sie synchronisiert ist',
     title: 'Reisekasse',
     overview: 'Übersicht',
     balances: 'Salden',
